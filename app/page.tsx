@@ -4,20 +4,26 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
-const ACCEPTED_TYPES = ['application/pdf', 'text/plain'];
-const ACCEPTED_EXT = ['.pdf', '.txt'];
+const ACCEPTED_TYPES = [
+  'application/pdf',
+  'text/plain',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+const ACCEPTED_EXT = ['.pdf', '.txt', '.docx'];
 
 export default function UploadPage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'uploading' | 'error'>('idle');
+  const [status, setStatus] = useState<
+    'idle' | 'uploading' | 'generating' | 'error'
+  >('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
   const validateAndSetFile = (f: File) => {
     const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
     if (!ACCEPTED_TYPES.includes(f.type) && !ACCEPTED_EXT.includes(ext)) {
-      setErrorMsg('Only PDF and TXT files are supported right now.');
+      setErrorMsg('Only PDF, TXT, and DOCX files are supported right now.');
       setStatus('error');
       return;
     }
@@ -41,6 +47,7 @@ export default function UploadPage() {
   const handleSubmit = async () => {
     if (!file) return;
     setStatus('uploading');
+    setErrorMsg('');
 
     const { data, error } = await supabase
       .from('flashcard_sets')
@@ -54,6 +61,34 @@ export default function UploadPage() {
     if (error) {
       setErrorMsg(error.message);
       setStatus('error');
+      return;
+    }
+
+    setStatus('generating');
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('setId', data.id);
+
+    try {
+      const res = await fetch('/api/generate-flashcards', {
+        method: 'POST',
+        body: formData,
+      });
+      const result = await res.json();
+
+      if (!res.ok) {
+        // The set was created but generation failed — still send them to
+        // the set page, which will show it has no cards yet.
+        setErrorMsg(result.error ?? 'Flashcard generation failed.');
+        setStatus('error');
+        router.push(`/sets/${data.id}`);
+        return;
+      }
+    } catch {
+      setErrorMsg('Could not reach the flashcard generator.');
+      setStatus('error');
+      router.push(`/sets/${data.id}`);
       return;
     }
 
@@ -81,7 +116,7 @@ export default function UploadPage() {
           <input
             id="file-input"
             type="file"
-            accept=".pdf,.txt"
+            accept=".pdf,.txt,.docx"
             onChange={handleFileInput}
             className="hidden"
           />
@@ -91,7 +126,7 @@ export default function UploadPage() {
             ) : (
               <>
                 <p className="font-medium">Drag & drop a file here</p>
-                <p className="text-sm text-gray-500 mt-1">or click to browse (PDF or TXT)</p>
+                <p className="text-sm text-gray-500 mt-1">or click to browse (PDF, TXT, or DOCX)</p>
               </>
             )}
           </label>
@@ -103,10 +138,14 @@ export default function UploadPage() {
 
         <button
           onClick={handleSubmit}
-          disabled={!file || status === 'uploading'}
+          disabled={!file || status === 'uploading' || status === 'generating'}
           className="w-full py-3 rounded-lg bg-blue-600 text-white font-medium disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {status === 'uploading' ? 'Uploading...' : 'Generate Flashcards'}
+          {status === 'uploading'
+            ? 'Uploading...'
+            : status === 'generating'
+              ? 'Generating flashcards... (this can take a bit)'
+              : 'Generate Flashcards'}
         </button>
       </div>
     </main>
