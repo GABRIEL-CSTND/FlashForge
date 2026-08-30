@@ -1,21 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { generateStudyItems, StudyType } from '@/lib/gemini';
+import { extractText } from '@/lib/extractText';
 
 export const runtime = 'nodejs';
-
-async function extractText(file: File): Promise<string> {
-  const buffer = Buffer.from(await file.arrayBuffer());
-
-  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-    const { extractText: extractPdfText, getDocumentProxy } = await import('unpdf');
-    const pdf = await getDocumentProxy(new Uint8Array(buffer));
-    const { text } = await extractPdfText(pdf, { mergePages: true });
-    return text;
-  }
-
-  return buffer.toString('utf-8');
-}
 
 const VALID_TYPES: StudyType[] = ['flashcard', 'multiple_choice'];
 

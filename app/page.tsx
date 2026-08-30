@@ -4,8 +4,12 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
-const ACCEPTED_TYPES = ['application/pdf', 'text/plain'];
-const ACCEPTED_EXT = ['.pdf', '.txt'];
+const ACCEPTED_TYPES = [
+  'application/pdf',
+  'text/plain',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+const ACCEPTED_EXT = ['.pdf', '.txt', '.docx'];
 
 type StudyType = 'flashcard' | 'multiple_choice';
 
@@ -25,7 +29,7 @@ export default function UploadPage() {
   const validateAndSetFile = (f: File) => {
     const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
     if (!ACCEPTED_TYPES.includes(f.type) && !ACCEPTED_EXT.includes(ext)) {
-      setErrorMsg('Only PDF and TXT files are supported right now.');
+      setErrorMsg('Only PDF, TXT, and DOCX files are supported right now.');
       setStatus('error');
       return;
     }
@@ -49,6 +53,7 @@ export default function UploadPage() {
   const handleSubmit = async () => {
     if (!file) return;
     setStatus('uploading');
+    setErrorMsg('');
 
     const { data, error } = await supabase
       .from('flashcard_sets')
@@ -129,7 +134,7 @@ export default function UploadPage() {
           <input
             id="file-input"
             type="file"
-            accept=".pdf,.txt"
+            accept=".pdf,.txt,.docx"
             onChange={handleFileInput}
             className="hidden"
           />
@@ -139,7 +144,7 @@ export default function UploadPage() {
             ) : (
               <>
                 <p className="font-medium">Drag & drop a file here</p>
-                <p className="text-sm text-gray-500 mt-1">or click to browse (PDF or TXT)</p>
+                <p className="text-sm text-gray-500 mt-1">or click to browse (PDF, TXT, or DOCX)</p>
               </>
             )}
           </label>
