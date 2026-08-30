@@ -1,60 +1,79 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+const GEMINI_MODEL = 'gemini-3.5-flash';
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
-const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
+export type StudyType = 'flashcard' | 'multiple_choice';
 
-export interface GeneratedFlashcard {
+export interface GeneratedItem {
   question: string;
   answer: string;
+  options?: string[];
 }
 
-const MIN_CARDS = 8;
-const MAX_CARDS = 20;
+const TYPE_INSTRUCTIONS: Record<StudyType, string> = {
+  flashcard: `Create flashcards. Each item has a clear "question" and a concise "answer". No "options" field.`,
+  multiple_choice: `Create multiple-choice questions. Each item has a "question", an "options" array of exactly 4 plausible choices (in random order), and an "answer" field that exactly matches one of the strings in "options" (the correct one).`,
+};
 
-export async function generateFlashcards(
-  sourceText: string
-): Promise<GeneratedFlashcard[]> {
-  const prompt = `You are helping a student study. Read the study material below and generate between ${MIN_CARDS} and ${MAX_CARDS} flashcards (question + answer pairs) covering the key concepts, definitions, and facts.
+export async function generateStudyItems(
+  sourceText: string,
+  studyType: StudyType
+): Promise<GeneratedItem[]> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY is not set');
 
-Rules:
-- Base the count on how much distinct content is in the material (short material = fewer cards, dense material = more, but never fewer than ${MIN_CARDS} or more than ${MAX_CARDS}).
-- Questions should be clear and answerable from the material alone.
-- Answers should be concise (1-2 sentences).
-- Return ONLY valid JSON, no markdown formatting, no code fences, no extra commentary.
-- Output format (a JSON array):
-[
-  { "question": "...", "answer": "..." }
-]
+  const prompt = `You are creating a study guide from the text below.
+Produce exactly 10 items. ${TYPE_INSTRUCTIONS[studyType]}
+Base everything strictly on the provided text. Avoid trivial or overly broad questions.
 
-Study material:
+TEXT:
 """
 ${sourceText.slice(0, 30000)}
 """`;
 
-  const result = await model.generateContent(prompt);
-  const raw = result.response.text().trim();
+  const itemSchema =
+    studyType === 'multiple_choice'
+      ? {
+          type: 'OBJECT',
+          properties: {
+            question: { type: 'STRING' },
+            options: { type: 'ARRAY', items: { type: 'STRING' } },
+            answer: { type: 'STRING' },
+          },
+          required: ['question', 'options', 'answer'],
+        }
+      : {
+          type: 'OBJECT',
+          properties: {
+            question: { type: 'STRING' },
+            answer: { type: 'STRING' },
+          },
+          required: ['question', 'answer'],
+        };
 
-  const cleaned = raw
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```\s*$/i, '')
-    .trim();
+  const res = await fetch(`${API_URL}?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: { type: 'ARRAY', items: itemSchema },
+      },
+    }),
+  });
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error('AI returned invalid JSON for flashcards.');
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Gemini API error (${res.status}): ${errText}`);
   }
 
-  if (!Array.isArray(parsed)) {
-    throw new Error('AI response was not an array of flashcards.');
-  }
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Gemini returned no content');
 
-  return (parsed as GeneratedFlashcard[]).filter(
-    (card) =>
-      card &&
-      typeof card.question === 'string' &&
-      typeof card.answer === 'string'
-  );
+  const items = JSON.parse(text) as GeneratedItem[];
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error('Gemini returned no study items');
+  }
+  return items.slice(0, 10);
 }
