@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
 const ACCEPTED_TYPES = [
@@ -101,6 +102,9 @@ export default function UploadPage() {
           <p className="text-sm text-gray-500">
             Upload a file and get an AI-generated study guide.
           </p>
+          <Link href="/sets" className="inline-block text-sm text-blue-600 underline">
+            View my sets
+          </Link>
         </div>
 
         <div className="space-y-2">
