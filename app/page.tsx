@@ -2,7 +2,9 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { useUser, signInWithGoogle, signOut } from '@/lib/auth';
 
 const ACCEPTED_TYPES = ['application/pdf', 'text/plain'];
 const ACCEPTED_EXT = ['.pdf', '.txt'];
@@ -16,6 +18,7 @@ const STUDY_TYPE_OPTIONS: { value: StudyType; label: string }[] = [
 
 export default function UploadPage() {
   const router = useRouter();
+  const { user } = useUser();
   const [file, setFile] = useState<File | null>(null);
   const [studyType, setStudyType] = useState<StudyType>('flashcard');
   const [dragActive, setDragActive] = useState(false);
@@ -56,6 +59,7 @@ export default function UploadPage() {
         title: file.name.replace(/\.[^/.]+$/, ''),
         source_filename: file.name,
         study_type: studyType,
+        user_id: user?.id ?? null,
       })
       .select()
       .single();
@@ -91,6 +95,27 @@ export default function UploadPage() {
   return (
     <main className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-md space-y-6">
+        <div className="flex justify-end">
+          {user ? (
+            <div className="flex items-center gap-3 text-sm">
+              <Link href="/my-sets" className="text-blue-500 hover:underline">
+                My Sets
+              </Link>
+              <span className="text-gray-400">{user.email}</span>
+              <button onClick={() => signOut()} className="text-gray-500 hover:underline">
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => signInWithGoogle()}
+              className="text-sm border rounded-lg px-3 py-1.5 font-medium hover:border-blue-400"
+            >
+              Sign in with Google
+            </button>
+          )}
+        </div>
+
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-semibold">FlashForge</h1>
           <p className="text-sm text-gray-500">

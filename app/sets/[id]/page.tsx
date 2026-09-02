@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
 interface FlashcardSet {
@@ -19,8 +20,20 @@ interface Flashcard {
   position: number;
 }
 
+function ExitButton() {
+  return (
+    <Link
+      href="/"
+      className="text-sm text-gray-500 hover:text-gray-800 inline-flex items-center gap-1"
+    >
+      ← Exit
+    </Link>
+  );
+}
+
 export default function SetPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [set, setSet] = useState<FlashcardSet | null>(null);
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [index, setIndex] = useState(0);
@@ -63,12 +76,14 @@ export default function SetPage() {
     setSelectedOption(null);
   };
 
-  const goNext = () => {
+  const goNext = (isMultipleChoice: boolean) => {
     if (index < cards.length - 1) {
       resetCardState();
       setIndex((i) => i + 1);
-    } else {
+    } else if (isMultipleChoice) {
       setView('summary');
+    } else {
+      router.push('/');
     }
   };
 
@@ -92,10 +107,6 @@ export default function SetPage() {
     setResults((r) => ({ ...r, [card.id]: opt === card.answer }));
   };
 
-  const selfMark = (card: Flashcard, correct: boolean) => {
-    setResults((r) => ({ ...r, [card.id]: correct }));
-  };
-
   if (loading) {
     return <main className="min-h-screen flex items-center justify-center">Loading...</main>;
   }
@@ -112,6 +123,9 @@ export default function SetPage() {
     return (
       <main className="min-h-screen flex items-center justify-center p-6">
         <div className="w-full max-w-md text-center space-y-6">
+          <div className="flex justify-start">
+            <ExitButton />
+          </div>
           <h1 className="text-xl font-semibold">{set.title}</h1>
           <div className="border rounded-xl p-8 space-y-2">
             <p className="text-4xl font-bold">
@@ -139,10 +153,13 @@ export default function SetPage() {
   const isMultipleChoice = set.study_type === 'multiple_choice';
   const isLast = index === cards.length - 1;
   const mcAnswered = selectedOption !== null;
-  const selfAnswered = results[card?.id] !== undefined;
 
   return (
     <main className="min-h-screen p-6 max-w-md mx-auto flex flex-col justify-center min-h-screen space-y-6">
+      <div className="flex justify-start">
+        <ExitButton />
+      </div>
+
       <div className="text-center">
         <h1 className="text-xl font-semibold">{set.title}</h1>
         {cards.length > 0 && (
@@ -194,7 +211,7 @@ export default function SetPage() {
               ← Prev
             </button>
             <button
-              onClick={goNext}
+              onClick={() => goNext(true)}
               disabled={!mcAnswered}
               className="flex-1 py-3 rounded-lg bg-blue-600 text-white font-medium disabled:opacity-30 disabled:cursor-not-allowed"
             >
@@ -215,31 +232,6 @@ export default function SetPage() {
             {!flipped && <p className="text-xs text-gray-400 mt-4">Tap to flip</p>}
           </button>
 
-          {flipped && (
-            <div className="flex gap-3">
-              <button
-                onClick={() => selfMark(card, false)}
-                className={`flex-1 py-2 rounded-lg border font-medium ${
-                  results[card.id] === false
-                    ? 'border-red-500 bg-red-500/10'
-                    : 'border-gray-300'
-                }`}
-              >
-                Got it wrong
-              </button>
-              <button
-                onClick={() => selfMark(card, true)}
-                className={`flex-1 py-2 rounded-lg border font-medium ${
-                  results[card.id] === true
-                    ? 'border-green-500 bg-green-500/10'
-                    : 'border-gray-300'
-                }`}
-              >
-                Got it right
-              </button>
-            </div>
-          )}
-
           <div className="flex justify-between items-center gap-4">
             <button
               onClick={goPrev}
@@ -249,9 +241,8 @@ export default function SetPage() {
               ← Prev
             </button>
             <button
-              onClick={goNext}
-              disabled={!selfAnswered}
-              className="flex-1 py-3 rounded-lg bg-blue-600 text-white font-medium disabled:opacity-30 disabled:cursor-not-allowed"
+              onClick={() => goNext(false)}
+              className="flex-1 py-3 rounded-lg bg-blue-600 text-white font-medium"
             >
               {isLast ? 'Finish' : 'Next →'}
             </button>
