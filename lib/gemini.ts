@@ -1,5 +1,7 @@
 const GEMINI_MODEL = 'gemini-3.5-flash';
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const REQUEST_TIMEOUT_MS = 30_000; // fail fast instead of hanging for minutes
+const MAX_ATTEMPTS = 2;
 
 export type StudyType = 'flashcard' | 'multiple_choice';
 
@@ -50,30 +52,54 @@ ${sourceText.slice(0, 30000)}
           required: ['question', 'answer'],
         };
 
-  const res = await fetch(`${API_URL}?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: { type: 'ARRAY', items: itemSchema },
-      },
-    }),
-  });
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const startedAt = Date.now();
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Gemini API error (${res.status}): ${errText}`);
+    try {
+      const res = await fetch(`${API_URL}?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseSchema: { type: 'ARRAY', items: itemSchema },
+          },
+        }),
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Gemini API error (${res.status}): ${errText}`);
+      }
+
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error('Gemini returned no content');
+
+      const items = JSON.parse(text) as GeneratedItem[];
+      if (!Array.isArray(items) || items.length === 0) {
+        throw new Error('Gemini returned no study items');
+      }
+      return items.slice(0, 10);
+    } catch (err) {
+      clearTimeout(timeout);
+      const elapsed = Date.now() - startedAt;
+      const isAbort = err instanceof Error && err.name === 'AbortError';
+      console.error(
+        `[gemini] attempt ${attempt}/${MAX_ATTEMPTS} failed after ${elapsed}ms:`,
+        isAbort ? `timed out after ${REQUEST_TIMEOUT_MS}ms` : err
+      );
+      lastError = isAbort
+        ? new Error(`Gemini request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`)
+        : err;
+    }
   }
 
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error('Gemini returned no content');
-
-  const items = JSON.parse(text) as GeneratedItem[];
-  if (!Array.isArray(items) || items.length === 0) {
-    throw new Error('Gemini returned no study items');
-  }
-  return items.slice(0, 10);
+  throw lastError instanceof Error ? lastError : new Error('Gemini request failed');
 }
