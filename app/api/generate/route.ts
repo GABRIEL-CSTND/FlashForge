@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase-admin';
 import { generateStudyItems, StudyType } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
@@ -34,6 +34,16 @@ export async function POST(req: NextRequest) {
       ? (studyTypeRaw as StudyType)
       : 'flashcard';
 
+    const { data: existingSet, error: setLookupError } = await supabaseAdmin
+      .from('flashcard_sets')
+      .select('id')
+      .eq('id', setId)
+      .single();
+
+    if (setLookupError || !existingSet) {
+      return NextResponse.json({ error: 'Set not found' }, { status: 404 });
+    }
+
     const text = await extractText(file);
     if (!text || text.trim().length < 20) {
       return NextResponse.json(
@@ -52,7 +62,7 @@ export async function POST(req: NextRequest) {
       position: i,
     }));
 
-    const { error: insertError } = await supabase.from('flashcards').insert(rows);
+    const { error: insertError } = await supabaseAdmin.from('flashcards').insert(rows);
     if (insertError) {
       return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
