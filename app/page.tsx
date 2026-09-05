@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useUser, signInWithGoogle, signOut } from '@/lib/auth';
+import StudyViewer, { StudyItem } from '@/components/StudyViewer';
 
 const ACCEPTED_TYPES = ['application/pdf', 'text/plain'];
 const ACCEPTED_EXT = ['.pdf', '.txt'];
@@ -16,14 +17,41 @@ const STUDY_TYPE_OPTIONS: { value: StudyType; label: string }[] = [
   { value: 'multiple_choice', label: 'Multiple Choice' },
 ];
 
+interface GeneratedResult {
+  title: string;
+  sourceFilename: string;
+  studyType: StudyType;
+  items: StudyItem[];
+}
+
+const PENDING_RESULT_KEY = 'flashforge_pending_result';
+
 export default function UploadPage() {
   const router = useRouter();
   const { user } = useUser();
   const [file, setFile] = useState<File | null>(null);
   const [studyType, setStudyType] = useState<StudyType>('flashcard');
   const [dragActive, setDragActive] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'uploading' | 'generating' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'generating' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [result, setResult] = useState<GeneratedResult | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'needs-auth'>('idle');
+  const [resumeAfterAuth, setResumeAfterAuth] = useState(false);
+
+  // Restore a generated-but-unsaved result after a Google sign-in redirect,
+  // since the OAuth flow does a full page reload and would otherwise lose it.
+  useEffect(() => {
+    const pending = sessionStorage.getItem(PENDING_RESULT_KEY);
+    if (pending) {
+      sessionStorage.removeItem(PENDING_RESULT_KEY);
+      try {
+        setResult(JSON.parse(pending));
+        setResumeAfterAuth(true);
+      } catch {
+        // ignore malformed/stale data
+      }
+    }
+  }, []);
 
   const validateAndSetFile = (f: File) => {
     const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
@@ -51,46 +79,117 @@ export default function UploadPage() {
 
   const handleSubmit = async () => {
     if (!file) return;
-    setStatus('uploading');
-
-    const { data, error } = await supabase
-      .from('flashcard_sets')
-      .insert({
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        source_filename: file.name,
-        study_type: studyType,
-        user_id: user?.id ?? null,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      setErrorMsg(error.message);
-      setStatus('error');
-      return;
-    }
-
     setStatus('generating');
+    setErrorMsg('');
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('setId', data.id);
     formData.append('studyType', studyType);
 
-    const genRes = await fetch('/api/generate', {
-      method: 'POST',
-      body: formData,
-    });
+    const res = await fetch('/api/generate', { method: 'POST', body: formData });
+    const body = await res.json().catch(() => ({}));
 
-    if (!genRes.ok) {
-      const body = await genRes.json().catch(() => ({}));
-      setErrorMsg(body.error || 'Failed to generate flashcards.');
+    if (!res.ok) {
+      setErrorMsg(body.error || 'Failed to generate study guide.');
       setStatus('error');
       return;
     }
 
-    router.push(`/sets/${data.id}`);
+    setResult(body);
+    setStatus('idle');
   };
+
+  const handleSave = async () => {
+    if (!result) return;
+
+    if (!user) {
+      setSaveStatus('needs-auth');
+      return;
+    }
+
+    setSaveStatus('saving');
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+
+    const res = await fetch('/api/save-set', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        title: result.title,
+        sourceFilename: result.sourceFilename,
+        studyType: result.studyType,
+        items: result.items,
+      }),
+    });
+
+    const body = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      setSaveStatus('error');
+      return;
+    }
+
+    setSaveStatus('saved');
+    router.push(`/sets/${body.id}`);
+  };
+
+  // If we restored a pending result after an auth redirect and the user is
+  // now signed in, finish the save automatically instead of making them
+  // click twice.
+  useEffect(() => {
+    if (resumeAfterAuth && user && result) {
+      setResumeAfterAuth(false);
+      handleSave();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeAfterAuth, user, result]);
+
+  if (result) {
+    const saveSlot = (
+      <div className="text-center space-y-2">
+        {saveStatus === 'saved' ? (
+          <p className="text-sm text-green-600 font-medium">Saved ✓</p>
+        ) : saveStatus === 'needs-auth' ? (
+          <div className="space-y-2">
+            <p className="text-sm text-amber-500">Sign in to save this study guide.</p>
+            <button
+              onClick={() => {
+                sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(result));
+                signInWithGoogle();
+              }}
+              className="text-sm border rounded-lg px-4 py-2 font-medium hover:border-blue-400"
+            >
+              Sign in with Google
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={handleSave}
+            disabled={saveStatus === 'saving'}
+            className="text-sm border rounded-lg px-4 py-2 font-medium hover:border-blue-400 disabled:opacity-40"
+          >
+            {saveStatus === 'saving' ? 'Saving...' : '💾 Save this study guide'}
+          </button>
+        )}
+        {saveStatus === 'error' && (
+          <p className="text-xs text-red-500">Failed to save. Try again.</p>
+        )}
+      </div>
+    );
+
+    return (
+      <StudyViewer
+        title={result.title}
+        studyType={result.studyType}
+        cards={result.items}
+        saveSlot={saveSlot}
+      />
+    );
+  }
 
   return (
     <main className="min-h-screen flex items-center justify-center p-6">
@@ -176,10 +275,9 @@ export default function UploadPage() {
 
         <button
           onClick={handleSubmit}
-          disabled={!file || status === 'uploading' || status === 'generating'}
+          disabled={!file || status === 'generating'}
           className="w-full py-3 rounded-lg bg-blue-600 text-white font-medium disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {status === 'uploading' && 'Uploading...'}
           {status === 'generating' && 'Generating (this can take ~20s)...'}
           {(status === 'idle' || status === 'error') && 'Generate Study Guide'}
         </button>

@@ -2,14 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { useUser } from '@/lib/auth';
+import StudyViewer from '@/components/StudyViewer';
 
 interface FlashcardSet {
   id: string;
   title: string;
   source_filename: string | null;
   study_type: 'flashcard' | 'multiple_choice';
+  user_id: string | null;
 }
 
 interface Flashcard {
@@ -20,29 +22,15 @@ interface Flashcard {
   position: number;
 }
 
-function ExitButton() {
-  return (
-    <Link
-      href="/"
-      className="text-sm text-gray-500 hover:text-gray-800 inline-flex items-center gap-1"
-    >
-      ← Exit
-    </Link>
-  );
-}
-
 export default function SetPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useUser();
   const [set, setSet] = useState<FlashcardSet | null>(null);
   const [cards, setCards] = useState<Flashcard[]>([]);
-  const [index, setIndex] = useState(0);
-  const [flipped, setFlipped] = useState(false);
-  const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [results, setResults] = useState<Record<string, boolean>>({});
-  const [view, setView] = useState<'card' | 'summary'>('card');
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -71,40 +59,23 @@ export default function SetPage() {
     load();
   }, [params.id]);
 
-  const resetCardState = () => {
-    setFlipped(false);
-    setSelectedOption(null);
-  };
+  const handleDelete = async () => {
+    if (!set) return;
+    const confirmed = window.confirm(
+      `Delete "${set.title}"? This can't be undone.`
+    );
+    if (!confirmed) return;
 
-  const goNext = (isMultipleChoice: boolean) => {
-    if (index < cards.length - 1) {
-      resetCardState();
-      setIndex((i) => i + 1);
-    } else if (isMultipleChoice) {
-      setView('summary');
-    } else {
-      router.push('/');
+    setDeleting(true);
+    const { error } = await supabase.from('flashcard_sets').delete().eq('id', set.id);
+    setDeleting(false);
+
+    if (error) {
+      alert('Failed to delete: ' + error.message);
+      return;
     }
-  };
 
-  const goPrev = () => {
-    if (index > 0) {
-      resetCardState();
-      setIndex((i) => i - 1);
-    }
-  };
-
-  const restart = () => {
-    setResults({});
-    setIndex(0);
-    resetCardState();
-    setView('card');
-  };
-
-  const selectMcOption = (card: Flashcard, opt: string) => {
-    if (selectedOption !== null) return;
-    setSelectedOption(opt);
-    setResults((r) => ({ ...r, [card.id]: opt === card.answer }));
+    router.push('/my-sets');
   };
 
   if (loading) {
@@ -115,140 +86,27 @@ export default function SetPage() {
     return <main className="min-h-screen flex items-center justify-center">Set not found.</main>;
   }
 
-  if (view === 'summary') {
-    const answered = Object.keys(results).length;
-    const correct = Object.values(results).filter(Boolean).length;
-    const pct = cards.length > 0 ? Math.round((correct / cards.length) * 100) : 0;
+  const isOwner = user && set.user_id === user.id;
 
-    return (
-      <main className="min-h-screen flex items-center justify-center p-6">
-        <div className="w-full max-w-md text-center space-y-6">
-          <div className="flex justify-start">
-            <ExitButton />
-          </div>
-          <h1 className="text-xl font-semibold">{set.title}</h1>
-          <div className="border rounded-xl p-8 space-y-2">
-            <p className="text-4xl font-bold">
-              {correct} / {cards.length}
-            </p>
-            <p className="text-gray-500">{pct}% correct</p>
-            {answered < cards.length && (
-              <p className="text-xs text-gray-400 mt-2">
-                {cards.length - answered} card{cards.length - answered === 1 ? '' : 's'} skipped without answering
-              </p>
-            )}
-          </div>
-          <button
-            onClick={restart}
-            className="w-full py-3 rounded-lg bg-blue-600 text-white font-medium"
-          >
-            Try Again
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  const card = cards[index];
-  const isMultipleChoice = set.study_type === 'multiple_choice';
-  const isLast = index === cards.length - 1;
-  const mcAnswered = selectedOption !== null;
+  const deleteSlot = isOwner ? (
+    <div className="text-center">
+      <button
+        onClick={handleDelete}
+        disabled={deleting}
+        className="text-sm text-red-500 hover:underline disabled:opacity-40"
+      >
+        {deleting ? 'Deleting...' : '🗑 Delete this set'}
+      </button>
+    </div>
+  ) : null;
 
   return (
-    <main className="min-h-screen p-6 max-w-md mx-auto flex flex-col justify-center min-h-screen space-y-6">
-      <div className="flex justify-start">
-        <ExitButton />
-      </div>
-
-      <div className="text-center">
-        <h1 className="text-xl font-semibold">{set.title}</h1>
-        {cards.length > 0 && (
-          <p className="text-sm text-gray-500 mt-1">
-            Card {index + 1} of {cards.length}
-          </p>
-        )}
-      </div>
-
-      {cards.length === 0 ? (
-        <div className="border rounded-lg p-6 text-center text-gray-500">
-          No items yet for this set.
-        </div>
-      ) : isMultipleChoice ? (
-        <>
-          <div className="w-full min-h-[220px] border rounded-xl p-8 flex flex-col justify-center space-y-4">
-            <p className="text-lg font-medium text-center">{card.question}</p>
-            <div className="space-y-2">
-              {(card.options ?? []).map((opt) => {
-                const isSelected = selectedOption === opt;
-                const isCorrect = opt === card.answer;
-                const showState = selectedOption !== null;
-                return (
-                  <button
-                    key={opt}
-                    onClick={() => selectMcOption(card, opt)}
-                    disabled={selectedOption !== null}
-                    className={`w-full text-left px-4 py-2 rounded-lg border transition-colors ${
-                      showState && isCorrect
-                        ? 'border-green-500 bg-green-500/10'
-                        : showState && isSelected && !isCorrect
-                        ? 'border-red-500 bg-red-500/10'
-                        : 'border-gray-300'
-                    }`}
-                  >
-                    {opt}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex justify-between items-center gap-4">
-            <button
-              onClick={goPrev}
-              disabled={index === 0}
-              className="flex-1 py-3 rounded-lg border font-medium disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              ← Prev
-            </button>
-            <button
-              onClick={() => goNext(true)}
-              disabled={!mcAnswered}
-              className="flex-1 py-3 rounded-lg bg-blue-600 text-white font-medium disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              {isLast ? 'Finish' : 'Next →'}
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <button
-            onClick={() => setFlipped((f) => !f)}
-            className="w-full min-h-[220px] border rounded-xl p-8 flex flex-col items-center justify-center text-center hover:border-blue-400 transition-colors"
-          >
-            <p className="text-xs uppercase tracking-wide text-gray-400 mb-3">
-              {flipped ? 'Answer' : 'Question'}
-            </p>
-            <p className="text-lg font-medium">{flipped ? card.answer : card.question}</p>
-            {!flipped && <p className="text-xs text-gray-400 mt-4">Tap to flip</p>}
-          </button>
-
-          <div className="flex justify-between items-center gap-4">
-            <button
-              onClick={goPrev}
-              disabled={index === 0}
-              className="flex-1 py-3 rounded-lg border font-medium disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              ← Prev
-            </button>
-            <button
-              onClick={() => goNext(false)}
-              className="flex-1 py-3 rounded-lg bg-blue-600 text-white font-medium"
-            >
-              {isLast ? 'Finish' : 'Next →'}
-            </button>
-          </div>
-        </>
-      )}
-    </main>
+    <StudyViewer
+      title={set.title}
+      studyType={set.study_type}
+      cards={cards}
+      onFinish={() => router.push('/')}
+      saveSlot={deleteSlot}
+    />
   );
 }

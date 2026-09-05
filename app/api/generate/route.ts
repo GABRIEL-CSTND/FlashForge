@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
 import { generateStudyItems, StudyType } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
@@ -19,30 +18,21 @@ async function extractText(file: File): Promise<string> {
 
 const VALID_TYPES: StudyType[] = ['flashcard', 'multiple_choice'];
 
+// Pure generation endpoint — no database writes here.
+// Nothing is persisted until the user explicitly saves via /api/save-set.
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
-    const setId = formData.get('setId') as string | null;
     const studyTypeRaw = formData.get('studyType') as string | null;
 
-    if (!file || !setId) {
-      return NextResponse.json({ error: 'Missing file or setId' }, { status: 400 });
+    if (!file) {
+      return NextResponse.json({ error: 'Missing file' }, { status: 400 });
     }
 
     const studyType: StudyType = VALID_TYPES.includes(studyTypeRaw as StudyType)
       ? (studyTypeRaw as StudyType)
       : 'flashcard';
-
-    const { data: existingSet, error: setLookupError } = await supabaseAdmin
-      .from('flashcard_sets')
-      .select('id')
-      .eq('id', setId)
-      .single();
-
-    if (setLookupError || !existingSet) {
-      return NextResponse.json({ error: 'Set not found' }, { status: 404 });
-    }
 
     const text = await extractText(file);
     if (!text || text.trim().length < 20) {
@@ -54,20 +44,12 @@ export async function POST(req: NextRequest) {
 
     const items = await generateStudyItems(text, studyType);
 
-    const rows = items.map((item, i) => ({
-      set_id: setId,
-      question: item.question,
-      answer: item.answer,
-      options: item.options ?? null,
-      position: i,
-    }));
-
-    const { error: insertError } = await supabaseAdmin.from('flashcards').insert(rows);
-    if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ count: rows.length });
+    return NextResponse.json({
+      title: file.name.replace(/\.[^/.]+$/, ''),
+      sourceFilename: file.name,
+      studyType,
+      items,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ error: message }, { status: 500 });
