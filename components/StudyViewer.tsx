@@ -14,6 +14,8 @@ interface StudyViewerProps {
   studyType: 'flashcard' | 'multiple_choice';
   cards: StudyItem[];
   onExit: () => void;
+  onFinish?: () => void;
+  saveSlot?: React.ReactNode;
 }
 
 function ExitButton({ onExit }: { onExit: () => void }) {
@@ -27,7 +29,7 @@ function ExitButton({ onExit }: { onExit: () => void }) {
   );
 }
 
-export default function StudyViewer({ title, studyType, cards, onExit }: StudyViewerProps) {
+export default function StudyViewer({ title, studyType, cards, onExit, onFinish, saveSlot }: StudyViewerProps) {
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -110,6 +112,7 @@ export default function StudyViewer({ title, studyType, cards, onExit }: StudyVi
               </p>
             )}
           </div>
+          {saveSlot}
           <button onClick={restart} className="w-full py-3 rounded-lg border font-medium">
             Try Again
           </button>
@@ -123,7 +126,7 @@ export default function StudyViewer({ title, studyType, cards, onExit }: StudyVi
       <main className="min-h-screen flex items-center justify-center p-6">
         <div className="w-full max-w-md text-center space-y-6">
           <div className="flex justify-start">
-            <ExitButton />
+            <ExitButton onExit={onExit} />
           </div>
           <h1 className="text-xl font-semibold">{title}</h1>
           <div className="border rounded-xl p-8 space-y-2">
@@ -161,6 +164,8 @@ export default function StudyViewer({ title, studyType, cards, onExit }: StudyVi
           Card {index + 1} of {cards.length}
         </p>
       </div>
+
+      {saveSlot}
 
       {isMultipleChoice ? (
         <>

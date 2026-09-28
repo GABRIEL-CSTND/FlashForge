@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { supabase } from '@/lib/supabase';
 import { useUser, signInWithGoogle, signOut } from '@/lib/auth';
 import StudyViewer, { StudyItem } from '@/components/StudyViewer';
 
@@ -21,6 +22,23 @@ interface GeneratedResult {
   items: StudyItem[];
 }
 
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'needs-auth';
+
+const PENDING_RESULT_KEY = 'flashforge_pending_result';
+
+function isGeneratedResult(value: unknown): value is GeneratedResult {
+  if (!value || typeof value !== 'object') return false;
+
+  const candidate = value as Partial<GeneratedResult>;
+  return (
+    typeof candidate.title === 'string' &&
+    typeof candidate.sourceFilename === 'string' &&
+    (candidate.studyType === 'flashcard' || candidate.studyType === 'multiple_choice') &&
+    Array.isArray(candidate.items) &&
+    candidate.items.length > 0
+  );
+}
+
 export default function UploadPage() {
   const { user } = useUser();
   const [file, setFile] = useState<File | null>(null);
@@ -29,6 +47,31 @@ export default function UploadPage() {
   const [status, setStatus] = useState<'idle' | 'generating' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [result, setResult] = useState<GeneratedResult | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [saveError, setSaveError] = useState('');
+  const shouldResumeSave = useRef(false);
+
+  useEffect(() => {
+    const pending = sessionStorage.getItem(PENDING_RESULT_KEY);
+    if (!pending) return;
+
+    try {
+      const parsed: unknown = JSON.parse(pending);
+      if (isGeneratedResult(parsed)) {
+        const timeoutId = window.setTimeout(() => {
+          sessionStorage.removeItem(PENDING_RESULT_KEY);
+          shouldResumeSave.current = true;
+          setResult(parsed);
+        }, 0);
+
+        return () => window.clearTimeout(timeoutId);
+      }
+
+      sessionStorage.removeItem(PENDING_RESULT_KEY);
+    } catch {
+      sessionStorage.removeItem(PENDING_RESULT_KEY);
+    }
+  }, []);
 
   const validateAndSetFile = (f: File) => {
     const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
@@ -73,16 +116,117 @@ export default function UploadPage() {
     }
 
     setResult(body);
+    setSaveStatus('idle');
+    setSaveError('');
     setStatus('idle');
   };
 
+  const handleSave = useCallback(async () => {
+    if (!result || saveStatus === 'saving' || saveStatus === 'saved') return;
+
+    if (!user) {
+      setSaveStatus('needs-auth');
+      return;
+    }
+
+    setSaveStatus('saving');
+    setSaveError('');
+
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
+      if (sessionError || !token) {
+        setSaveStatus('needs-auth');
+        setSaveError('Your session expired. Sign in again to save this study guide.');
+        return;
+      }
+
+      const response = await fetch('/api/save-set', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: result.title,
+          sourceFilename: result.sourceFilename,
+          studyType: result.studyType,
+          items: result.items,
+        }),
+      });
+
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setSaveStatus(response.status === 401 ? 'needs-auth' : 'error');
+        setSaveError(body.error || 'Failed to save the study guide.');
+        return;
+      }
+
+      setSaveStatus('saved');
+    } catch {
+      setSaveStatus('error');
+      setSaveError('Failed to save the study guide. Check your connection and try again.');
+    }
+  }, [result, saveStatus, user]);
+
+  useEffect(() => {
+    if (!shouldResumeSave.current || !user || !result) return;
+
+    const timeoutId = window.setTimeout(() => {
+      shouldResumeSave.current = false;
+      void handleSave();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [handleSave, result, user]);
+
+  const handleExit = () => {
+    setResult(null);
+    setSaveStatus('idle');
+    setSaveError('');
+  };
+
   if (result) {
+    const saveSlot = (
+      <div className="text-center space-y-2" aria-live="polite">
+        {saveStatus === 'saved' ? (
+          <p className="text-sm text-green-600 font-medium">Study guide saved.</p>
+        ) : saveStatus === 'needs-auth' ? (
+          <div className="space-y-2">
+            <p className="text-sm text-amber-600">Sign in to save this study guide.</p>
+            <button
+              type="button"
+              onClick={() => {
+                sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(result));
+                void signInWithGoogle();
+              }}
+              className="text-sm border rounded-lg px-4 py-2 font-medium hover:border-blue-400"
+            >
+              Sign in with Google
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={saveStatus === 'saving'}
+            className="text-sm border rounded-lg px-4 py-2 font-medium hover:border-blue-400 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {saveStatus === 'saving' ? 'Saving...' : 'Save this study guide'}
+          </button>
+        )}
+        {saveError && <p className="text-xs text-red-500">{saveError}</p>}
+      </div>
+    );
+
     return (
       <StudyViewer
         title={result.title}
         studyType={result.studyType}
         cards={result.items}
-        onExit={() => setResult(null)}
+        onExit={handleExit}
+        saveSlot={saveSlot}
       />
     );
   }
