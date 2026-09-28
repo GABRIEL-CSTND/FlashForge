@@ -32,7 +32,7 @@ export default function StudyViewer({ title, studyType, cards, onExit }: StudyVi
   const [flipped, setFlipped] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [results, setResults] = useState<Record<number, boolean>>({});
-  const [view, setView] = useState<'card' | 'summary'>('card');
+  const [view, setView] = useState<'card' | 'summary' | 'complete'>('card');
 
   const isMultipleChoice = studyType === 'multiple_choice';
   const isLast = index === cards.length - 1;
@@ -50,7 +50,7 @@ export default function StudyViewer({ title, studyType, cards, onExit }: StudyVi
     } else if (isMultipleChoice) {
       setView('summary');
     } else {
-      onExit();
+      setView('complete');
     }
   };
 
@@ -113,6 +113,37 @@ export default function StudyViewer({ title, studyType, cards, onExit }: StudyVi
           <button onClick={restart} className="w-full py-3 rounded-lg border font-medium">
             Try Again
           </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (view === 'complete') {
+    return (
+      <main className="min-h-screen flex items-center justify-center p-6">
+        <div className="w-full max-w-md text-center space-y-6">
+          <div className="flex justify-start">
+            <ExitButton />
+          </div>
+          <h1 className="text-xl font-semibold">{title}</h1>
+          <div className="border rounded-xl p-8 space-y-2">
+            <p className="text-2xl font-bold">You&apos;ve reviewed all {cards.length} cards! 🎉</p>
+          </div>
+          {saveSlot}
+          <button
+            onClick={restart}
+            className="w-full py-3 rounded-lg border font-medium"
+          >
+            Review Again
+          </button>
+          {onFinish && (
+            <button
+              onClick={onFinish}
+              className="w-full py-3 rounded-lg bg-blue-600 text-white font-medium"
+            >
+              Done
+            </button>
+          )}
         </div>
       </main>
     );
