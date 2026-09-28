@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useUser, signInWithGoogle, signOut } from '@/lib/auth';
 import StudyViewer, { StudyItem } from '@/components/StudyViewer';
@@ -237,6 +238,9 @@ export default function UploadPage() {
         <div className="flex justify-end">
           {user ? (
             <div className="flex items-center gap-3 text-sm">
+              <Link href="/my-sets" className="text-blue-500 hover:underline">
+                My Sets
+              </Link>
               <span className="text-gray-400">{user.email}</span>
               <button onClick={() => signOut()} className="text-gray-500 hover:underline">
                 Sign out
