@@ -32,6 +32,8 @@ export default function SetPage() {
     cards: [],
     error: '',
   });
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     if (!userId) return;
@@ -106,6 +108,50 @@ export default function SetPage() {
 
   const returnToSets = () => router.push('/my-sets');
 
+  const handleDelete = async () => {
+    if (!state.set || deleting) return;
+
+    const confirmed = window.confirm(`Delete "${state.set.title}"? This can't be undone.`);
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setDeleteError('');
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+
+    const res = await fetch('/api/delete-set', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ id: state.set.id }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setDeleteError(body.error || 'Failed to delete. Try again.');
+      setDeleting(false);
+      return;
+    }
+
+    router.push('/my-sets');
+  };
+
+  const deleteSlot = (
+    <div className="text-center space-y-1">
+      <button
+        onClick={handleDelete}
+        disabled={deleting}
+        className="text-sm text-red-500 hover:underline disabled:opacity-40"
+      >
+        {deleting ? 'Deleting...' : '🗑 Delete this set'}
+      </button>
+      {deleteError && <p className="text-xs text-red-500">{deleteError}</p>}
+    </div>
+  );
+
   return (
     <StudyViewer
       title={state.set.title}
@@ -113,6 +159,7 @@ export default function SetPage() {
       cards={state.cards}
       onExit={returnToSets}
       onFinish={returnToSets}
+      saveSlot={deleteSlot}
     />
   );
 }
