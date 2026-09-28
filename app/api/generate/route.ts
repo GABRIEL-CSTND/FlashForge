@@ -18,8 +18,8 @@ async function extractText(file: File): Promise<string> {
 
 const VALID_TYPES: StudyType[] = ['flashcard', 'multiple_choice'];
 
-// Pure generation endpoint — no database writes here.
-// Nothing is persisted until the user explicitly saves via /api/save-set.
+// Pure generation endpoint — no database writes. Results are returned to the
+// client and are not persisted anywhere.
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();

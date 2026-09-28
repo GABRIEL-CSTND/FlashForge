@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 
 export interface StudyItem {
   id?: string;
@@ -14,22 +13,21 @@ interface StudyViewerProps {
   title: string;
   studyType: 'flashcard' | 'multiple_choice';
   cards: StudyItem[];
-  onFinish?: () => void;
-  saveSlot?: React.ReactNode;
+  onExit: () => void;
 }
 
-function ExitButton() {
+function ExitButton({ onExit }: { onExit: () => void }) {
   return (
-    <Link
-      href="/"
+    <button
+      onClick={onExit}
       className="text-sm text-gray-500 hover:text-gray-800 inline-flex items-center gap-1"
     >
       ← Exit
-    </Link>
+    </button>
   );
 }
 
-export default function StudyViewer({ title, studyType, cards, onFinish, saveSlot }: StudyViewerProps) {
+export default function StudyViewer({ title, studyType, cards, onExit }: StudyViewerProps) {
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
@@ -51,8 +49,8 @@ export default function StudyViewer({ title, studyType, cards, onFinish, saveSlo
       setIndex((i) => i + 1);
     } else if (isMultipleChoice) {
       setView('summary');
-    } else if (onFinish) {
-      onFinish();
+    } else {
+      onExit();
     }
   };
 
@@ -80,7 +78,7 @@ export default function StudyViewer({ title, studyType, cards, onFinish, saveSlo
     return (
       <main className="min-h-screen p-6 max-w-md mx-auto flex flex-col justify-center space-y-6">
         <div className="flex justify-start">
-          <ExitButton />
+          <ExitButton onExit={onExit} />
         </div>
         <div className="border rounded-lg p-6 text-center text-gray-500">
           No items in this set.
@@ -98,7 +96,7 @@ export default function StudyViewer({ title, studyType, cards, onFinish, saveSlo
       <main className="min-h-screen flex items-center justify-center p-6">
         <div className="w-full max-w-md text-center space-y-6">
           <div className="flex justify-start">
-            <ExitButton />
+            <ExitButton onExit={onExit} />
           </div>
           <h1 className="text-xl font-semibold">{title}</h1>
           <div className="border rounded-xl p-8 space-y-2">
@@ -112,11 +110,7 @@ export default function StudyViewer({ title, studyType, cards, onFinish, saveSlo
               </p>
             )}
           </div>
-          {saveSlot}
-          <button
-            onClick={restart}
-            className="w-full py-3 rounded-lg border font-medium"
-          >
+          <button onClick={restart} className="w-full py-3 rounded-lg border font-medium">
             Try Again
           </button>
         </div>
@@ -127,7 +121,7 @@ export default function StudyViewer({ title, studyType, cards, onFinish, saveSlo
   return (
     <main className="min-h-screen p-6 max-w-md mx-auto flex flex-col justify-center min-h-screen space-y-6">
       <div className="flex justify-start">
-        <ExitButton />
+        <ExitButton onExit={onExit} />
       </div>
 
       <div className="text-center">
@@ -136,8 +130,6 @@ export default function StudyViewer({ title, studyType, cards, onFinish, saveSlo
           Card {index + 1} of {cards.length}
         </p>
       </div>
-
-      {saveSlot}
 
       {isMultipleChoice ? (
         <>
