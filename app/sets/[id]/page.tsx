@@ -31,6 +31,10 @@ export default function SetPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [savingTitle, setSavingTitle] = useState(false);
+  const [titleError, setTitleError] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -78,6 +82,50 @@ export default function SetPage() {
     router.push('/my-sets');
   };
 
+  const startEditingTitle = () => {
+    if (!set) return;
+    setTitleDraft(set.title);
+    setTitleError('');
+    setIsEditingTitle(true);
+  };
+
+  const cancelEditingTitle = () => {
+    setIsEditingTitle(false);
+    setTitleError('');
+  };
+
+  const saveTitle = async () => {
+    if (!set) return;
+
+    const trimmed = titleDraft.trim();
+    if (!trimmed) {
+      setTitleError('Name cannot be empty.');
+      return;
+    }
+    if (trimmed === set.title) {
+      setIsEditingTitle(false);
+      return;
+    }
+
+    setSavingTitle(true);
+    setTitleError('');
+
+    const { error } = await supabase
+      .from('flashcard_sets')
+      .update({ title: trimmed })
+      .eq('id', set.id);
+
+    setSavingTitle(false);
+
+    if (error) {
+      setTitleError(error.message);
+      return;
+    }
+
+    setSet({ ...set, title: trimmed });
+    setIsEditingTitle(false);
+  };
+
   if (loading) {
     return <main className="min-h-screen flex items-center justify-center">Loading...</main>;
   }
@@ -89,14 +137,56 @@ export default function SetPage() {
   const isOwner = user && set.user_id === user.id;
 
   const deleteSlot = isOwner ? (
-    <div className="text-center">
-      <button
-        onClick={handleDelete}
-        disabled={deleting}
-        className="text-sm text-red-500 hover:underline disabled:opacity-40"
-      >
-        {deleting ? 'Deleting...' : '🗑 Delete this set'}
-      </button>
+    <div className="text-center space-y-2">
+      {isEditingTitle ? (
+        <div className="flex flex-col items-center gap-2">
+          <input
+            autoFocus
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveTitle();
+              if (e.key === 'Escape') cancelEditingTitle();
+            }}
+            disabled={savingTitle}
+            className="w-full max-w-xs text-center px-3 py-1.5 rounded-lg border text-sm"
+            placeholder="Study guide name"
+          />
+          {titleError && <p className="text-xs text-red-500">{titleError}</p>}
+          <div className="flex gap-3 text-sm">
+            <button
+              onClick={saveTitle}
+              disabled={savingTitle}
+              className="text-blue-600 hover:underline disabled:opacity-40"
+            >
+              {savingTitle ? 'Saving...' : 'Save'}
+            </button>
+            <button
+              onClick={cancelEditingTitle}
+              disabled={savingTitle}
+              className="text-gray-500 hover:underline disabled:opacity-40"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          onClick={startEditingTitle}
+          className="text-sm text-gray-500 hover:underline"
+        >
+          ✏️ Rename this set
+        </button>
+      )}
+      <div>
+        <button
+          onClick={handleDelete}
+          disabled={deleting}
+          className="text-sm text-red-500 hover:underline disabled:opacity-40"
+        >
+          {deleting ? 'Deleting...' : '🗑 Delete this set'}
+        </button>
+      </div>
     </div>
   ) : null;
 
