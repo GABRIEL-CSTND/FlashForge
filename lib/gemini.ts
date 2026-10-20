@@ -14,6 +14,14 @@ const ATTEMPT_TIMEOUT_MS = 25_000;
 const TOTAL_BUDGET_MS = 50_000;
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
+const ITEM_COUNT = 10;
+// Multiple-choice items that fail validation are dropped, so ask for a few
+// extra to still end up with ITEM_COUNT.
+const REQUESTED_COUNT: Record<'flashcard' | 'multiple_choice', number> = {
+  flashcard: ITEM_COUNT,
+  multiple_choice: 12,
+};
+
 const BUSY_MESSAGE = 'The AI is busy right now. Please try again in a minute.';
 const GENERIC_MESSAGE = 'Something went wrong while generating your study guide. Please try again.';
 
@@ -54,10 +62,44 @@ Examples of the format (not the content):
 - question: "Pigment in chloroplasts that absorbs light energy for photosynthesis" → answer: "Chlorophyll"
 - question: "Organelle that produces most of the cell's ATP" → answer: "Mitochondria"
 - question: "Year the Treaty of Paris ended the Spanish-American War" → answer: "1898"`,
-  multiple_choice: `Create multiple-choice questions. Each item has a "question", an "options" array of exactly 4 plausible choices (in random order), and an "answer" field that exactly matches one of the strings in "options" (the correct one).`,
+  multiple_choice: `Create multiple-choice questions.
+- "question": a clue, description, or definition that points to exactly one specific term, name, date, number, or concept from the text.
+- "answer": the correct choice, 1 to 4 words. It must be copied exactly, character for character, from "options".
+- "options": exactly 4 different choices: the correct answer plus 3 wrong ones.
+- Wrong choices must be the same kind of thing as the answer (all dates, all people, all organelles, all protocols, etc.) and should come from the text when possible, so that none is obviously wrong.
+- Exactly one choice is correct. Never use "All of the above", "None of the above", or "Both A and B".`,
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const normalize = (s: string) => s.trim().replace(/\s+/g, ' ').replace(/[.]+$/, '').toLowerCase();
+
+function shuffle<T>(arr: T[]): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+// The model doesn't reliably follow the "answer must match one option" rule,
+// and tends to put the correct answer in the same position. Returns null for
+// items the UI couldn't grade (no single matching option, wrong option count).
+function validateMultipleChoice(item: GeneratedItem): GeneratedItem | null {
+  if (!item.question?.trim() || !item.answer?.trim() || !Array.isArray(item.options)) return null;
+
+  const seen = new Set<string>();
+  const options = item.options
+    .map((o) => (typeof o === 'string' ? o.trim() : ''))
+    .filter((o) => o && !seen.has(normalize(o)) && seen.add(normalize(o)));
+  if (options.length !== 4) return null;
+
+  const matches = options.filter((o) => normalize(o) === normalize(item.answer));
+  if (matches.length !== 1) return null;
+
+  return { question: item.question.trim(), answer: matches[0], options: shuffle(options) };
+}
 
 async function callModel(
   model: string,
@@ -120,7 +162,7 @@ export async function generateStudyItems(
   if (!apiKey) throw new GeminiError('GEMINI_API_KEY is not set', { retryable: false });
 
   const prompt = `You are creating a study guide from the text below.
-Produce exactly 10 items. ${TYPE_INSTRUCTIONS[studyType]}
+Produce exactly ${REQUESTED_COUNT[studyType]} items. ${TYPE_INSTRUCTIONS[studyType]}
 Base everything strictly on the provided text. Avoid trivial or overly broad questions.
 
 TEXT:
@@ -134,7 +176,7 @@ ${sourceText.slice(0, 30000)}
           type: 'OBJECT',
           properties: {
             question: { type: 'STRING' },
-            options: { type: 'ARRAY', items: { type: 'STRING' } },
+            options: { type: 'ARRAY', items: { type: 'STRING' }, minItems: 4, maxItems: 4 },
             answer: { type: 'STRING' },
           },
           required: ['question', 'options', 'answer'],
@@ -173,17 +215,25 @@ ${sourceText.slice(0, 30000)}
 
       const startedAt = Date.now();
       try {
-        const { items, outputTokens } = await callModel(
+        const { items: rawItems, outputTokens } = await callModel(
           model,
           apiKey,
           body,
           Math.min(ATTEMPT_TIMEOUT_MS, remaining)
         );
+        const items =
+          studyType === 'multiple_choice'
+            ? rawItems.map(validateMultipleChoice).filter((i): i is GeneratedItem => i !== null)
+            : rawItems;
+        if (items.length === 0) {
+          throw new GeminiError(`all ${rawItems.length} items failed validation`, { retryable: true });
+        }
+
         console.log(
-          `[gemini] ${model} generated ${items.length} ${studyType} items in ${Date.now() - startedAt}ms` +
+          `[gemini] ${model} generated ${items.length}/${rawItems.length} valid ${studyType} items in ${Date.now() - startedAt}ms` +
             ` (attempt ${attempt}, ${outputTokens ?? '?'} output tokens)`
         );
-        return items.slice(0, 10);
+        return items.slice(0, ITEM_COUNT);
       } catch (err) {
         const error =
           err instanceof GeminiError ? err : new GeminiError(String(err), { retryable: false });
