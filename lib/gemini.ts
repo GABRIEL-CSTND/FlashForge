@@ -42,7 +42,18 @@ export class GeminiError extends Error {
 }
 
 const TYPE_INSTRUCTIONS: Record<StudyType, string> = {
-  flashcard: `Create flashcards. Each item has a clear "question" and a concise "answer". No "options" field.`,
+  flashcard: `Create identification-style flashcards.
+- "question": a clue, description, or definition that points to exactly one specific term, name, date, number, or concept from the text.
+- "answer": that term itself, 1 to 4 words. Never a sentence or an explanation.
+- Never ask "What is X?" when the answer would be a definition. Flip it: put the definition in the question and X as the answer.
+- Do not write questions that ask the reader to explain, describe, compare, discuss, or list, and do not start questions with "Why" or "How".
+- Every answer must be different; don't make two cards about the same term.
+- No "options" field.
+
+Examples of the format (not the content):
+- question: "Pigment in chloroplasts that absorbs light energy for photosynthesis" → answer: "Chlorophyll"
+- question: "Organelle that produces most of the cell's ATP" → answer: "Mitochondria"
+- question: "Year the Treaty of Paris ended the Spanish-American War" → answer: "1898"`,
   multiple_choice: `Create multiple-choice questions. Each item has a "question", an "options" array of exactly 4 plausible choices (in random order), and an "answer" field that exactly matches one of the strings in "options" (the correct one).`,
 };
 
@@ -131,8 +142,14 @@ ${sourceText.slice(0, 30000)}
       : {
           type: 'OBJECT',
           properties: {
-            question: { type: 'STRING' },
-            answer: { type: 'STRING' },
+            question: {
+              type: 'STRING',
+              description: 'A clue or definition that identifies one specific term from the text',
+            },
+            answer: {
+              type: 'STRING',
+              description: 'The term being identified: 1 to 4 words, never a full sentence',
+            },
           },
           required: ['question', 'answer'],
         };
