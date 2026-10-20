@@ -137,6 +137,22 @@ export default function UploadPage() {
     router.push(`/sets/${body.id}`);
   };
 
+  // The study guide is rendered on this same page, so exiting means clearing it
+  // rather than navigating to "/".
+  const handleExit = () => {
+    if (
+      saveStatus !== 'saved' &&
+      !window.confirm("Leave this study guide? It hasn't been saved and will be lost.")
+    ) {
+      return;
+    }
+    setResult(null);
+    setFile(null);
+    setSaveStatus('idle');
+    setStatus('idle');
+    setErrorMsg('');
+  };
+
   // If we restored a pending result after an auth redirect and the user is
   // now signed in, finish the save automatically instead of making them
   // click twice.
@@ -186,6 +202,7 @@ export default function UploadPage() {
         title={result.title}
         studyType={result.studyType}
         cards={result.items}
+        onExit={handleExit}
         saveSlot={saveSlot}
       />
     );
