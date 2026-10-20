@@ -3,33 +3,11 @@
 Notable changes to FlashForge, newest first. Issue and PR numbers refer to
 [GABRIEL-CSTND/FlashForge](https://github.com/GABRIEL-CSTND/FlashForge).
 
-## Unreleased
+## Unreleased (on `dev`, not on the live site yet)
 
-### Added
-- **Choose student or teacher at sign-up** (#52). Signed-in users who haven't chosen
-  (including the 2 existing students) see a one-time screen. Teachers land on a new
-  `/teacher` dashboard (a placeholder until classes arrive in #53), and the upload page
-  links to it. `POST /api/profile/role` allows each user exactly one choice, never
-  `admin`.
-- Component tests with React Testing Library and jsdom.
-- **Classes with join codes (live database)** (#53):
-  - Teachers create classes on `/teacher` and each class gets a code like `K7M-2QX`.
-  - A class page shows the code (copy, or get a new one; the old one stops working) and
-    the roster (names and emails), and lets the teacher rename the class, remove students
-    and delete it.
-  - Teachers can only see and change their own classes, with up to 50 each.
-  - New tables `classes` and `class_members`, with RLS and a `class_roster()` function
-    (16 of 16 database checks pass).
-- `test-utils/fake-supabase.ts`, a reusable in-memory Supabase client for route tests.
-  `npm test` now runs 82 tests.
-
-### Security
-- Vitest updated 3.2.4 → 3.2.7 (fixes a critical advisory for the Vitest UI server).
-
-## 2026-10-20
-
-Released to `dev`; reaches the live site when PR #48 (`dev` → `main`) is merged.
-Database changes marked **(live)** were applied to Supabase the same day.
+Everything here was done on 2026-10-20. It reaches the live site when `dev` is merged
+into `main`. There is only one Supabase database, so changes marked **(live)** are
+already applied there.
 
 ### Security
 - **Closed two database holes (live)** (#46). Anyone with the public anon key could read
@@ -40,17 +18,35 @@ Database changes marked **(live)** were applied to Supabase the same day.
   with SQL checks in `supabase/tests/` that simulate users in a rolled-back
   transaction (#46).
 - The Gemini API key is sent in a request header instead of the URL (#40).
+- Vitest updated 3.2.4 → 3.2.7 (fixes a critical advisory for the Vitest UI server).
+  Advisories that are still open are listed under *Known limitations* in
+  `docs/ARCHITECTURE.md`.
 
 ### Added
 - **User roles (live)** (#51): `profiles` table (`student` / `teacher` / `admin`), a
   sign-up trigger that creates a student profile, and the first admin
-  (castanedag438@gmail.com). Users can't change their own role.
-- `lib/roles.ts`: `requireRole()` for upcoming teacher and admin routes (401/403).
+  (castanedag438@gmail.com). Users can't change their own role. `lib/roles.ts` has
+  `requireRole()` for teacher and admin routes (401/403).
+- **Choose student or teacher at sign-up** (#52). Signed-in users who haven't chosen
+  (including the 2 existing students) see a one-time screen. Teachers land on the
+  `/teacher` dashboard, and the upload page links to it. `POST /api/profile/role`
+  allows each user exactly one choice, never `admin`.
+- **Classes with join codes (live database)** (#53):
+  - Teachers create classes on `/teacher` and each class gets a code like `K7M-2QX`.
+  - A class page shows the code (copy, or get a new one; the old one stops working) and
+    the roster (names and emails), and lets the teacher rename the class, remove students
+    and delete it.
+  - Teachers can only see and change their own classes, with up to 50 each.
+  - New tables `classes` and `class_members`, with RLS and a `class_roster()` function
+    (16 of 16 database checks pass).
 - **Gemma 4 as a last-resort AI backup** (PR #49): when both Gemini models are busy or
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Vitest** test runner (`npm test`) with 9 tests for the role checks.
+- **Automated tests** (`npm test`, 82 tests):
+  - Vitest (#51).
+  - React Testing Library and jsdom for component tests (#52).
+  - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53).
 - Plan for teacher and admin features, with a 6-week schedule: parent issue #50 and
   sub-issues #51–#63.
 

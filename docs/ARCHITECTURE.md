@@ -10,10 +10,14 @@ flowchart LR
   subgraph Browser
     U[Upload page<br/>app/page.tsx] --> SV[StudyViewer]
     MS[My Sets] --> SP["Set page<br/>/sets/[id]"]
+    RC[RoleChooser<br/>one-time screen]
+    T["Teacher pages<br/>/teacher, /teacher/classes/[id]"]
   end
   subgraph "Next.js server (Vercel)"
     G["/api/generate"] --> AI[lib/gemini.ts]
     S["/api/save-set"]
+    R["/api/profile/role"]
+    TC["/api/teacher/classes/..."] --> CL[lib/classes.ts]
   end
   subgraph Google
     AI --> M1[gemini-3.5-flash]
@@ -29,7 +33,32 @@ flowchart LR
   MS -->|anon key + user session| DB
   SP -->|anon key + user session| DB
   U --> AUTH
+  RC --> R -->|service-role key| DB
+  T --> TC
+  CL -->|service-role key, scoped to the teacher| DB
 ```
+
+Every server route that changes data checks the caller first (`lib/roles.ts`) and then
+writes with the service-role key. Browsers read only what RLS allows (section 4).
+
+### API routes
+
+| Method and path | Who | What it does |
+|---|---|---|
+| `POST /api/generate` | Anyone | Extract text from a PDF/TXT and generate 10 study items (section 1) |
+| `POST /api/save-set` | Signed in | Save a generated study guide to the user's account |
+| `POST /api/profile/role` | Signed in, not chosen yet | One-time choice: `{ role: 'student' \| 'teacher' }` (#52) |
+| `GET /api/teacher/classes` | Teacher, admin | The caller's classes, newest first, with student counts |
+| `POST /api/teacher/classes` | Teacher, admin | Create a class: `{ name }` → the class with its join code |
+| `GET /api/teacher/classes/[id]` | The class's teacher | Class details and roster (names, emails, join dates) |
+| `PATCH /api/teacher/classes/[id]` | The class's teacher | Rename: `{ name }` |
+| `DELETE /api/teacher/classes/[id]` | The class's teacher | Delete the class and its memberships |
+| `POST /api/teacher/classes/[id]/join-code` | The class's teacher | Replace the join code; the old one stops working |
+| `DELETE /api/teacher/classes/[id]/students/[studentId]` | The class's teacher | Remove one student from the class |
+
+Errors are JSON `{ error }` with 400 (bad input), 401 (not signed in), 403 (wrong role),
+404 (not found, *or* someone else's class), 409 (conflict, e.g. a role already chosen or
+the 50-class limit), and 500 (a generic message; details only go to the server log).
 
 ## 1. Generating a study guide
 
@@ -140,6 +169,8 @@ flowchart LR
   teacher owns the class.
 - A teacher can have at most 50 classes (`MAX_CLASSES_PER_TEACHER`), since anyone can
   pick "teacher" at sign-up.
+- **Admins** can use all teacher features, but only on classes they created themselves.
+  Seeing other teachers' classes would be an admin feature (#60/#61).
 - Students joining with a code is #54.
 
 The plan for teacher and admin features is tracked in #50.
@@ -208,3 +239,15 @@ transaction. Run them after every database change.
   uploaded to the server whole (#44), and only PDF and TXT are supported (#20).
 - **3 existing ESLint errors** (`react-hooks/set-state-in-effect`) in `app/page.tsx` and
   `app/my-sets/page.tsx`.
+- **Students can't join classes yet.** Teachers can create classes and share codes, but
+  the join form for students is #54, so rosters stay empty until then.
+- **Open dependency advisories** (`npm audit`, 2026-10-20):
+  - **`next` 16.3.3** (used by the live site) has published advisories. They include a
+    critical remote-code-execution bug in `next/og` and a high-severity SSRF in image
+    optimization. FlashForge doesn't use `next/og`, `next/image` or an `images`
+    config, so it's likely not exploitable, but the fix is to upgrade to **16.3.8**
+    (along with `eslint-config-next`). This hasn't been done yet.
+  - **Dev tools only:** `vitest` 3.2.7 still pulls in `tinypool` and `@vitest/mocker`
+    advisories, and `eslint-config-next` pulls in `fast-glob`, `micromatch` and
+    `braces` advisories. These only matter if someone controls our test or lint config,
+    and fixing them needs major-version upgrades.

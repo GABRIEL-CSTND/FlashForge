@@ -68,7 +68,7 @@ Open http://localhost:3000.
 | `npm run build` | Production build (also type-checks) |
 | `npm start` | Run the production build |
 | `npm run lint` | ESLint (3 known errors in `app/page.tsx` and `app/my-sets/page.tsx`, unrelated to recent work) |
-| `npm test` | Unit tests with Vitest |
+| `npm test` | Unit, API-route and component tests (Vitest + React Testing Library) |
 
 ## Project structure
 
