@@ -1,5 +1,8 @@
 const GEMINI_MODEL = 'gemini-3.5-flash';
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+// Gemini 3.x models "think" before answering by default. Flashcards don't need
+// deep reasoning, so keep it low to cut latency.
+const THINKING_LEVEL = 'low';
 
 export type StudyType = 'flashcard' | 'multiple_choice';
 
@@ -50,6 +53,7 @@ ${sourceText.slice(0, 30000)}
           required: ['question', 'answer'],
         };
 
+  const startedAt = Date.now();
   const res = await fetch(`${API_URL}?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -58,6 +62,7 @@ ${sourceText.slice(0, 30000)}
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: { type: 'ARRAY', items: itemSchema },
+        thinkingConfig: { thinkingLevel: THINKING_LEVEL },
       },
     }),
   });
@@ -75,5 +80,10 @@ ${sourceText.slice(0, 30000)}
   if (!Array.isArray(items) || items.length === 0) {
     throw new Error('Gemini returned no study items');
   }
+
+  console.log(
+    `[gemini] ${GEMINI_MODEL} generated ${items.length} ${studyType} items in ${Date.now() - startedAt}ms` +
+      ` (${data.usageMetadata?.candidatesTokenCount ?? '?'} output tokens)`
+  );
   return items.slice(0, 10);
 }
