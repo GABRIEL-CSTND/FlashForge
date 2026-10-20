@@ -104,6 +104,20 @@ flowchart LR
     column-level grant. **They can never change their own role.**
   - The first admins come from `supabase/seed-admins.sql`; later ones will be added
     in-app (#60).
+- **Choosing a role at sign-up** (#52):
+  - `components/ProfileProvider.tsx` (in the root layout) loads the user's own profile,
+    which RLS allows, and shares it with every page through `useProfile()`.
+  - `components/RoleChooser.tsx` shows a one-time "student or teacher?" screen to any
+    signed-in user who is still a default student with an empty `role_chosen_at`. That
+    includes existing users on their next visit. It sits on top of the current page
+    instead of navigating, so a save that's finishing after the Google redirect keeps
+    running.
+  - `POST /api/profile/role` accepts only `student` or `teacher`, and only once. It
+    updates the row only `where role = 'student' and role_chosen_at is null`, so it can't
+    overwrite a role an admin assigned, and two parallel requests can't both succeed. If
+    the profile row is missing, it inserts one.
+  - Responses: 401 not signed in, 400 any other role (including `admin`), 409 already
+    chosen. Teachers then land on `/teacher`; students stay where they are.
 - **Server checks** (`lib/roles.ts`): `requireRole(req, ['teacher', 'admin'])` reads the
   Bearer token and returns the user, or throws `AuthError` with 401 (not signed in) or
   403 (wrong role). A user without a profile counts as a student. Every teacher and
@@ -146,7 +160,9 @@ transaction. Run them after every database change.
 
 ## 5. Testing
 
-- `npm test`: Vitest unit tests (currently `lib/roles.test.ts`).
+- `npm test`: Vitest. Unit tests for `lib/roles.ts` and `/api/profile/role` (with an
+  in-memory profiles table), and component tests for `RoleChooser` in jsdom with React
+  Testing Library. Component tests start with `// @vitest-environment jsdom`.
 - `supabase/tests/sets-rls-check.sql` and `profiles-rls-check.sql`: database security
   checks. Each prints expected vs. actual for 10 cases.
 - AI changes were checked with mocked `fetch` (retries, fallbacks, validation) and a few

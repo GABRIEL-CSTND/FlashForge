@@ -1,12 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { ROLES, type Role, type SelfSelectableRole } from '@/lib/role-types';
 
 // SERVER-ONLY (uses the service-role client). Roles live in public.profiles and
 // can only be changed through server routes; RLS stops users from editing
 // their own role.
-export type Role = 'student' | 'teacher' | 'admin';
-
-export const ROLES: readonly Role[] = ['student', 'teacher', 'admin'];
+export { ROLES, type Role };
 
 export interface AuthedUser {
   id: string;
@@ -67,4 +66,38 @@ export async function requireRole(
     throw new AuthError(403, "You don't have permission to do that.");
   }
   return user;
+}
+
+export type ChooseRoleResult = 'chosen' | 'already-chosen';
+
+// The one-time role choice at sign-up (#52). Only succeeds while the user is
+// still a default student who hasn't chosen yet, so it can't overwrite a role
+// an admin assigned, and two parallel requests can't both win: the UPDATE's
+// WHERE clause is re-checked under the row lock.
+export async function chooseOwnRole(
+  userId: string,
+  role: SelfSelectableRole,
+  client: SupabaseClient = supabaseAdmin
+): Promise<ChooseRoleResult> {
+  const chosenAt = new Date().toISOString();
+
+  const { data: updated, error: updateError } = await client
+    .from('profiles')
+    .update({ role, role_chosen_at: chosenAt })
+    .eq('id', userId)
+    .eq('role', 'student')
+    .is('role_chosen_at', null)
+    .select('id');
+  if (updateError) throw updateError;
+  if (updated && updated.length > 0) return 'chosen';
+
+  // Nothing updated: either the choice was already made (or an admin set the
+  // role), or the sign-up trigger never created a profile row. Inserting tells
+  // the two apart: the primary key rejects it if the row exists.
+  const { error: insertError } = await client
+    .from('profiles')
+    .insert({ id: userId, role, role_chosen_at: chosenAt });
+  if (!insertError) return 'chosen';
+  if (insertError.code === '23505') return 'already-chosen';
+  throw insertError;
 }

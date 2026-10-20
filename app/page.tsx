@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useUser, signInWithGoogle, signOut } from '@/lib/auth';
 import StudyViewer, { StudyItem } from '@/components/StudyViewer';
+import { useProfile } from '@/components/ProfileProvider';
+import { canUseTeacherTools } from '@/lib/role-types';
 
 const ACCEPTED_TYPES = ['application/pdf', 'text/plain'];
 const ACCEPTED_EXT = ['.pdf', '.txt'];
@@ -31,6 +33,7 @@ const SLOW_NOTICE_MS = 15_000;
 export default function UploadPage() {
   const router = useRouter();
   const { user } = useUser();
+  const { profile } = useProfile();
   const [file, setFile] = useState<File | null>(null);
   const [studyType, setStudyType] = useState<StudyType>('flashcard');
   const [dragActive, setDragActive] = useState(false);
@@ -230,6 +233,11 @@ export default function UploadPage() {
         <div className="flex justify-end">
           {user ? (
             <div className="flex items-center gap-3 text-sm">
+              {canUseTeacherTools(profile?.role) && (
+                <Link href="/teacher" className="text-blue-500 hover:underline">
+                  Teacher dashboard
+                </Link>
+              )}
               <Link href="/my-sets" className="text-blue-500 hover:underline">
                 My Sets
               </Link>

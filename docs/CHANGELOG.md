@@ -3,6 +3,19 @@
 Notable changes to FlashForge, newest first. Issue and PR numbers refer to
 [GABRIEL-CSTND/FlashForge](https://github.com/GABRIEL-CSTND/FlashForge).
 
+## Unreleased
+
+### Added
+- **Choose student or teacher at sign-up** (#52). Signed-in users who haven't chosen
+  (including the 2 existing students) see a one-time screen. Teachers land on a new
+  `/teacher` dashboard (a placeholder until classes arrive in #53), and the upload page
+  links to it. `POST /api/profile/role` allows each user exactly one choice, never
+  `admin`.
+- Component tests with React Testing Library and jsdom. `npm test` now runs 35 tests.
+
+### Security
+- Vitest updated 3.2.4 → 3.2.7 (fixes a critical advisory for the Vitest UI server).
+
 ## 2026-10-20
 
 Released to `dev`; reaches the live site when PR #48 (`dev` → `main`) is merged.

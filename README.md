@@ -18,7 +18,7 @@ Live site: https://flash-forge-one.vercel.app
 | Database and sign-in | [Supabase](https://supabase.com) (Postgres with Row Level Security, Google OAuth) |
 | PDF text extraction | [unpdf](https://github.com/unjs/unpdf) |
 | Hosting | Vercel (`main` deploys to production; other branches get preview deployments) |
-| Tests | [Vitest](https://vitest.dev) (`npm test`) plus SQL security checks in `supabase/tests/` |
+| Tests | [Vitest](https://vitest.dev) and React Testing Library (`npm test`), plus SQL security checks in `supabase/tests/` |
 
 > **Next.js 16 note:** this version has breaking changes compared to older Next.js
 > tutorials. Check `node_modules/next/dist/docs/` before using an API you're unsure of
@@ -77,13 +77,18 @@ app/
   page.tsx              Upload page; also shows a freshly generated guide
   my-sets/page.tsx      Signed-in user's saved sets
   sets/[id]/page.tsx    A saved set: study, rename, delete
+  teacher/page.tsx      Teacher dashboard (classes coming in #53)
   api/generate/         POST: extract text from the file, generate items with AI
   api/save-set/         POST: save a generated guide (signed-in users only)
+  api/profile/role/     POST: one-time student/teacher choice at sign-up
 components/
   StudyViewer.tsx       Flashcard / multiple-choice study UI
+  ProfileProvider.tsx   Shares the signed-in user's profile (role) with every page
+  RoleChooser.tsx       "Student or teacher?" screen for users who haven't chosen
 lib/
   gemini.ts             AI model chain, prompts, retries, output validation
-  roles.ts              getAuthedUser / requireRole for teacher and admin routes
+  roles.ts              getAuthedUser / requireRole / chooseOwnRole (server-only)
+  role-types.ts         Role types and helpers shared by server and client
   supabase.ts           Browser Supabase client (anon key)
   supabase-admin.ts     Server-only Supabase client (service-role key)
   auth.ts               useUser hook, Google sign-in/out
