@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateStudyItems, StudyType } from '@/lib/gemini';
+import { generateStudyItems, GeminiError, StudyType } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
+// Gemini retries are capped at ~50s (see lib/gemini.ts); leave headroom for upload + PDF parsing.
+export const maxDuration = 60;
 
 async function extractText(file: File): Promise<string> {
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -34,7 +36,16 @@ export async function POST(req: NextRequest) {
       ? (studyTypeRaw as StudyType)
       : 'flashcard';
 
-    const text = await extractText(file);
+    let text: string;
+    try {
+      text = await extractText(file);
+    } catch (err) {
+      console.error('[generate] text extraction failed:', err);
+      return NextResponse.json(
+        { error: "We couldn't read this file. Please try a different PDF or TXT file." },
+        { status: 422 }
+      );
+    }
     if (!text || text.trim().length < 20) {
       return NextResponse.json(
         { error: 'Could not extract enough readable text from this file.' },
@@ -51,7 +62,14 @@ export async function POST(req: NextRequest) {
       items,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Never send raw API errors to the browser; log the details server-side instead.
+    console.error('[generate] failed:', err);
+    if (err instanceof GeminiError) {
+      return NextResponse.json({ error: err.userMessage }, { status: err.retryable ? 503 : 502 });
+    }
+    return NextResponse.json(
+      { error: 'Something went wrong while generating your study guide. Please try again.' },
+      { status: 500 }
+    );
   }
 }
