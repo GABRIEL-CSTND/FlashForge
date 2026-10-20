@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateStudyItems, GeminiError, StudyType } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
-// Gemini retries are capped at ~50s (see lib/gemini.ts); leave headroom for upload + PDF parsing.
-export const maxDuration = 60;
+// Model retries are capped at ~75s (see lib/gemini.ts); leave headroom for upload + PDF parsing.
+export const maxDuration = 90;
 
 async function extractText(file: File): Promise<string> {
   const buffer = Buffer.from(await file.arrayBuffer());
@@ -53,13 +53,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const items = await generateStudyItems(text, studyType);
+    const { items, model } = await generateStudyItems(text, studyType);
 
     return NextResponse.json({
       title: file.name.replace(/\.[^/.]+$/, ''),
       sourceFilename: file.name,
       studyType,
       items,
+      // Which model produced this guide (Gemini, or the Gemma backup).
+      model,
     });
   } catch (err) {
     // Never send raw API errors to the browser; log the details server-side instead.
