@@ -25,6 +25,8 @@ interface GeneratedResult {
 }
 
 const PENDING_RESULT_KEY = 'flashforge_pending_result';
+// Gemini normally answers in under ~12s; longer usually means the Gemma backup.
+const SLOW_NOTICE_MS = 15_000;
 
 export default function UploadPage() {
   const router = useRouter();
@@ -37,6 +39,7 @@ export default function UploadPage() {
   const [result, setResult] = useState<GeneratedResult | null>(null);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'needs-auth'>('idle');
   const [resumeAfterAuth, setResumeAfterAuth] = useState(false);
+  const [slowGeneration, setSlowGeneration] = useState(false);
 
   // Restore a generated-but-unsaved result after a Google sign-in redirect,
   // since the OAuth flow does a full page reload and would otherwise lose it.
@@ -86,7 +89,20 @@ export default function UploadPage() {
     formData.append('file', file);
     formData.append('studyType', studyType);
 
-    const res = await fetch('/api/generate', { method: 'POST', body: formData });
+    // Past this point the main AI is probably out of quota and the slower
+    // backup model is answering, so tell the user it can take up to a minute.
+    const slowTimer = setTimeout(() => setSlowGeneration(true), SLOW_NOTICE_MS);
+    let res: Response;
+    try {
+      res = await fetch('/api/generate', { method: 'POST', body: formData });
+    } catch {
+      setErrorMsg('Could not reach the server. Check your connection and try again.');
+      setStatus('error');
+      return;
+    } finally {
+      clearTimeout(slowTimer);
+      setSlowGeneration(false);
+    }
     const body = await res.json().catch(() => ({}));
 
     if (!res.ok) {
@@ -298,6 +314,13 @@ export default function UploadPage() {
           {status === 'generating' && 'Generating (this can take ~20s)...'}
           {(status === 'idle' || status === 'error') && 'Generate Study Guide'}
         </button>
+
+        {status === 'generating' && slowGeneration && (
+          <p className="text-sm text-gray-500 text-center">
+            Our AI is extra busy right now, so we&apos;re using a slower backup. This can take up
+            to a minute.
+          </p>
+        )}
       </div>
     </main>
   );

@@ -1,7 +1,34 @@
-const PRIMARY_MODEL = 'gemini-3.5-flash';
-// Lighter model with its own free-tier quota, used when the primary model is
-// overloaded (503) or out of quota (429).
-const FALLBACK_MODEL = 'gemini-3.5-flash-lite';
+// Models are tried in order; each has its own free-tier quota. A 429 (quota used
+// up) moves to the next model immediately, so once both Gemini models hit their
+// daily limit every request lands on Gemma 4 automatically, and goes back to
+// Gemini as soon as its quota resets.
+//
+// Gemma 4 is only the last-resort backup: it's much slower (~26-33s) and less
+// reliable (intermittent 500s and hangs). It also needs a different request:
+// - `responseSchema` returns HTTP 500 and any `thinkingConfig` returns HTTP 400.
+// - `responseJsonSchema` (with minItems) is fast (~9s) because it skips thinking,
+//   but the output degenerates into garbage ("Taxonomy-set-3-A-R-C", repeated
+//   phrases, HTML). Without minItems it just returns `[]`.
+// - Plain JSON mode works and gives good cards, but Gemma always thinks first
+//   (~860 thought tokens, ~26s for 10 cards) and returns the thoughts as separate
+//   parts before the answer.
+// - It intermittently returns HTTP 500 or hangs with no response.
+// So Gemma gets plain JSON mode with the format described in the prompt, one long
+// attempt, and every item is checked by looksBroken() before it reaches the UI.
+type ModelFamily = 'gemini' | 'gemma';
+
+interface ModelConfig {
+  id: string;
+  family: ModelFamily;
+  attempts: number;
+  timeoutMs: number;
+}
+
+const MODEL_CHAIN: ModelConfig[] = [
+  { id: 'gemini-3.5-flash', family: 'gemini', attempts: 2, timeoutMs: 25_000 },
+  { id: 'gemini-3.5-flash-lite', family: 'gemini', attempts: 2, timeoutMs: 25_000 },
+  { id: 'gemma-4-26b-a4b-it', family: 'gemma', attempts: 1, timeoutMs: 40_000 },
+];
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 // Gemini 3.x models "think" before answering by default. Flashcards don't need
 // deep reasoning, so keep it low to cut latency.
@@ -9,9 +36,7 @@ const THINKING_LEVEL = 'low';
 
 // Retry budget. The whole generation (all attempts + backoff) must finish
 // within TOTAL_BUDGET_MS so the user isn't left waiting indefinitely.
-const ATTEMPTS_PER_MODEL = 2;
-const ATTEMPT_TIMEOUT_MS = 25_000;
-const TOTAL_BUDGET_MS = 50_000;
+const TOTAL_BUDGET_MS = 75_000;
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 const ITEM_COUNT = 10;
@@ -21,6 +46,8 @@ const REQUESTED_COUNT: Record<'flashcard' | 'multiple_choice', number> = {
   flashcard: ITEM_COUNT,
   multiple_choice: 12,
 };
+// A response with fewer usable items than this counts as a failed attempt.
+const MIN_VALID_ITEMS = 6;
 
 const BUSY_MESSAGE = 'The AI is busy right now. Please try again in a minute.';
 const GENERIC_MESSAGE = 'Something went wrong while generating your study guide. Please try again.';
@@ -70,6 +97,14 @@ Examples of the format (not the content):
 - Exactly one choice is correct. Never use "All of the above", "None of the above", or "Both A and B".`,
 };
 
+// Gemma gets no response schema (see top of file), so the format goes in the prompt.
+const GEMMA_FORMAT: Record<StudyType, string> = {
+  flashcard:
+    'Return ONLY a JSON array of objects with string fields "question" and "answer". No other text.',
+  multiple_choice:
+    'Return ONLY a JSON array of objects with fields "question" (string), "options" (array of exactly 4 strings), and "answer" (string, copied exactly from "options"). No other text.',
+};
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const normalize = (s: string) => s.trim().replace(/\s+/g, ' ').replace(/[.]+$/, '').toLowerCase();
@@ -83,22 +118,60 @@ function shuffle<T>(arr: T[]): T[] {
   return out;
 }
 
+// Catches degenerate model output: HTML, a short chunk repeated 4+ times in a
+// row, slug-like tokens ("status-code-404-not-found"), and long whitespace runs.
+function looksBroken(s: string, maxLength: number): boolean {
+  return (
+    s.length === 0 ||
+    s.length > maxLength ||
+    /<\/?[a-z][^>]*>/i.test(s) ||
+    /(.{2,30}?)\1{3,}/.test(s) ||
+    /(?:^|\s)[^\s-]+(?:-[^\s-]+){3,}(?:\s|$)/.test(s) ||
+    /\s{5,}/.test(s)
+  );
+}
+
+function validateFlashcard(item: GeneratedItem): GeneratedItem | null {
+  if (typeof item.question !== 'string' || typeof item.answer !== 'string') return null;
+  const question = item.question.trim();
+  const answer = item.answer.trim();
+  if (looksBroken(question, 300) || looksBroken(answer, 80)) return null;
+  if (answer.split(/\s+/).length > 8) return null;
+  return { question, answer };
+}
+
 // The model doesn't reliably follow the "answer must match one option" rule,
 // and tends to put the correct answer in the same position. Returns null for
 // items the UI couldn't grade (no single matching option, wrong option count).
 function validateMultipleChoice(item: GeneratedItem): GeneratedItem | null {
-  if (!item.question?.trim() || !item.answer?.trim() || !Array.isArray(item.options)) return null;
+  if (typeof item.question !== 'string' || typeof item.answer !== 'string') return null;
+  if (!Array.isArray(item.options) || looksBroken(item.question.trim(), 300)) return null;
 
   const seen = new Set<string>();
   const options = item.options
     .map((o) => (typeof o === 'string' ? o.trim() : ''))
-    .filter((o) => o && !seen.has(normalize(o)) && seen.add(normalize(o)));
+    .filter((o) => o && !looksBroken(o, 80) && !seen.has(normalize(o)) && seen.add(normalize(o)));
   if (options.length !== 4) return null;
 
   const matches = options.filter((o) => normalize(o) === normalize(item.answer));
   if (matches.length !== 1) return null;
 
   return { question: item.question.trim(), answer: matches[0], options: shuffle(options) };
+}
+
+// Thinking models can return "thought" parts before the answer, and Gemma
+// sometimes wraps JSON in a markdown code fence.
+function extractResponseText(data: {
+  candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[];
+}): string {
+  const parts = data.candidates?.[0]?.content?.parts ?? [];
+  return parts
+    .filter((p) => !p.thought && typeof p.text === 'string')
+    .map((p) => p.text)
+    .join('')
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '');
 }
 
 async function callModel(
@@ -133,7 +206,7 @@ async function callModel(
 
   // Empty or malformed output is usually a one-off, so it's worth retrying.
   const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  const text = extractResponseText(data);
   if (!text) {
     throw new GeminiError(
       `no content (finishReason: ${data.candidates?.[0]?.finishReason ?? 'unknown'})`,
@@ -157,7 +230,7 @@ async function callModel(
 export async function generateStudyItems(
   sourceText: string,
   studyType: StudyType
-): Promise<GeneratedItem[]> {
+): Promise<{ items: GeneratedItem[]; model: string }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new GeminiError('GEMINI_API_KEY is not set', { retryable: false });
 
@@ -196,20 +269,26 @@ ${sourceText.slice(0, 30000)}
           required: ['question', 'answer'],
         };
 
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: { type: 'ARRAY', items: itemSchema },
-      thinkingConfig: { thinkingLevel: THINKING_LEVEL },
-    },
-  });
+  const bodies: Record<ModelFamily, string> = {
+    gemini: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: { type: 'ARRAY', items: itemSchema },
+        thinkingConfig: { thinkingLevel: THINKING_LEVEL },
+      },
+    }),
+    gemma: JSON.stringify({
+      contents: [{ parts: [{ text: `${prompt}\n\n${GEMMA_FORMAT[studyType]}` }] }],
+      generationConfig: { responseMimeType: 'application/json' },
+    }),
+  };
 
   const deadline = Date.now() + TOTAL_BUDGET_MS;
   let lastError: GeminiError | undefined;
 
-  for (const model of [PRIMARY_MODEL, FALLBACK_MODEL]) {
-    for (let attempt = 1; attempt <= ATTEMPTS_PER_MODEL; attempt++) {
+  for (const { id: model, family, attempts, timeoutMs } of MODEL_CHAIN) {
+    for (let attempt = 1; attempt <= attempts; attempt++) {
       const remaining = deadline - Date.now();
       if (remaining < 2_000) break;
 
@@ -218,22 +297,23 @@ ${sourceText.slice(0, 30000)}
         const { items: rawItems, outputTokens } = await callModel(
           model,
           apiKey,
-          body,
-          Math.min(ATTEMPT_TIMEOUT_MS, remaining)
+          bodies[family],
+          Math.min(timeoutMs, remaining)
         );
-        const items =
-          studyType === 'multiple_choice'
-            ? rawItems.map(validateMultipleChoice).filter((i): i is GeneratedItem => i !== null)
-            : rawItems;
-        if (items.length === 0) {
-          throw new GeminiError(`all ${rawItems.length} items failed validation`, { retryable: true });
+        const items = rawItems
+          .map(studyType === 'multiple_choice' ? validateMultipleChoice : validateFlashcard)
+          .filter((i): i is GeneratedItem => i !== null);
+        if (items.length < MIN_VALID_ITEMS) {
+          throw new GeminiError(`only ${items.length}/${rawItems.length} items passed validation`, {
+            retryable: true,
+          });
         }
 
         console.log(
           `[gemini] ${model} generated ${items.length}/${rawItems.length} valid ${studyType} items in ${Date.now() - startedAt}ms` +
             ` (attempt ${attempt}, ${outputTokens ?? '?'} output tokens)`
         );
-        return items.slice(0, ITEM_COUNT);
+        return { items: items.slice(0, ITEM_COUNT), model };
       } catch (err) {
         const error =
           err instanceof GeminiError ? err : new GeminiError(String(err), { retryable: false });
@@ -243,10 +323,10 @@ ${sourceText.slice(0, 30000)}
         lastError = error;
 
         if (!error.retryable) throw error;
-        // Quota errors won't clear in a few seconds; go straight to the fallback model.
+        // Quota errors won't clear in a few seconds; go straight to the next model.
         if (error.status === 429) break;
 
-        if (attempt < ATTEMPTS_PER_MODEL) {
+        if (attempt < attempts) {
           const backoff = 1_000 * 2 ** (attempt - 1) + Math.random() * 500;
           await sleep(Math.min(backoff, Math.max(0, deadline - Date.now() - 2_000)));
         }
