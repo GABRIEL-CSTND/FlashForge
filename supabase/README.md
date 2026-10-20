@@ -21,6 +21,7 @@ soon as it's applied.
 | `20261020000050_tighten_rls.sql` | #46 | 2026-10-20 |
 | `20261020000100_profiles_roles.sql` | #51 | 2026-10-20 |
 | `seed-admins.sql` | #51 | 2026-10-20 (castanedag438@gmail.com) |
+| `20261020000200_classes.sql` | #53 | 2026-10-20 |
 
 Add a row here whenever you apply a new migration.
 

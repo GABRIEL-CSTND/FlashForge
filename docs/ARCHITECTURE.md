@@ -123,6 +123,25 @@ flowchart LR
   403 (wrong role). A user without a profile counts as a student. Every teacher and
   admin route must use it, because hiding UI is not protection.
 
+### Classes (#53)
+
+- Teachers (and admins) create classes on `/teacher`. Each class gets a **join code**:
+  6 characters from an alphabet without look-alikes (no `0/O`, `1/I/L`), stored as
+  `K7M2QX` and shown as `K7M-2QX`. A unique constraint guarantees one class per code;
+  on a clash the server simply tries a new random code.
+- **All class changes go through `/api/teacher/classes/...`** routes, which call
+  `requireRole(req, ['teacher', 'admin'])` and then `lib/classes.ts`. Every query there
+  filters on `teacher_id = <caller>`, so another teacher's class behaves exactly like a
+  missing one (404). There are no write grants or policies for browsers.
+- **Get a new code** replaces it right away. The old code stops working, and students
+  already in the class stay in it.
+- The roster (names **and emails**) comes from `public.class_roster(class, teacher)`, a
+  database function only the service role may call. It returns nothing unless the
+  teacher owns the class.
+- A teacher can have at most 50 classes (`MAX_CLASSES_PER_TEACHER`), since anyone can
+  pick "teacher" at sign-up.
+- Students joining with a code is #54.
+
 The plan for teacher and admin features is tracked in #50.
 
 ## 3. Data model
@@ -132,6 +151,8 @@ The plan for teacher and admin features is tracked in #50.
 | `flashcard_sets` | `id`, `user_id` → `auth.users`, `title`, `source_filename`, `study_type`, `created_at` | `user_id` is null for legacy sets made before sign-in was required |
 | `flashcards` | `id`, `set_id` → `flashcard_sets` (cascade), `question`, `answer`, `options` (jsonb, MC only), `position` | Indexed on `set_id` |
 | `profiles` | `id` → `auth.users` (cascade), `display_name`, `role`, `role_chosen_at`, `created_at` | `role_chosen_at` is for the sign-up role choice (#52) |
+| `classes` | `id`, `teacher_id` → `auth.users` (cascade), `name` (1–80 chars), `join_code` (unique), `created_at` | Indexed on `teacher_id` |
+| `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
 
 ## 4. Security model
 
@@ -150,6 +171,12 @@ The plan for teacher and admin features is tracked in #50.
 | `flashcard_sets` | Anyone | **Insert: nobody** (saves go through `/api/save-set`) |
 | `flashcards` | Anyone | Read cards whose set they can read; no direct writes |
 | `profiles` | The user | Read their own row and update `display_name` only; anon has no access |
+| `classes` | Teacher / members | The teacher reads their own classes; members read classes they joined; no direct writes |
+| `class_members` | Student / teacher | A student reads their own memberships; the teacher reads their roster; no direct writes |
+
+The `classes` and `class_members` policies need to check each other, which would make RLS
+recurse. So they use `private.is_class_teacher()` and `private.is_class_member()`:
+security-definer helpers in a schema the API doesn't expose.
 
 **Two holes fixed on 2026-10-20 (#46):**
 - An anon policy exposed **every** card, including private ones.
@@ -160,11 +187,14 @@ transaction. Run them after every database change.
 
 ## 5. Testing
 
-- `npm test`: Vitest. Unit tests for `lib/roles.ts` and `/api/profile/role` (with an
-  in-memory profiles table), and component tests for `RoleChooser` in jsdom with React
-  Testing Library. Component tests start with `// @vitest-environment jsdom`.
-- `supabase/tests/sets-rls-check.sql` and `profiles-rls-check.sql`: database security
-  checks. Each prints expected vs. actual for 10 cases.
+- `npm test`: Vitest.
+  - Unit and route tests for roles, `/api/profile/role` and the class API, using
+    `test-utils/fake-supabase.ts`. That's an in-memory client with unique keys (23505)
+    and cascading deletes.
+  - Component tests for `RoleChooser` and the teacher pages, in jsdom with React Testing
+    Library. Component tests start with `// @vitest-environment jsdom`.
+- `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and
+  classes. Each prints expected vs. actual (10, 10 and 16 cases).
 - AI changes were checked with mocked `fetch` (retries, fallbacks, validation) and a few
   real API calls. Keep real calls to a minimum because of the 20-requests-a-day quota.
 

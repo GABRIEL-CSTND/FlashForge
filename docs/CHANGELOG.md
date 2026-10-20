@@ -11,7 +11,17 @@ Notable changes to FlashForge, newest first. Issue and PR numbers refer to
   `/teacher` dashboard (a placeholder until classes arrive in #53), and the upload page
   links to it. `POST /api/profile/role` allows each user exactly one choice, never
   `admin`.
-- Component tests with React Testing Library and jsdom. `npm test` now runs 35 tests.
+- Component tests with React Testing Library and jsdom.
+- **Classes with join codes (live database)** (#53):
+  - Teachers create classes on `/teacher` and each class gets a code like `K7M-2QX`.
+  - A class page shows the code (copy, or get a new one; the old one stops working) and
+    the roster (names and emails), and lets the teacher rename the class, remove students
+    and delete it.
+  - Teachers can only see and change their own classes, with up to 50 each.
+  - New tables `classes` and `class_members`, with RLS and a `class_roster()` function
+    (16 of 16 database checks pass).
+- `test-utils/fake-supabase.ts`, a reusable in-memory Supabase client for route tests.
+  `npm test` now runs 82 tests.
 
 ### Security
 - Vitest updated 3.2.4 → 3.2.7 (fixes a critical advisory for the Vitest UI server).

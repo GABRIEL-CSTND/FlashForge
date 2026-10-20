@@ -77,18 +77,27 @@ app/
   page.tsx              Upload page; also shows a freshly generated guide
   my-sets/page.tsx      Signed-in user's saved sets
   sets/[id]/page.tsx    A saved set: study, rename, delete
-  teacher/page.tsx      Teacher dashboard (classes coming in #53)
+  teacher/page.tsx      Teacher dashboard: create classes, see join codes
+  teacher/classes/[id]/ One class: join code, roster, rename, delete
   api/generate/         POST: extract text from the file, generate items with AI
   api/save-set/         POST: save a generated guide (signed-in users only)
   api/profile/role/     POST: one-time student/teacher choice at sign-up
+  api/teacher/classes/  Teacher class API (list/create, rename/delete, new code, remove student)
 components/
   StudyViewer.tsx       Flashcard / multiple-choice study UI
   ProfileProvider.tsx   Shares the signed-in user's profile (role) with every page
   RoleChooser.tsx       "Student or teacher?" screen for users who haven't chosen
+  TeacherOnly.tsx       Shows teacher pages only to teachers and admins
 lib/
   gemini.ts             AI model chain, prompts, retries, output validation
   roles.ts              getAuthedUser / requireRole / chooseOwnRole (server-only)
   role-types.ts         Role types and helpers shared by server and client
+  classes.ts            Class logic, always scoped to the acting teacher (server-only)
+  classes-shared.ts     Class name and join-code rules shared by server and client
+  api-client.ts         apiFetch(): calls our API routes with the user's token
+  route-helpers.ts      Shared error/404 responses for API routes
+test-utils/
+  fake-supabase.ts      In-memory Supabase client for route tests
   supabase.ts           Browser Supabase client (anon key)
   supabase-admin.ts     Server-only Supabase client (service-role key)
   auth.ts               useUser hook, Google sign-in/out
