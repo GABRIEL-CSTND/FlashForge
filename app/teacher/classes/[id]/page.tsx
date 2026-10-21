@@ -6,12 +6,22 @@ import { useParams, useRouter } from 'next/navigation';
 import TeacherOnly from '@/components/TeacherOnly';
 import { apiFetch, errorMessage } from '@/lib/api-client';
 import { CLASS_NAME_MAX_LENGTH, formatJoinCode } from '@/lib/classes-shared';
+import { formatDueDate, fromLocalInputValue, isOverdue, parseDueAt, toLocalInputValue } from '@/lib/due-dates';
 
 interface Student {
   studentId: string;
   displayName: string | null;
   email: string | null;
   joinedAt: string;
+}
+
+interface Assignment {
+  id: string;
+  setId: string;
+  setTitle: string;
+  studyType: string;
+  dueAt: string | null;
+  createdAt: string;
 }
 
 interface ClassDetail {
@@ -21,6 +31,7 @@ interface ClassDetail {
   createdAt: string;
   studentCount: number;
   students: Student[];
+  assignments: Assignment[];
 }
 
 type LoadState =
@@ -63,6 +74,8 @@ function ClassView({ id }: { id: string }) {
   const [notice, setNotice] = useState('');
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
+  const [editingDueId, setEditingDueId] = useState<string | null>(null);
+  const [dueDraft, setDueDraft] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -152,6 +165,31 @@ function ClassView({ id }: { id: string }) {
       const students = cls.students.filter((s) => s.studentId !== student.studentId);
       update({ students, studentCount: students.length });
     }
+  };
+
+  const saveDue = async (assignment: Assignment, value: string | null) => {
+    const checked = parseDueAt(value);
+    if (!checked.ok) {
+      setActionError(checked.error);
+      return;
+    }
+    const data = await run(() =>
+      apiFetch(`/api/teacher/classes/${id}/assignments/${assignment.id}`, { method: 'PATCH', body: { dueAt: checked.dueAt } })
+    );
+    if (data) {
+      update({
+        assignments: cls.assignments.map((a) => (a.id === assignment.id ? { ...a, dueAt: data.dueAt as string | null } : a)),
+      });
+      setEditingDueId(null);
+    }
+  };
+
+  const unassign = async (assignment: Assignment) => {
+    if (!window.confirm(`Unassign "${assignment.setTitle}" from ${cls.name}? Students will no longer see it.`)) return;
+    const data = await run(() =>
+      apiFetch(`/api/teacher/classes/${id}/assignments/${assignment.id}`, { method: 'DELETE' })
+    );
+    if (data) update({ assignments: cls.assignments.filter((a) => a.id !== assignment.id) });
   };
 
   const deleteClass = async () => {
@@ -261,6 +299,105 @@ function ClassView({ id }: { id: string }) {
           <p role="status" className="text-xs text-gray-500">
             {notice}
           </p>
+        )}
+      </section>
+
+      <section className="space-y-2" aria-labelledby="assigned-heading">
+        <h2 id="assigned-heading" className="font-medium">
+          Assigned sets ({cls.assignments.length})
+        </h2>
+        {cls.assignments.length === 0 ? (
+          <div className="rounded-lg border p-6 text-center text-sm text-gray-500">
+            Nothing assigned yet. To assign a set, open it from{' '}
+            <Link href="/my-sets" className="text-blue-500 hover:underline">
+              My Sets
+            </Link>{' '}
+            and choose <span className="font-medium">📌 Assign to class</span>.
+          </div>
+        ) : (
+          <ul className="divide-y rounded-lg border">
+            {cls.assignments.map((a) => (
+              <li key={a.id} className="space-y-2 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link href={`/sets/${a.setId}`} className="block truncate font-medium hover:underline">
+                      {a.setTitle}
+                    </Link>
+                    <p className="text-xs text-gray-400">
+                      {a.dueAt ? `Due ${formatDueDate(a.dueAt)}` : 'No due date'}
+                      {isOverdue(a.dueAt) && (
+                        <span className="ml-2 rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-500">Overdue</span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-3 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingDueId(a.id);
+                        setDueDraft(a.dueAt ? toLocalInputValue(a.dueAt) : '');
+                      }}
+                      disabled={busy}
+                      aria-label={`Change due date for ${a.setTitle}`}
+                      className="text-gray-500 hover:underline disabled:opacity-40"
+                    >
+                      Due date
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => unassign(a)}
+                      disabled={busy}
+                      aria-label={`Unassign ${a.setTitle}`}
+                      className="text-red-500 hover:underline disabled:opacity-40"
+                    >
+                      Unassign
+                    </button>
+                  </div>
+                </div>
+                {editingDueId === a.id && (
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <label htmlFor={`due-${a.id}`} className="sr-only">
+                      New due date for {a.setTitle}
+                    </label>
+                    <input
+                      id={`due-${a.id}`}
+                      type="datetime-local"
+                      value={dueDraft}
+                      onChange={(e) => setDueDraft(e.target.value)}
+                      disabled={busy}
+                      className="rounded-lg border bg-transparent px-2 py-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => saveDue(a, fromLocalInputValue(dueDraft))}
+                      disabled={busy || !dueDraft}
+                      className="text-blue-600 hover:underline disabled:opacity-40"
+                    >
+                      Save
+                    </button>
+                    {a.dueAt && (
+                      <button
+                        type="button"
+                        onClick={() => saveDue(a, null)}
+                        disabled={busy}
+                        className="text-gray-500 hover:underline disabled:opacity-40"
+                      >
+                        Remove due date
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setEditingDueId(null)}
+                      disabled={busy}
+                      className="text-gray-500 hover:underline disabled:opacity-40"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 

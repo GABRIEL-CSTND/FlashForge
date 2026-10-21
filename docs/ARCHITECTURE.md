@@ -18,6 +18,7 @@ flowchart LR
     G["/api/generate"] --> AI[lib/gemini.ts]
     S["/api/save-set"]
     EC["/api/sets/[id]/cards"]
+    AS["/api/teacher/sets/[id]/assignments"] --> ASL[lib/assignments.ts]
     R["/api/profile/role"]
     TC["/api/teacher/classes/..."] --> CL[lib/classes.ts]
     SC["/api/student/classes/..."] --> SCL[lib/student-classes.ts]
@@ -36,6 +37,8 @@ flowchart LR
   MS -->|anon key + user session| DB
   SP -->|anon key + user session| DB
   SP -->|Edit cards| EC -->|"service-role key, replace_set_cards()"| DB
+  SP -->|Assign to class| AS
+  ASL -->|service-role key, scoped to the teacher| DB
   U --> AUTH
   RC --> R -->|service-role key| DB
   T --> TC
@@ -57,14 +60,18 @@ writes with the service-role key. Browsers read only what RLS allows (section 4)
 | `POST /api/profile/role` | Signed in, not chosen yet | One-time choice: `{ role: 'student' \| 'teacher' }` (#52) |
 | `GET /api/teacher/classes` | Teacher, admin | The caller's classes, newest first, with student counts |
 | `POST /api/teacher/classes` | Teacher, admin | Create a class: `{ name }` → the class with its join code |
-| `GET /api/teacher/classes/[id]` | The class's teacher | Class details and roster (names, emails, join dates) |
+| `GET /api/teacher/classes/[id]` | The class's teacher | Class details, roster (names, emails, join dates) and assignments (#56) |
 | `PATCH /api/teacher/classes/[id]` | The class's teacher | Rename: `{ name }` |
 | `DELETE /api/teacher/classes/[id]` | The class's teacher | Delete the class and its memberships |
 | `POST /api/teacher/classes/[id]/join-code` | The class's teacher | Replace the join code; the old one stops working |
 | `DELETE /api/teacher/classes/[id]/students/[studentId]` | The class's teacher | Remove one student from the class |
-| `GET /api/student/classes` | Student | The classes the caller joined, most recent first, with teacher names |
+| `GET /api/student/classes` | Student | The classes the caller joined, most recent first, with teacher names and each class's assignments (#56) |
 | `POST /api/student/classes` | Student | Join with a code: `{ code }` (any case, spaces or hyphen) → 201 joined, or 200 `alreadyMember` |
 | `DELETE /api/student/classes/[id]` | Student in that class | Leave the class |
+| `GET /api/teacher/sets/[id]/assignments` | The set's owner (teacher, admin) | The owner's classes, marking which already have this set (#56) |
+| `POST /api/teacher/sets/[id]/assignments` | The set's owner (teacher, admin) | Assign: `{ classIds, dueAt \| null }` → `{ assigned, alreadyAssigned }` |
+| `PATCH /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | Change the due date: `{ dueAt \| null }` |
+| `DELETE /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | Unassign; students lose access right away |
 
 Errors are JSON `{ error }` with 400 (bad input), 401 (not signed in), 403 (wrong role),
 404 (not found, *or* someone else's class), 409 (conflict, e.g. a role already chosen or
@@ -229,6 +236,29 @@ the 50-class limit), 429 (too many wrong join codes; includes a `Retry-After` he
 - **Leaving** (`DELETE /api/student/classes/[id]`) removes only the caller's own
   membership. Rejoining needs the class's current code.
 
+### Assigning sets to classes (#56)
+
+- On a set they own, teachers (and admins) get **📌 Assign to class**
+  (`components/AssignPanel.tsx`). It lists their classes, with ones that already have
+  the set shown as assigned, and takes an optional due date. A set is assigned to a
+  class at most once (unique `class_id, set_id`), so assigning again reports
+  `alreadyAssigned` and leaves the existing due date alone.
+- **Only the owner's own sets, to their own classes:** `lib/assignments.ts` checks
+  `flashcard_sets.user_id` and `classes.teacher_id` against the caller. If any class in
+  the list isn't theirs, nothing is assigned (404).
+- On the class page, teachers see **Assigned sets**, soonest due first, with an
+  **Overdue** badge. They can change or remove the due date, or **Unassign**.
+- **Due dates** (`lib/due-dates.ts`) are stored as timestamps and always shown in the
+  viewer's own time zone (`toLocaleString`). The server accepts no date, or a date that
+  hasn't passed (5-minute grace) and is within 2 years.
+- **Students** see each class's assigned sets on **My classes**, with the due date and an
+  Overdue badge, and open them on `/sets/[id]`. They can't edit them.
+- **Access follows the assignment (RLS):** a new `flashcard_sets` policy lets a user read
+  a set while it's assigned to a class they're in (`private.is_assigned_to_me()`). Cards
+  are now readable exactly when their set is. Unassigning, leaving the class, or the
+  teacher deleting the set or class removes access immediately.
+- "Done / not done" per student needs saved study results, which is #57.
+
 The plan for teacher and admin features is tracked in #50.
 
 ## 3. Data model
@@ -241,6 +271,7 @@ The plan for teacher and admin features is tracked in #50.
 | `classes` | `id`, `teacher_id` → `auth.users` (cascade), `name` (1–80 chars), `join_code` (unique), `created_at` | Indexed on `teacher_id` |
 | `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
 | `class_join_failures` | `id`, `user_id` → `auth.users` (cascade), `attempted_at` | Wrong join codes for the rate limit; indexed on (`user_id`, `attempted_at`); old rows are deleted as new ones arrive |
+| `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `due_at` (nullable), `created_at` | Unique (`class_id`, `set_id`); indexed on `set_id` |
 
 ## 4. Security model
 
@@ -256,12 +287,14 @@ The plan for teacher and admin features is tracked in #50.
 |---|---|---|
 | `flashcard_sets` | Owner | Read, rename, delete their own sets |
 | `flashcard_sets` | Anyone | Read legacy sets with no owner |
+| `flashcard_sets` | Students in a class | Read a set while it's assigned to a class they're in (#56) |
 | `flashcard_sets` | Anyone | **Insert: nobody** (saves go through `/api/save-set`) |
-| `flashcards` | Anyone | Read cards whose set they can read; no direct writes (edits go through `replace_set_cards()`, server-only) |
+| `flashcards` | Anyone | Read a card exactly when they can read its set (the policy checks the set through the set's own RLS); no direct writes (edits go through `replace_set_cards()`, server-only) |
 | `profiles` | The user | Read their own row and update `display_name` only; anon has no access |
 | `classes` | Teacher / members | The teacher reads their own classes; members read classes they joined; no direct writes |
 | `class_members` | Student / teacher | A student reads their own memberships; the teacher reads their roster; no direct writes (joining and leaving go through the server) |
 | `class_join_failures` | Nobody | Server-only: no grants or policies for anon or signed-in users |
+| `assignments` | Teacher / members | The class's teacher and its members read its assignments; no direct writes |
 
 The `classes` and `class_members` policies need to check each other, which would make RLS
 recurse. So they use `private.is_class_teacher()` and `private.is_class_member()`:
@@ -284,9 +317,14 @@ transaction. Run them after every database change.
     Library. Component tests start with `// @vitest-environment jsdom`.
 - `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and
   classes. Each prints expected vs. actual (10, 10 and 21 cases).
+- `supabase/tests/assignments-rls-check.sql` (16 cases): an assigned student can open the
+  set and its cards, a student outside the class can't, access ends on unassign, and
+  only the owner can edit.
 - `supabase/tests/sets-editing-check.sql`: `replace_set_cards()` (12 cases), covering a
   real edit, kept ids, each kind of refused save, that a refused save changes nothing,
   and that browsers can't call it.
+- Every check file clears the simulated sign-in (`request.jwt.claims`) before acting as
+  `anon`; otherwise `auth.uid()` would still be the previous user.
 - AI changes were checked with mocked `fetch` (retries, fallbacks, validation) and a few
   real API calls. Keep real calls to a minimum because of the 20-requests-a-day quota.
 
@@ -301,6 +339,8 @@ transaction. Run them after every database change.
   uploaded to the server whole (#44), and only PDF and TXT are supported (#20).
 - **3 existing ESLint errors** (`react-hooks/set-state-in-effect`) in `app/page.tsx` and
   `app/my-sets/page.tsx`.
+- **"Done / not done" for assignments isn't shown yet.** It needs saved study results
+  (#57).
 - **The join-code guessing limit is per account** (10 wrong codes per 15 minutes).
   Someone with many Google accounts could guess faster. With about 887 million possible
   codes, that's still impractical, and #63 will add wider rate limits.

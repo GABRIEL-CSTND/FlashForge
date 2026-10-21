@@ -85,6 +85,7 @@ begin
   begin perform * from public.replace_set_cards(sa, a, '[]'::jsonb); ok := true;
   exception when others then ok := false; end;
   reset role; insert into results values (11, 'the owner calls it directly from the browser', 'denied', case when ok then 'ALLOWED' else 'denied' end);
+  perform set_config('request.jwt.claims', '{}', true); -- anon has no sign-in
   execute 'set local role anon';
   begin perform * from public.replace_set_cards(sa, a, '[]'::jsonb); ok := true;
   exception when others then ok := false; end;

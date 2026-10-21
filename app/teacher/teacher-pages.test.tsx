@@ -8,7 +8,7 @@ const state = vi.hoisted(() => ({
   params: { id: 'c1' },
   // A tiny in-memory version of the class API, keyed by "METHOD path".
   calls: [] as { method: string; path: string; body?: unknown }[],
-  classes: [] as { id: string; name: string; joinCode: string; createdAt: string; studentCount: number; students: { studentId: string; displayName: string | null; email: string | null; joinedAt: string }[] }[],
+  classes: [] as { id: string; name: string; joinCode: string; createdAt: string; studentCount: number; students: { studentId: string; displayName: string | null; email: string | null; joinedAt: string }[]; assignments: { id: string; setId: string; setTitle: string; studyType: string; dueAt: string | null; createdAt: string }[] }[],
   failNext: null as null | { status: number; error?: string; offline?: boolean },
 }));
 
@@ -36,13 +36,14 @@ vi.mock('@/lib/api-client', async (importOriginal) => {
       const find = (id: string) => state.classes.find((c) => c.id === id);
       let m: RegExpMatchArray | null;
       if (path === '/api/teacher/classes' && method === 'GET') {
-        return ok({ classes: state.classes.map(({ students, ...c }) => ({ ...c, studentCount: students.length })) });
+        return ok({ classes: state.classes.map(({ students, assignments, ...c }) => { void assignments; return { ...c, studentCount: students.length }; }) });
       }
       if (path === '/api/teacher/classes' && method === 'POST') {
-        const cls = { id: `new-${state.classes.length}`, name: String((init.body as { name: string }).name).trim(), joinCode: 'NEWCD2', createdAt: '2026-10-20', studentCount: 0, students: [] };
+        const cls = { id: `new-${state.classes.length}`, name: String((init.body as { name: string }).name).trim(), joinCode: 'NEWCD2', createdAt: '2026-10-20', studentCount: 0, students: [], assignments: [] };
         state.classes.unshift(cls);
-        const { students, ...summary } = cls;
+        const { students, assignments, ...summary } = cls;
         void students;
+        void assignments;
         return ok({ class: summary }, 201);
       }
       if ((m = path.match(/^\/api\/teacher\/classes\/([^/]+)$/))) {
@@ -54,6 +55,16 @@ vi.mock('@/lib/api-client', async (importOriginal) => {
           state.classes = state.classes.filter((c) => c !== cls);
           return ok({ deleted: true });
         }
+      }
+      if ((m = path.match(/^\/api\/teacher\/classes\/([^/]+)\/assignments\/([^/]+)$/))) {
+        const cls = find(m[1])!;
+        if (method === 'DELETE') {
+          cls.assignments = cls.assignments.filter((a) => a.id !== m![2]);
+          return ok({ unassigned: true });
+        }
+        const dueAt = (init.body as { dueAt: string | null }).dueAt;
+        cls.assignments = cls.assignments.map((a) => (a.id === m![2] ? { ...a, dueAt } : a));
+        return ok({ dueAt });
       }
       if ((m = path.match(/^\/api\/teacher\/classes\/([^/]+)\/join-code$/))) {
         const cls = find(m[1])!;
@@ -70,6 +81,7 @@ vi.mock('@/lib/api-client', async (importOriginal) => {
 });
 
 import TeacherDashboardPage from '@/app/teacher/page';
+import { toLocalInputValue } from '@/lib/due-dates';
 import TeacherClassPage from '@/app/teacher/classes/[id]/page';
 
 const confirmMock = vi.fn(() => true);
@@ -88,8 +100,12 @@ beforeEach(() => {
         { studentId: 's1', displayName: 'Ana Reyes', email: 'ana@example.com', joinedAt: '2026-10-19T08:00:00Z' },
         { studentId: 's2', displayName: null, email: 'ben@example.com', joinedAt: '2026-10-19T09:00:00Z' },
       ],
+      assignments: [
+        { id: 'a1', setId: 'set-1', setTitle: 'Photosynthesis', studyType: 'flashcard', dueAt: '2099-01-15T17:00:00Z', createdAt: '2026-10-20' },
+        { id: 'a2', setId: 'set-2', setTitle: 'Cell parts', studyType: 'multiple_choice', dueAt: '2020-01-01T00:00:00Z', createdAt: '2026-10-19' },
+      ],
     },
-    { id: 'c2', name: 'Chemistry', joinCode: 'ABC234', createdAt: '2026-10-18', studentCount: 0, students: [] },
+    { id: 'c2', name: 'Chemistry', joinCode: 'ABC234', createdAt: '2026-10-18', studentCount: 0, students: [], assignments: [] },
   ];
   confirmMock.mockReset().mockReturnValue(true);
   vi.stubGlobal('confirm', confirmMock);
@@ -170,7 +186,7 @@ describe('class page', () => {
     render(<TeacherClassPage />);
     expect(await screen.findByRole('heading', { name: 'Biology 101' })).toBeTruthy();
     expect(screen.getByTestId('join-code').textContent).toBe('K7M-2QX');
-    const roster = screen.getByRole('list');
+    const roster = within(screen.getByRole('heading', { name: 'Students (2)' }).closest('section')!).getByRole('list');
     expect(within(roster).getByText('Ana Reyes')).toBeTruthy();
     expect(within(roster).getByText(/ana@example.com/)).toBeTruthy();
     // No display name: the email is the label.
@@ -230,6 +246,43 @@ describe('class page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Delete this class' }));
     expect(confirmMock).toHaveBeenCalledWith(expect.stringMatching(/Delete "Biology 101"\? Its 2 students will be removed/));
     await waitFor(() => expect(state.push).toHaveBeenCalledWith('/teacher'));
+  });
+
+  it('lists assigned sets with due dates, an Overdue badge, and links to the sets', async () => {
+    render(<TeacherClassPage />);
+    const section = (await screen.findByRole('heading', { name: 'Assigned sets (2)' })).closest('section')!;
+    const link = within(section).getByRole('link', { name: 'Photosynthesis' });
+    expect(link.getAttribute('href')).toBe('/sets/set-1');
+    expect(within(section).getAllByText('Overdue')).toHaveLength(1);
+    expect(section.textContent).toContain('Due ');
+  });
+
+  it('unassigns a set after confirming', async () => {
+    render(<TeacherClassPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Unassign Photosynthesis' }));
+    expect(confirmMock).toHaveBeenCalledWith('Unassign "Photosynthesis" from Biology 101? Students will no longer see it.');
+    expect(await screen.findByRole('heading', { name: 'Assigned sets (1)' })).toBeTruthy();
+    expect(state.calls.find((c) => c.method === 'DELETE')?.path).toBe('/api/teacher/classes/c1/assignments/a1');
+  });
+
+  it('changes and removes a due date', async () => {
+    render(<TeacherClassPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Change due date for Photosynthesis' }));
+    // Due dates must be within 2 years, so use one week from now.
+    const nextWeek = toLocalInputValue(new Date(Date.now() + 7 * 86_400_000).toISOString());
+    fireEvent.change(screen.getByLabelText('New due date for Photosynthesis'), { target: { value: nextWeek } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(state.calls.find((c) => c.method === 'PATCH')).toBeTruthy());
+    expect(state.calls.find((c) => c.method === 'PATCH')).toEqual({
+      method: 'PATCH',
+      path: '/api/teacher/classes/c1/assignments/a1',
+      body: { dueAt: new Date(nextWeek).toISOString() },
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Change due date for Photosynthesis' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove due date' }));
+    await waitFor(() => expect(state.calls.filter((c) => c.method === 'PATCH')).toHaveLength(2));
+    expect(state.calls.filter((c) => c.method === 'PATCH')[1].body).toEqual({ dueAt: null });
   });
 
   it('shows the error and stays put when an action fails', async () => {

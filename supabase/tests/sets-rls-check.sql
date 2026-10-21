@@ -14,12 +14,15 @@ begin
   select array_agg(id) into owned from public.flashcard_sets where user_id is not null;
 
   -- 1-3: anonymous visitor
+  perform set_config('request.jwt.claims', '{}', true); -- anon has no sign-in
   execute 'set local role anon';
   select count(*) into v from public.flashcards where set_id = any(owned);
   reset role; insert into results values (1, 'anon reads cards of owned (private) sets', '0', v::text);
+  perform set_config('request.jwt.claims', '{}', true); -- anon has no sign-in
   execute 'set local role anon';
   select count(*) into v from public.flashcard_sets where user_id is not null;
   reset role; insert into results values (2, 'anon reads owned sets', '0', v::text);
+  perform set_config('request.jwt.claims', '{}', true); -- anon has no sign-in
   execute 'set local role anon';
   begin
     insert into public.flashcard_sets (title, study_type) values ('rls-test', 'flashcard'); ok := true;
@@ -51,6 +54,7 @@ begin
   execute 'set local role authenticated';
   with u as (update public.flashcard_sets set title = title where id = a_set returning 1) select count(*) into v from u;
   reset role; insert into results values (9, 'owner renames own set', '1 rows', v || ' rows');
+  perform set_config('request.jwt.claims', '{}', true); -- anon has no sign-in
   execute 'set local role anon';
   select count(*) into v from public.flashcard_sets where user_id is null;
   reset role; insert into results values (10, 'anon reads ownerless (legacy) sets', '>0 (allowed)', v::text);

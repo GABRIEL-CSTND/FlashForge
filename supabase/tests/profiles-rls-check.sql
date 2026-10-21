@@ -40,6 +40,7 @@ begin
   exception when others then ok := false; end;
   reset role; insert into results values (7, 'user inserts an admin profile', 'denied', case when ok then 'ALLOWED' else 'denied' end);
 
+  perform set_config('request.jwt.claims', '{}', true); -- anon has no sign-in
   execute 'set local role anon';
   begin select count(*) into v from public.profiles; ok := true;
   exception when others then ok := false; end;

@@ -78,17 +78,20 @@ app/
   my-sets/page.tsx      Signed-in user's saved sets
   sets/[id]/page.tsx    A saved set: study; the owner can edit cards, rename, delete
   teacher/page.tsx      Teacher dashboard: create classes, see join codes
-  teacher/classes/[id]/ One class: join code, roster, rename, delete
-  classes/page.tsx      My classes (students): join with a code, see classes, leave
+  teacher/classes/[id]/ One class: join code, assigned sets, roster, rename, delete
+  classes/page.tsx      My classes (students): join with a code, see classes and assigned sets, leave
   api/generate/         POST: extract text from the file, generate items with AI
   api/save-set/         POST: save a generated guide (signed-in users only)
   api/sets/[id]/cards/  PUT: save the owner's edited cards, all at once
   api/profile/role/     POST: one-time student/teacher choice at sign-up
-  api/teacher/classes/  Teacher class API (list/create, rename/delete, new code, remove student)
-  api/student/classes/  Student class API (list, join with a code, leave)
+  api/teacher/classes/  Teacher class API (list/create, rename/delete, new code, remove student,
+                        change due date / unassign)
+  api/teacher/sets/[id]/assignments/  Assign a set to the teacher's classes
+  api/student/classes/  Student class API (list with assignments, join with a code, leave)
 components/
   StudyViewer.tsx       Flashcard / multiple-choice study UI
   CardEditor.tsx        Edit mode for a set: change, add, delete and reorder cards
+  AssignPanel.tsx       "Assign to class" dialog on a set the teacher owns
   ProfileProvider.tsx   Shares the signed-in user's profile (role) with every page
   RoleChooser.tsx       "Student or teacher?" screen for users who haven't chosen
   RoleGate.tsx          Shows a page only to the allowed roles (sign-in/denied messages otherwise)
@@ -103,6 +106,8 @@ lib/
   classes.ts            Class logic, always scoped to the acting teacher (server-only)
   classes-shared.ts     Class name and join-code rules shared by server and client
   student-classes.ts    Joining/leaving classes and the wrong-code rate limit (server-only)
+  assignments.ts        Assigning sets to classes, scoped to the teacher/student (server-only)
+  due-dates.ts          Due-date checks, local-time display, Overdue, sorting (shared)
   api-client.ts         apiFetch(): calls our API routes with the user's token
   route-helpers.ts      Shared error/404 responses for API routes
 test-utils/

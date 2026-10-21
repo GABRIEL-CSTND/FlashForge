@@ -3,6 +3,9 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* Native controls (date pickers, checkboxes, scrollbars) follow the same
+     light/dark preference as the rest of the page. */
+  color-scheme: light dark;
 }
 
 @theme inline {

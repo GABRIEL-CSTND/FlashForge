@@ -6,12 +6,24 @@ import RoleGate from '@/components/RoleGate';
 import { apiFetch, errorMessage } from '@/lib/api-client';
 import { normalizeJoinCode } from '@/lib/classes-shared';
 import { STUDENT_ROLES } from '@/lib/role-types';
+import { formatDueDate, isOverdue } from '@/lib/due-dates';
+
+interface AssignedSet {
+  id: string;
+  setId: string;
+  setTitle: string;
+  studyType: string;
+  dueAt: string | null;
+  createdAt: string;
+}
 
 interface JoinedClass {
   id: string;
   name: string;
   teacherName: string | null;
   joinedAt: string;
+  // Soonest due first (#56).
+  assignments: AssignedSet[];
 }
 
 type LoadState =
@@ -38,7 +50,8 @@ async function fetchMyClasses(): Promise<LoadState> {
   }
 }
 
-// Students' classes (#54): join with a code, see the classes they're in, leave.
+// Students' classes (#54): join with a code, see the classes they're in and
+// what's assigned in each (#56), leave.
 export default function MyClassesPage() {
   return (
     <RoleGate
@@ -204,22 +217,46 @@ function MyClasses() {
         {state.status === 'ready' && state.classes.length > 0 && (
           <ul className="space-y-2">
             {state.classes.map((c) => (
-              <li key={c.id} className="flex items-center justify-between gap-3 rounded-lg border p-4">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{c.name}</p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    {c.teacherName ? `${c.teacherName} · ` : ''}Joined {new Date(c.joinedAt).toLocaleDateString()}
-                  </p>
+              <li key={c.id} aria-label={c.name} className="space-y-3 rounded-lg border p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{c.name}</p>
+                    <p className="mt-1 text-xs text-gray-400">
+                      {c.teacherName ? `${c.teacherName} · ` : ''}Joined {new Date(c.joinedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleLeave(c)}
+                    disabled={leavingId !== null}
+                    aria-label={`Leave ${c.name}`}
+                    className="shrink-0 text-sm text-red-500 hover:underline disabled:opacity-40"
+                  >
+                    {leavingId === c.id ? 'Leaving...' : 'Leave'}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleLeave(c)}
-                  disabled={leavingId !== null}
-                  aria-label={`Leave ${c.name}`}
-                  className="shrink-0 text-sm text-red-500 hover:underline disabled:opacity-40"
-                >
-                  {leavingId === c.id ? 'Leaving...' : 'Leave'}
-                </button>
+                {c.assignments.length === 0 ? (
+                  <p className="text-xs text-gray-400">No assigned sets yet.</p>
+                ) : (
+                  <ul className="space-y-1" aria-label={`Assigned in ${c.name}`}>
+                    {c.assignments.map((a) => (
+                      <li key={a.id}>
+                        <Link
+                          href={`/sets/${a.setId}`}
+                          className="block rounded-lg bg-gray-500/5 px-3 py-2 text-sm hover:bg-gray-500/10"
+                        >
+                          <span className="block truncate font-medium">{a.setTitle}</span>
+                          <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                            {a.dueAt ? `Due ${formatDueDate(a.dueAt)}` : 'No due date'}
+                            {isOverdue(a.dueAt) && (
+                              <span className="rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-500">Overdue</span>
+                            )}
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>

@@ -24,6 +24,7 @@ soon as it's applied.
 | `20261020000200_classes.sql` | #53 | 2026-10-20 |
 | `20261021000100_class_join_failures.sql` | #54 | 2026-10-21 |
 | `20261021000200_replace_set_cards.sql` | #55 | 2026-10-21 |
+| `20261021000300_assignments.sql` | #56 | 2026-10-21 |
 
 Add a row here whenever you apply a new migration.
 
@@ -50,5 +51,7 @@ npx supabase db query --linked --project-ref <ref> -f supabase/migrations/<file>
    trigger), but you still have to add policies and grants, or nobody can read them.
 4. Never let users change their own `profiles.role`. Role changes go through
    server routes using the service-role key (`lib/roles.ts`).
-5. After applying, run both `tests/*.sql` files and check that every row matches
+5. After applying, run every `tests/*.sql` file and check that every row matches
    its expected value.
+6. When writing a check, run `set_config('request.jwt.claims', '{}', true)` before
+   acting as `anon`. Otherwise `auth.uid()` is still the last simulated user.

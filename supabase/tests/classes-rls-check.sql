@@ -63,6 +63,7 @@ begin
   reset role; insert into results values (10, 'teacher B sees their own roster (Y)', '1', v::text);
 
   -- anon and the roster function
+  perform set_config('request.jwt.claims', '{}', true); -- anon has no sign-in
   execute 'set local role anon';
   begin select count(*) into v from public.classes; ok := true;
   exception when others then ok := false; end;
@@ -100,6 +101,7 @@ begin
   begin insert into public.class_join_failures (user_id) values (c); ok := true;
   exception when others then ok := false; end;
   reset role; insert into results values (19, 'signed-in user writes the wrong-code log', 'denied', case when ok then 'ALLOWED' else 'denied' end);
+  perform set_config('request.jwt.claims', '{}', true); -- anon has no sign-in
   execute 'set local role anon';
   begin select count(*) into v from public.class_join_failures; ok := true;
   exception when others then ok := false; end;

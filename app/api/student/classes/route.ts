@@ -10,13 +10,23 @@ import {
   minutesUntilJoinAllowed,
   recordFailedJoin,
 } from '@/lib/student-classes';
+import { listStudentAssignments } from '@/lib/assignments';
 import { errorResponse, readJsonBody } from '@/lib/route-helpers';
 
-// The signed-in student's classes (#54), most recently joined first.
+// The signed-in student's classes (#54), most recently joined first, each
+// with its assignments, soonest due first (#56).
 export async function GET(req: NextRequest) {
   try {
     const user = await requireRole(req, STUDENT_ROLES);
-    return NextResponse.json({ classes: await listJoinedClasses(user.id) });
+    const [classes, assignments] = await Promise.all([listJoinedClasses(user.id), listStudentAssignments(user.id)]);
+    return NextResponse.json({
+      classes: classes.map((c) => ({
+        ...c,
+        assignments: assignments
+          .filter((a) => a.classId === c.id)
+          .map(({ id, setId, setTitle, studyType, dueAt, createdAt }) => ({ id, setId, setTitle, studyType, dueAt, createdAt })),
+      })),
+    });
   } catch (err) {
     return errorResponse(err, 'student/classes GET');
   }

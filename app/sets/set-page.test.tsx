@@ -12,6 +12,7 @@ const state = vi.hoisted(() => ({
   cards: [] as Record<string, unknown>[],
   apiCalls: [] as { path: string; init: unknown }[],
   apiResult: null as null | { ok: boolean; status: number; data: Record<string, unknown> },
+  role: 'student' as string,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -19,6 +20,11 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 vi.mock('@/lib/auth', () => ({ useUser: () => ({ user: state.user, loading: false }) }));
+vi.mock('@/components/ProfileProvider', () => ({
+  useProfile: () => ({ profile: state.user ? { role: state.role, roleChosenAt: '2026-10-20', displayName: null } : null }),
+}));
+// The assign dialog has its own tests; here it only needs to open.
+vi.mock('@/components/AssignPanel', () => ({ default: ({ setTitle }: { setTitle: string }) => <div role="dialog">Assign {setTitle}</div> }));
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: (table: string) => ({
@@ -47,6 +53,7 @@ beforeEach(() => {
   state.cards = [{ id: CARD, question: 'Pigment that absorbs light', answer: 'Chlorophyll', options: null, position: 0 }];
   state.apiCalls = [];
   state.apiResult = null;
+  state.role = 'student';
   vi.stubGlobal('confirm', vi.fn(() => true));
 });
 afterEach(() => {
@@ -90,6 +97,19 @@ describe('study set page', () => {
     expect(screen.getByRole('heading', { name: 'Edit cards' })).toBeTruthy();
   });
 
+  it.each([['teacher'], ['admin']])('offers a %s who owns the set "Assign to class"', async (role) => {
+    state.role = role;
+    render(<SetPage />);
+    fireEvent.click(await screen.findByRole('button', { name: '📌 Assign to class' }));
+    expect(screen.getByRole('dialog').textContent).toBe('Assign Photosynthesis');
+  });
+
+  it('does not offer "Assign to class" to a student who owns the set', async () => {
+    render(<SetPage />);
+    await screen.findByRole('button', { name: '✏️ Edit cards' });
+    expect(screen.queryByRole('button', { name: '📌 Assign to class' })).toBeNull();
+  });
+
   it.each([
     ['another signed-in user', () => (state.user = { id: '00000000-0000-4000-8000-0000000000dd' })],
     ['someone signed out', () => (state.user = null)],
@@ -100,5 +120,6 @@ describe('study set page', () => {
     await screen.findByText('Pigment that absorbs light');
     await waitFor(() => expect(screen.queryByRole('button', { name: '✏️ Edit cards' })).toBeNull());
     expect(screen.queryByRole('button', { name: 'Rename this set' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '📌 Assign to class' })).toBeNull();
   });
 });

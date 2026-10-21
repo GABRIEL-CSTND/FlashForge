@@ -7,6 +7,9 @@ import { useUser } from '@/lib/auth';
 import StudyViewer from '@/components/StudyViewer';
 import CardEditor, { type CardPayload, type SaveResult } from '@/components/CardEditor';
 import { apiFetch, errorMessage } from '@/lib/api-client';
+import AssignPanel from '@/components/AssignPanel';
+import { useProfile } from '@/components/ProfileProvider';
+import { canUseTeacherTools } from '@/lib/role-types';
 
 interface FlashcardSet {
   id: string;
@@ -28,6 +31,7 @@ export default function SetPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { user } = useUser();
+  const { profile } = useProfile();
   const [set, setSet] = useState<FlashcardSet | null>(null);
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +44,7 @@ export default function SetPage() {
   const [editingCards, setEditingCards] = useState(false);
   // Bumped after saving edited cards so the study view starts over on the new cards.
   const [viewerVersion, setViewerVersion] = useState(0);
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -217,6 +222,14 @@ export default function SetPage() {
           >
             Rename this set
           </button>
+          {canUseTeacherTools(profile?.role) && (
+            <button
+              onClick={() => setAssigning(true)}
+              className="text-sm text-gray-500 hover:underline"
+            >
+              📌 Assign to class
+            </button>
+          )}
         </div>
       )}
       <div>
@@ -232,6 +245,7 @@ export default function SetPage() {
   ) : null;
 
   return (
+    <>
     <StudyViewer
       key={viewerVersion}
       title={set.title}
@@ -240,5 +254,9 @@ export default function SetPage() {
       onFinish={() => router.push('/')}
       saveSlot={deleteSlot}
     />
+    {isOwner && assigning && (
+      <AssignPanel setId={set.id} setTitle={set.title} onClose={() => setAssigning(false)} />
+    )}
+    </>
   );
 }

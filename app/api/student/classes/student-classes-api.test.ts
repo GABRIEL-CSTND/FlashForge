@@ -176,8 +176,8 @@ describe('listing and leaving classes', () => {
     const res = await list('stu');
     expect(res.status).toBe(200);
     expect(res.body.classes).toEqual([
-      { id: CLASSES.chem, name: 'Chemistry', teacherName: null, joinedAt: minutesAgo(5) },
-      { id: CLASSES.bio, name: 'Biology 101', teacherName: 'Ms. Reyes', joinedAt: minutesAgo(60) },
+      { id: CLASSES.chem, name: 'Chemistry', teacherName: null, joinedAt: minutesAgo(5), assignments: [] },
+      { id: CLASSES.bio, name: 'Biology 101', teacherName: 'Ms. Reyes', joinedAt: minutesAgo(60), assignments: [] },
     ]);
   });
 

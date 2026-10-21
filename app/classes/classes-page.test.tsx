@@ -6,7 +6,7 @@ const state = vi.hoisted(() => ({
   profile: null as unknown,
   calls: [] as { method: string; path: string; body?: unknown }[],
   // What the fake /api/student/classes knows about.
-  mine: [] as { id: string; name: string; teacherName: string | null; joinedAt: string }[],
+  mine: [] as { id: string; name: string; teacherName: string | null; joinedAt: string; assignments: { id: string; setId: string; setTitle: string; studyType: string; dueAt: string | null; createdAt: string }[] }[],
   codes: {} as Record<string, { id: string; name: string; teacherName: string | null }>,
   failNext: null as null | { status: number; error?: string; offline?: boolean },
 }));
@@ -31,7 +31,7 @@ vi.mock('@/lib/api-client', async (importOriginal) => {
         const cls = state.codes[(init.body as { code: string }).code];
         if (!cls) return { ok: false, status: 404, data: { error: 'No class uses that code. Check it with your teacher.' } };
         const already = state.mine.some((c) => c.id === cls.id);
-        if (!already) state.mine.unshift({ ...cls, joinedAt: '2026-10-21T12:00:00Z' });
+        if (!already) state.mine.unshift({ ...cls, joinedAt: '2026-10-21T12:00:00Z', assignments: [] });
         return { ok: true, status: already ? 200 : 201, data: { class: cls, alreadyMember: already } };
       }
       const m = path.match(/^\/api\/student\/classes\/([^/]+)$/);
@@ -53,7 +53,7 @@ beforeEach(() => {
   state.profile = student;
   state.calls = [];
   state.failNext = null;
-  state.mine = [{ id: 'c1', name: 'Biology 101', teacherName: 'Ms. Reyes', joinedAt: '2026-10-19T08:00:00Z' }];
+  state.mine = [{ id: 'c1', name: 'Biology 101', teacherName: 'Ms. Reyes', joinedAt: '2026-10-19T08:00:00Z', assignments: [] }];
   state.codes = {
     K7M2QX: { id: 'c1', name: 'Biology 101', teacherName: 'Ms. Reyes' },
     ABC234: { id: 'c2', name: 'Chemistry', teacherName: null },
@@ -73,15 +73,40 @@ async function joinWith(code: string) {
   fireEvent.change(codeInput(), { target: { value: code } });
   fireEvent.click(screen.getByRole('button', { name: 'Join' }));
 }
-const classNames = () => screen.queryAllByRole('listitem').map((li) => within(li).getByText(/./, { selector: 'p.font-medium' }).textContent);
+// Top-level class cards only (each class card also contains its assignments list).
+const classItems = () => [...document.querySelectorAll('section[aria-labelledby="classes-heading"] > ul > li')] as HTMLElement[];
+const classNames = () => classItems().map((li) => li.querySelector('p.font-medium')!.textContent);
 
 describe('my classes page', () => {
   it('lists the student\'s classes with the teacher\'s name', async () => {
     render(<MyClassesPage />);
     expect(await screen.findByRole('heading', { name: 'Your classes (1)' })).toBeTruthy();
-    const item = screen.getByRole('listitem');
+    const item = classItems()[0];
     expect(item.textContent).toContain('Biology 101');
     expect(item.textContent).toContain('Ms. Reyes');
+  });
+
+  it("lists each class's assigned sets with due dates and an Overdue badge, linking to the set", async () => {
+    state.mine[0].assignments = [
+      { id: 'a1', setId: 'set-1', setTitle: 'Photosynthesis', studyType: 'flashcard', dueAt: '2099-01-15T17:00:00Z', createdAt: '2026-10-20' },
+      { id: 'a2', setId: 'set-2', setTitle: 'Cell parts', studyType: 'flashcard', dueAt: '2020-01-01T00:00:00Z', createdAt: '2026-10-19' },
+      { id: 'a3', setId: 'set-3', setTitle: 'Extra reading', studyType: 'flashcard', dueAt: null, createdAt: '2026-10-18' },
+    ];
+    render(<MyClassesPage />);
+    const list = await screen.findByRole('list', { name: 'Assigned in Biology 101' });
+    const links = within(list).getAllByRole('link');
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/sets/set-1', '/sets/set-2', '/sets/set-3']);
+    // Shown in the viewer's own time zone, via toLocaleString.
+    const due = new Date('2099-01-15T17:00:00Z').toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    expect(links[0].textContent).toContain(`Due ${due}`);
+    expect(links[0].textContent).not.toContain('Overdue');
+    expect(links[1].textContent).toContain('Overdue');
+    expect(links[2].textContent).toContain('No due date');
+  });
+
+  it('says when a class has nothing assigned', async () => {
+    render(<MyClassesPage />);
+    expect(await screen.findByText('No assigned sets yet.')).toBeTruthy();
   });
 
   it('shows an empty state with a hint', async () => {
@@ -134,7 +159,7 @@ describe('my classes page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Leave Biology 101' }));
     expect(confirmMock).toHaveBeenCalledWith(expect.stringMatching(/^Leave Biology 101\? Your teacher will no longer see your scores/));
     expect((await screen.findByRole('status')).textContent).toBe('You left Biology 101.');
-    expect(screen.queryByRole('listitem')).toBeNull();
+    expect(classItems()).toEqual([]);
     expect(state.calls.find((c) => c.method === 'DELETE')?.path).toBe('/api/student/classes/c1');
   });
 
@@ -143,7 +168,7 @@ describe('my classes page', () => {
     render(<MyClassesPage />);
     fireEvent.click(await screen.findByRole('button', { name: 'Leave Biology 101' }));
     expect(state.calls.some((c) => c.method === 'DELETE')).toBe(false);
-    expect(screen.getByRole('listitem').textContent).toContain('Biology 101');
+    expect(classItems()[0].textContent).toContain('Biology 101');
   });
 
   it('offers a retry when the list fails to load', async () => {

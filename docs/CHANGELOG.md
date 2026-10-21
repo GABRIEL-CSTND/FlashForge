@@ -5,11 +5,14 @@ Notable changes to FlashForge, newest first. Issue and PR numbers refer to
 
 ## Unreleased (on `dev`, not on the live site yet)
 
-Everything here was done on 2026-10-20 and 2026-10-21. It reaches the live site when `dev` is merged
+Everything here was done between 2026-10-20 and 2026-10-22. It reaches the live site when `dev` is merged
 into `main`. There is only one Supabase database, so changes marked **(live)** are
 already applied there.
 
 ### Security
+- Card access now always follows set access (#56): the cards policy checks the set
+  through the set's own RLS, so the two can't drift apart. All 5 database check files pass
+  (69 cases), and they now reset the simulated sign-in before acting as anonymous.
 - **Closed two database holes (live)** (#46). Anyone with the public anon key could read
   every flashcard, including 110 cards in private sets, and anyone could insert sets
   with any owner. Both policies were removed. The public API now returns only legacy
@@ -39,6 +42,15 @@ already applied there.
   - Teachers can only see and change their own classes, with up to 50 each.
   - New tables `classes` and `class_members`, with RLS and a `class_roster()` function
     (16 of 16 database checks pass).
+- **Assign sets to classes** (#56, live database):
+  - On a set they own, teachers pick one or more of their classes and an optional due
+    date (**📌 Assign to class**).
+  - The class page lists assigned sets with due dates and an Overdue badge, and lets the
+    teacher change the due date or unassign.
+  - Students see each class's assigned sets on **My classes**, in their own time zone, and
+    can open them.
+  - New `assignments` table. Students can read a set and its cards only while it's
+    assigned to a class they're in.
 - **Card editor** (#55, live database): the owner of a set can edit questions and
   answers, delete, add (up to 50) and reorder cards, and for multiple choice edit the 4
   choices and pick the correct one. Everything saves at once in one transaction
@@ -56,7 +68,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 175 tests):
+- **Automated tests** (`npm test`, 215 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),
@@ -80,6 +92,8 @@ already applied there.
 - New README, plus `docs/ARCHITECTURE.md` and this changelog (#47).
 
 ### Fixed
+- Date pickers, checkboxes and other built-in controls were hard to see in dark mode
+  (e.g. a dark calendar icon on a dark background). The page now sets `color-scheme`.
 - **The Exit button did nothing on a freshly generated study guide.** It now returns
   to the upload page and asks first if the guide hasn't been saved.
 - Network failures while generating now show an error instead of leaving the button
