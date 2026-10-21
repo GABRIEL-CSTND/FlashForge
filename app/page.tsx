@@ -238,6 +238,11 @@ export default function UploadPage() {
                   Teacher dashboard
                 </Link>
               )}
+              {profile?.role === 'student' && (
+                <Link href="/classes" className="text-blue-500 hover:underline">
+                  My Classes
+                </Link>
+              )}
               <Link href="/my-sets" className="text-blue-500 hover:underline">
                 My Sets
               </Link>

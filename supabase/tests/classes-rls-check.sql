@@ -1,5 +1,5 @@
 -- Run: npx supabase db query --linked --project-ref <ref> -f supabase/tests/classes-rls-check.sql
--- Read-only in effect: the test classes and memberships are rolled back.
+-- Read-only in effect: the test classes, memberships and attempts are rolled back.
 --
 -- Setup: users A, B, C are three existing accounts (roles don't matter for RLS).
 --   class X: teacher A, members B and C
@@ -85,6 +85,29 @@ begin
   begin insert into public.classes (teacher_id, name, join_code) values (a, '   ', 'O0I1LL'); code := 'inserted';
   exception when others then code := sqlstate; end;
   insert into results values (16, 'blank name / look-alike characters', '23514', code);
+
+  -- #54: joining and leaving only happen through the server
+  perform set_config('request.jwt.claims', json_build_object('sub', c, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  begin delete from public.class_members where class_id = y and student_id = c; ok := true;
+  exception when others then ok := false; end;
+  reset role; insert into results values (17, 'student C leaves a class directly (must use server)', 'denied', case when ok then 'ALLOWED' else 'denied' end);
+  execute 'set local role authenticated';
+  begin select count(*) into v from public.class_join_failures; ok := true;
+  exception when others then ok := false; end;
+  reset role; insert into results values (18, 'signed-in user reads the wrong-code log', 'denied', case when ok then 'ALLOWED' else 'denied' end);
+  execute 'set local role authenticated';
+  begin insert into public.class_join_failures (user_id) values (c); ok := true;
+  exception when others then ok := false; end;
+  reset role; insert into results values (19, 'signed-in user writes the wrong-code log', 'denied', case when ok then 'ALLOWED' else 'denied' end);
+  execute 'set local role anon';
+  begin select count(*) into v from public.class_join_failures; ok := true;
+  exception when others then ok := false; end;
+  reset role; insert into results values (20, 'anon reads the wrong-code log', 'denied', case when ok then 'ALLOWED' else 'denied' end);
+  execute 'set local role service_role';
+  insert into public.class_join_failures (user_id) values (c);
+  select count(*) into v from public.class_join_failures where user_id = c and attempted_at > now() - interval '1 minute';
+  reset role; insert into results values (21, 'server records a wrong-code attempt', '1', v::text);
 end $$;
 select n, check_name, expected, actual from results order by n;
 rollback;

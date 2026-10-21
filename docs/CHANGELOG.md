@@ -5,7 +5,7 @@ Notable changes to FlashForge, newest first. Issue and PR numbers refer to
 
 ## Unreleased (on `dev`, not on the live site yet)
 
-Everything here was done on 2026-10-20. It reaches the live site when `dev` is merged
+Everything here was done on 2026-10-20 and 2026-10-21. It reaches the live site when `dev` is merged
 into `main`. There is only one Supabase database, so changes marked **(live)** are
 already applied there.
 
@@ -39,14 +39,22 @@ already applied there.
   - Teachers can only see and change their own classes, with up to 50 each.
   - New tables `classes` and `class_members`, with RLS and a `class_roster()` function
     (16 of 16 database checks pass).
+- **Students join classes with a code** (#54, live database):
+  - Students get a **My classes** page (`/classes`, linked in the header) to join with a
+    code, see their classes and teachers, and leave a class.
+  - Before joining, they're told their teacher will see their name, email and scores.
+  - Joining twice changes nothing. Codes are checked on the server, and after 10 wrong
+    codes in 15 minutes a student has to wait (new `class_join_failures` table, server-only).
+  - Teachers' class pages now tell them where students enter the code.
 - **Gemma 4 as a last-resort AI backup** (PR #49): when both Gemini models are busy or
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 82 tests):
+- **Automated tests** (`npm test`, 123 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
-  - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53).
+  - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),
+    with time-window filters for the join rate limit (#54).
 - Plan for teacher and admin features, with a 6-week schedule: parent issue #50 and
   sub-issues #51–#63.
 

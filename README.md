@@ -79,21 +79,25 @@ app/
   sets/[id]/page.tsx    A saved set: study, rename, delete
   teacher/page.tsx      Teacher dashboard: create classes, see join codes
   teacher/classes/[id]/ One class: join code, roster, rename, delete
+  classes/page.tsx      My classes (students): join with a code, see classes, leave
   api/generate/         POST: extract text from the file, generate items with AI
   api/save-set/         POST: save a generated guide (signed-in users only)
   api/profile/role/     POST: one-time student/teacher choice at sign-up
   api/teacher/classes/  Teacher class API (list/create, rename/delete, new code, remove student)
+  api/student/classes/  Student class API (list, join with a code, leave)
 components/
   StudyViewer.tsx       Flashcard / multiple-choice study UI
   ProfileProvider.tsx   Shares the signed-in user's profile (role) with every page
   RoleChooser.tsx       "Student or teacher?" screen for users who haven't chosen
-  TeacherOnly.tsx       Shows teacher pages only to teachers and admins
+  RoleGate.tsx          Shows a page only to the allowed roles (sign-in/denied messages otherwise)
+  TeacherOnly.tsx       RoleGate for teacher pages (teachers and admins)
 lib/
   gemini.ts             AI model chain, prompts, retries, output validation
   roles.ts              getAuthedUser / requireRole / chooseOwnRole (server-only)
   role-types.ts         Role types and helpers shared by server and client
   classes.ts            Class logic, always scoped to the acting teacher (server-only)
   classes-shared.ts     Class name and join-code rules shared by server and client
+  student-classes.ts    Joining/leaving classes and the wrong-code rate limit (server-only)
   api-client.ts         apiFetch(): calls our API routes with the user's token
   route-helpers.ts      Shared error/404 responses for API routes
 test-utils/

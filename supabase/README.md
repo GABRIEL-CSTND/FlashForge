@@ -22,6 +22,7 @@ soon as it's applied.
 | `20261020000100_profiles_roles.sql` | #51 | 2026-10-20 |
 | `seed-admins.sql` | #51 | 2026-10-20 (castanedag438@gmail.com) |
 | `20261020000200_classes.sql` | #53 | 2026-10-20 |
+| `20261021000100_class_join_failures.sql` | #54 | 2026-10-21 |
 
 Add a row here whenever you apply a new migration.
 

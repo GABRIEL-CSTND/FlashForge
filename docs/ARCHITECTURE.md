@@ -12,12 +12,14 @@ flowchart LR
     MS[My Sets] --> SP["Set page<br/>/sets/[id]"]
     RC[RoleChooser<br/>one-time screen]
     T["Teacher pages<br/>/teacher, /teacher/classes/[id]"]
+    MC["My classes<br/>/classes"]
   end
   subgraph "Next.js server (Vercel)"
     G["/api/generate"] --> AI[lib/gemini.ts]
     S["/api/save-set"]
     R["/api/profile/role"]
     TC["/api/teacher/classes/..."] --> CL[lib/classes.ts]
+    SC["/api/student/classes/..."] --> SCL[lib/student-classes.ts]
   end
   subgraph Google
     AI --> M1[gemini-3.5-flash]
@@ -36,6 +38,8 @@ flowchart LR
   RC --> R -->|service-role key| DB
   T --> TC
   CL -->|service-role key, scoped to the teacher| DB
+  MC --> SC
+  SCL -->|service-role key, scoped to the student| DB
 ```
 
 Every server route that changes data checks the caller first (`lib/roles.ts`) and then
@@ -55,10 +59,14 @@ writes with the service-role key. Browsers read only what RLS allows (section 4)
 | `DELETE /api/teacher/classes/[id]` | The class's teacher | Delete the class and its memberships |
 | `POST /api/teacher/classes/[id]/join-code` | The class's teacher | Replace the join code; the old one stops working |
 | `DELETE /api/teacher/classes/[id]/students/[studentId]` | The class's teacher | Remove one student from the class |
+| `GET /api/student/classes` | Student | The classes the caller joined, most recent first, with teacher names |
+| `POST /api/student/classes` | Student | Join with a code: `{ code }` (any case, spaces or hyphen) → 201 joined, or 200 `alreadyMember` |
+| `DELETE /api/student/classes/[id]` | Student in that class | Leave the class |
 
 Errors are JSON `{ error }` with 400 (bad input), 401 (not signed in), 403 (wrong role),
 404 (not found, *or* someone else's class), 409 (conflict, e.g. a role already chosen or
-the 50-class limit), and 500 (a generic message; details only go to the server log).
+the 50-class limit), 429 (too many wrong join codes; includes a `Retry-After` header), and
+500 (a generic message; details only go to the server log).
 
 ## 1. Generating a study guide
 
@@ -171,7 +179,27 @@ the 50-class limit), and 500 (a generic message; details only go to the server l
   pick "teacher" at sign-up.
 - **Admins** can use all teacher features, but only on classes they created themselves.
   Seeing other teachers' classes would be an admin feature (#60/#61).
-- Students joining with a code is #54.
+
+### Joining a class (#54)
+
+- Students open **My classes** (`/classes`, linked in the upload page header) and type a
+  code. Case, spaces and the hyphen don't matter (`k7m 2qx` → `K7M2QX`, using
+  `normalizeJoinCode`). Before joining, the page says: *"Your teacher will see your name,
+  email, and your scores on this class's assignments."*
+- `POST /api/student/classes` looks the code up on the server, with the service role. So
+  codes can't be listed or guessed through the database API: browsers have no access to
+  other classes' rows at all.
+- **Students only:** teachers and admins get 403 (they manage classes, they don't join them).
+- **Joining twice changes nothing.** The (`class_id`, `student_id`) primary key rejects
+  the second row, which the route reports as `alreadyMember`.
+- **Guessing limit:** each wrong code (a valid format, but no class has it) is saved in
+  `class_join_failures`. After **10 wrong codes in 15 minutes**, the route answers 429
+  until the oldest one falls out of the window. That's checked *before* the lookup, so
+  even a correct code waits. Codes with an impossible format are rejected (400) without
+  counting. This is stored in the database because Vercel runs many server instances
+  that don't share memory.
+- **Leaving** (`DELETE /api/student/classes/[id]`) removes only the caller's own
+  membership. Rejoining needs the class's current code.
 
 The plan for teacher and admin features is tracked in #50.
 
@@ -184,6 +212,7 @@ The plan for teacher and admin features is tracked in #50.
 | `profiles` | `id` → `auth.users` (cascade), `display_name`, `role`, `role_chosen_at`, `created_at` | `role_chosen_at` is for the sign-up role choice (#52) |
 | `classes` | `id`, `teacher_id` → `auth.users` (cascade), `name` (1–80 chars), `join_code` (unique), `created_at` | Indexed on `teacher_id` |
 | `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
+| `class_join_failures` | `id`, `user_id` → `auth.users` (cascade), `attempted_at` | Wrong join codes for the rate limit; indexed on (`user_id`, `attempted_at`); old rows are deleted as new ones arrive |
 
 ## 4. Security model
 
@@ -203,7 +232,8 @@ The plan for teacher and admin features is tracked in #50.
 | `flashcards` | Anyone | Read cards whose set they can read; no direct writes |
 | `profiles` | The user | Read their own row and update `display_name` only; anon has no access |
 | `classes` | Teacher / members | The teacher reads their own classes; members read classes they joined; no direct writes |
-| `class_members` | Student / teacher | A student reads their own memberships; the teacher reads their roster; no direct writes |
+| `class_members` | Student / teacher | A student reads their own memberships; the teacher reads their roster; no direct writes (joining and leaving go through the server) |
+| `class_join_failures` | Nobody | Server-only: no grants or policies for anon or signed-in users |
 
 The `classes` and `class_members` policies need to check each other, which would make RLS
 recurse. So they use `private.is_class_teacher()` and `private.is_class_member()`:
@@ -225,7 +255,7 @@ transaction. Run them after every database change.
   - Component tests for `RoleChooser` and the teacher pages, in jsdom with React Testing
     Library. Component tests start with `// @vitest-environment jsdom`.
 - `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and
-  classes. Each prints expected vs. actual (10, 10 and 16 cases).
+  classes. Each prints expected vs. actual (10, 10 and 21 cases).
 - AI changes were checked with mocked `fetch` (retries, fallbacks, validation) and a few
   real API calls. Keep real calls to a minimum because of the 20-requests-a-day quota.
 
@@ -239,8 +269,9 @@ transaction. Run them after every database change.
   uploaded to the server whole (#44), and only PDF and TXT are supported (#20).
 - **3 existing ESLint errors** (`react-hooks/set-state-in-effect`) in `app/page.tsx` and
   `app/my-sets/page.tsx`.
-- **Students can't join classes yet.** Teachers can create classes and share codes, but
-  the join form for students is #54, so rosters stay empty until then.
+- **The join-code guessing limit is per account** (10 wrong codes per 15 minutes).
+  Someone with many Google accounts could guess faster. With about 887 million possible
+  codes, that's still impractical, and #63 will add wider rate limits.
 - **Open dependency advisories** (`npm audit`, 2026-10-20):
   - **`next` 16.3.3** (used by the live site) has published advisories. They include a
     critical remote-code-execution bug in `next/og` and a high-severity SSRF in image

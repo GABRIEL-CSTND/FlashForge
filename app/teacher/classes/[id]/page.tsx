@@ -236,7 +236,10 @@ function ClassView({ id }: { id: string }) {
         <p className="font-mono text-3xl font-bold tracking-widest" data-testid="join-code">
           {formatJoinCode(cls.joinCode)}
         </p>
-        <p className="text-sm text-gray-500">Students enter this code on FlashForge to join your class.</p>
+        <p className="text-sm text-gray-500">
+          Students sign in to FlashForge, open <span className="font-medium">My Classes</span>, and enter this
+          code.
+        </p>
         <div className="flex justify-center gap-2">
           <button
             type="button"

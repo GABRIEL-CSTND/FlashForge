@@ -1,7 +1,7 @@
 // In-memory stand-in for the service-role Supabase client, for route tests.
 // Supports the subset of the query builder the app uses: select (with
-// `{ count: 'exact', head: true }`), insert, update, delete, eq/neq/in/is
-// filters, order, limit, single/maybeSingle, rpc, and auth.getUser. Unique
+// `{ count: 'exact', head: true }`), insert, update, delete, eq/neq/in/is,
+// gt/gte/lt/lte filters, order, limit, single/maybeSingle, rpc, and auth.getUser. Unique
 // keys return Postgres error 23505 and deletes can cascade, like the real
 // schema. Behaviour that matters was also checked against the live database.
 
@@ -173,6 +173,23 @@ export function createFakeSupabase(options: FakeSupabaseOptions = {}) {
       },
       is(column: string, value: null) {
         filters.push((r) => (r[column] ?? null) === value);
+        return builder;
+      },
+      // Comparisons work for numbers and for ISO timestamps (which sort as strings).
+      gt(column: string, value: string | number) {
+        filters.push((r) => (r[column] as string | number) > value);
+        return builder;
+      },
+      gte(column: string, value: string | number) {
+        filters.push((r) => (r[column] as string | number) >= value);
+        return builder;
+      },
+      lt(column: string, value: string | number) {
+        filters.push((r) => (r[column] as string | number) < value);
+        return builder;
+      },
+      lte(column: string, value: string | number) {
+        filters.push((r) => (r[column] as string | number) <= value);
         return builder;
       },
       order(column: string, opts?: { ascending?: boolean }) {
