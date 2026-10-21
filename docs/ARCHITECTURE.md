@@ -17,6 +17,7 @@ flowchart LR
   subgraph "Next.js server (Vercel)"
     G["/api/generate"] --> AI[lib/gemini.ts]
     S["/api/save-set"]
+    EC["/api/sets/[id]/cards"]
     R["/api/profile/role"]
     TC["/api/teacher/classes/..."] --> CL[lib/classes.ts]
     SC["/api/student/classes/..."] --> SCL[lib/student-classes.ts]
@@ -34,6 +35,7 @@ flowchart LR
   SV -->|Save| S -->|service-role key| DB
   MS -->|anon key + user session| DB
   SP -->|anon key + user session| DB
+  SP -->|Edit cards| EC -->|"service-role key, replace_set_cards()"| DB
   U --> AUTH
   RC --> R -->|service-role key| DB
   T --> TC
@@ -51,6 +53,7 @@ writes with the service-role key. Browsers read only what RLS allows (section 4)
 |---|---|---|
 | `POST /api/generate` | Anyone | Extract text from a PDF/TXT and generate 10 study items (section 1) |
 | `POST /api/save-set` | Signed in | Save a generated study guide to the user's account |
+| `PUT /api/sets/[id]/cards` | The set's owner | Save edited cards: `{ cards: [{ id?, question, answer, options? }] }` in display order (#55) |
 | `POST /api/profile/role` | Signed in, not chosen yet | One-time choice: `{ role: 'student' \| 'teacher' }` (#52) |
 | `GET /api/teacher/classes` | Teacher, admin | The caller's classes, newest first, with student counts |
 | `POST /api/teacher/classes` | Teacher, admin | Create a class: `{ name }` → the class with its join code |
@@ -127,8 +130,33 @@ the 50-class limit), 429 (too many wrong join codes; includes a `Retry-After` he
   long whitespace runs, and over-long text. Flashcard answers over 8 words are dropped.
 - **Multiple choice:** options are trimmed and de-duplicated, exactly 4 are required,
   the answer must match exactly one option (ignoring case and spacing, and then stored
-  as that option's text), and options are shuffled in code.
+  as that option's text), and options are shuffled in code. The matching rule is
+  `normalizeChoice()` in `lib/card-rules.ts`, shared with the card editor.
 - Fewer than **6** valid items counts as a failed attempt, so the next model is tried.
+
+### Editing a saved study set (#55)
+
+- The set's owner sees **✏️ Edit cards** on `/sets/[id]`. `components/CardEditor.tsx`
+  lets them change questions and answers, delete cards, add cards (up to 50) and reorder
+  them. For multiple choice they edit the 4 choices and pick the correct one with a radio
+  button. Cancel asks first if anything changed.
+- **Saving is all at once.** `PUT /api/sets/[id]/cards` gets the whole list in display
+  order: cards with an `id` are kept and updated, cards without one are new, and the
+  set's other cards are deleted.
+- **One set of rules on both sides:** `validateCards()` in `lib/card-rules.ts` runs in
+  the editor before sending and again on the server. Every card needs a question (up to
+  500 characters) and an answer (up to 200). A multiple-choice card needs exactly 4
+  different choices (compared with `normalizeChoice`) with one marked correct, and the
+  answer is stored as that choice's text. Errors name the card ("Card 3: write a
+  question.") and come back with a `cardIndex` so the editor can outline that card.
+- **Only the owner, checked twice:** the route looks the set up with `user_id = caller`
+  (`lib/sets.ts`, so others get 404, including admins and legacy ownerless sets). Then
+  `public.replace_set_cards()` re-checks the owner.
+- **All or nothing:** `replace_set_cards()` is one transaction. It locks the set's row so
+  two saves queue up, rejects card ids that aren't in this set and ids sent twice (the
+  route answers 409 "Reload the page"), then applies the update, insert and delete.
+  **Edited cards keep their ids**, so study results (#57) and most-missed questions
+  (#59) can refer to them. Only the service role may call it.
 
 ## 2. Auth and roles
 
@@ -208,7 +236,7 @@ The plan for teacher and admin features is tracked in #50.
 | Table | Columns | Notes |
 |---|---|---|
 | `flashcard_sets` | `id`, `user_id` → `auth.users`, `title`, `source_filename`, `study_type`, `created_at` | `user_id` is null for legacy sets made before sign-in was required |
-| `flashcards` | `id`, `set_id` → `flashcard_sets` (cascade), `question`, `answer`, `options` (jsonb, MC only), `position` | Indexed on `set_id` |
+| `flashcards` | `id`, `set_id` → `flashcard_sets` (cascade), `question`, `answer`, `options` (jsonb, MC only), `position` | Indexed on `set_id`. Ids stay the same when a card is edited (#55) |
 | `profiles` | `id` → `auth.users` (cascade), `display_name`, `role`, `role_chosen_at`, `created_at` | `role_chosen_at` is for the sign-up role choice (#52) |
 | `classes` | `id`, `teacher_id` → `auth.users` (cascade), `name` (1–80 chars), `join_code` (unique), `created_at` | Indexed on `teacher_id` |
 | `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
@@ -229,7 +257,7 @@ The plan for teacher and admin features is tracked in #50.
 | `flashcard_sets` | Owner | Read, rename, delete their own sets |
 | `flashcard_sets` | Anyone | Read legacy sets with no owner |
 | `flashcard_sets` | Anyone | **Insert: nobody** (saves go through `/api/save-set`) |
-| `flashcards` | Anyone | Read cards whose set they can read; no direct writes |
+| `flashcards` | Anyone | Read cards whose set they can read; no direct writes (edits go through `replace_set_cards()`, server-only) |
 | `profiles` | The user | Read their own row and update `display_name` only; anon has no access |
 | `classes` | Teacher / members | The teacher reads their own classes; members read classes they joined; no direct writes |
 | `class_members` | Student / teacher | A student reads their own memberships; the teacher reads their roster; no direct writes (joining and leaving go through the server) |
@@ -256,6 +284,9 @@ transaction. Run them after every database change.
     Library. Component tests start with `// @vitest-environment jsdom`.
 - `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and
   classes. Each prints expected vs. actual (10, 10 and 21 cases).
+- `supabase/tests/sets-editing-check.sql`: `replace_set_cards()` (12 cases), covering a
+  real edit, kept ids, each kind of refused save, that a refused save changes nothing,
+  and that browsers can't call it.
 - AI changes were checked with mocked `fetch` (retries, fallbacks, validation) and a few
   real API calls. Keep real calls to a minimum because of the 20-requests-a-day quota.
 
@@ -264,7 +295,8 @@ transaction. Run them after every database change.
 - **Free-tier AI quota:** about 20 requests a day on `gemini-3.5-flash`, shared by
   everyone. The backups help, but a paid tier is being discussed in #45.
 - **`/api/generate` has no rate limit yet** (#41 and #63), so anyone can use up the quota.
-- **Legacy sets with no owner (28 of them) are publicly readable.**
+- **Legacy sets with no owner (28 of them) are publicly readable**, and nobody can edit
+  their cards.
 - **Text extraction:** only the first 30,000 characters are used (#38), PDFs are
   uploaded to the server whole (#44), and only PDF and TXT are supported (#20).
 - **3 existing ESLint errors** (`react-hooks/set-state-in-effect`) in `app/page.tsx` and

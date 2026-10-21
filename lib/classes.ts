@@ -30,11 +30,8 @@ export interface ClassDetail extends ClassSummary {
 // account can create.
 export const MAX_CLASSES_PER_TEACHER = 50;
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function isUuid(value: string): boolean {
-  return UUID_PATTERN.test(value);
-}
+// Re-exported so existing imports keep working; the check lives in lib/ids.ts.
+export { isUuid } from '@/lib/ids';
 
 export function generateJoinCode(): string {
   let code = '';

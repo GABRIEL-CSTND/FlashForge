@@ -1,3 +1,5 @@
+import { normalizeChoice } from '@/lib/card-rules';
+
 // Models are tried in order; each has its own free-tier quota. A 429 (quota used
 // up) moves to the next model immediately, so once both Gemini models hit their
 // daily limit every request lands on Gemma 4 automatically, and goes back to
@@ -107,7 +109,8 @@ const GEMMA_FORMAT: Record<StudyType, string> = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const normalize = (s: string) => s.trim().replace(/\s+/g, ' ').replace(/[.]+$/, '').toLowerCase();
+// Same comparison the card editor uses (#55).
+const normalize = normalizeChoice;
 
 function shuffle<T>(arr: T[]): T[] {
   const out = [...arr];

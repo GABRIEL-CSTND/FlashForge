@@ -39,6 +39,12 @@ already applied there.
   - Teachers can only see and change their own classes, with up to 50 each.
   - New tables `classes` and `class_members`, with RLS and a `class_roster()` function
     (16 of 16 database checks pass).
+- **Card editor** (#55, live database): the owner of a set can edit questions and
+  answers, delete, add (up to 50) and reorder cards, and for multiple choice edit the 4
+  choices and pick the correct one. Everything saves at once in one transaction
+  (`replace_set_cards()`), and edited cards keep their ids. The editor and the server use
+  the same rules (`lib/card-rules.ts`), and AI generation now uses the same choice-matching
+  rule.
 - **Students join classes with a code** (#54, live database):
   - Students get a **My classes** page (`/classes`, linked in the header) to join with a
     code, see their classes and teachers, and leave a class.
@@ -50,7 +56,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 123 tests):
+- **Automated tests** (`npm test`, 175 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),

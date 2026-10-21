@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
 import StudyViewer from '@/components/StudyViewer';
+import CardEditor, { type CardPayload, type SaveResult } from '@/components/CardEditor';
+import { apiFetch, errorMessage } from '@/lib/api-client';
 
 interface FlashcardSet {
   id: string;
@@ -35,6 +37,9 @@ export default function SetPage() {
   const [titleDraft, setTitleDraft] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
   const [titleError, setTitleError] = useState('');
+  const [editingCards, setEditingCards] = useState(false);
+  // Bumped after saving edited cards so the study view starts over on the new cards.
+  const [viewerVersion, setViewerVersion] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -126,6 +131,23 @@ export default function SetPage() {
     setIsEditingTitle(false);
   };
 
+  const saveCards = async (payload: CardPayload[]): Promise<SaveResult> => {
+    if (!set) return { ok: false, error: 'Set not found.', cardIndex: null };
+    try {
+      const res = await apiFetch(`/api/sets/${set.id}/cards`, { method: 'PUT', body: { cards: payload } });
+      if (!res.ok) {
+        const cardIndex = typeof res.data.cardIndex === 'number' ? res.data.cardIndex : null;
+        return { ok: false, error: errorMessage(res.data), cardIndex };
+      }
+      setCards(res.data.cards as Flashcard[]);
+      setEditingCards(false);
+      setViewerVersion((v) => v + 1);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Could not reach the server. Check your connection and try again.', cardIndex: null };
+    }
+  };
+
   if (loading) {
     return <main className="min-h-screen flex items-center justify-center">Loading...</main>;
   }
@@ -135,6 +157,17 @@ export default function SetPage() {
   }
 
   const isOwner = user && set.user_id === user.id;
+
+  if (isOwner && editingCards) {
+    return (
+      <CardEditor
+        studyType={set.study_type}
+        cards={cards}
+        onSave={saveCards}
+        onCancel={() => setEditingCards(false)}
+      />
+    );
+  }
 
   const deleteSlot = isOwner ? (
     <div className="text-center space-y-2">
@@ -171,12 +204,20 @@ export default function SetPage() {
           </div>
         </div>
       ) : (
-        <button
-          onClick={startEditingTitle}
-          className="text-sm text-gray-500 hover:underline"
-        >
-          ✏️ Rename this set
-        </button>
+        <div className="flex justify-center gap-4">
+          <button
+            onClick={() => setEditingCards(true)}
+            className="text-sm text-gray-500 hover:underline"
+          >
+            ✏️ Edit cards
+          </button>
+          <button
+            onClick={startEditingTitle}
+            className="text-sm text-gray-500 hover:underline"
+          >
+            Rename this set
+          </button>
+        </div>
       )}
       <div>
         <button
@@ -192,6 +233,7 @@ export default function SetPage() {
 
   return (
     <StudyViewer
+      key={viewerVersion}
       title={set.title}
       studyType={set.study_type}
       cards={cards}

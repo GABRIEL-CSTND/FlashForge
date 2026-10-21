@@ -234,7 +234,12 @@ export function createFakeSupabase(options: FakeSupabaseOptions = {}) {
     async rpc(name: string, args: Record<string, unknown>) {
       const handler = options.rpc?.[name];
       if (!handler) return { data: null, error: { code: '42883', message: `function ${name} does not exist` } };
-      return { data: handler(args, db), error: null };
+      // A handler throws { code, message } to act like a function that raises.
+      try {
+        return { data: handler(args, db), error: null };
+      } catch (err) {
+        return { data: null, error: err as { code: string; message: string } };
+      }
     },
   };
 
