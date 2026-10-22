@@ -54,6 +54,10 @@ already applied there.
     can open them.
   - New `assignments` table. Students can read a set and its cards only while it's
     assigned to a class they're in.
+- **Most-missed questions** (#59): from the results table, each assignment opens its
+  questions hardest first, with the % of students who got each wrong (by their latest
+  attempt) and, for multiple choice, the wrong answer picked most often. Edited sets are
+  handled by card id: deleted cards drop out and new ones show "No answers yet".
 - **Student results for teachers** (#58):
   - Each class has a **📊 Student results** page: every student × assignment with the
     best score, number of attempts, and Late or Not started (never shown as 0%), plus
@@ -91,7 +95,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 305 tests):
+- **Automated tests** (`npm test`, 317 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),

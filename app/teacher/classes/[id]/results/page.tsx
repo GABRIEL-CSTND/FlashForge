@@ -162,9 +162,13 @@ function ResultsView({ id }: { id: string }) {
                   </th>
                   {assignments.map((a) => (
                     <th key={a.id} scope="col" className="min-w-36 border-b px-3 py-2 text-left align-bottom font-medium">
-                      <span className="block max-w-48 truncate" title={a.setTitle}>
+                      <Link
+                        href={`/teacher/classes/${id}/assignments/${a.id}`}
+                        title={`Hardest questions in ${a.setTitle}`}
+                        className="block max-w-48 truncate text-blue-600 hover:underline"
+                      >
                         {a.setTitle}
-                      </span>
+                      </Link>
                       <span className="block text-xs font-normal text-gray-400">
                         {a.dueAt ? `Due ${formatDueDate(a.dueAt)}` : 'No due date'}
                       </span>
@@ -215,7 +219,8 @@ function ResultsView({ id }: { id: string }) {
           <p className="text-xs text-gray-400">
             Each cell shows the student&apos;s best score. <span className="font-medium">Late</span> means they first
             finished after the due date. Students who haven&apos;t started aren&apos;t counted in the average.
-            Flashcard scores are marked by the students themselves. Select a student to see every attempt.
+            Flashcard scores are marked by the students themselves. Select a student to see every attempt, or an
+            assignment to see its hardest questions.
           </p>
         </>
       )}

@@ -188,6 +188,8 @@ describe('class results page', () => {
     render(<ClassResultsPage />);
     await table();
     expect(screen.getByRole('link', { name: '← Biology X' }).getAttribute('href')).toBe('/teacher/classes/c1');
+    // Each assignment header opens its hardest questions (#59).
+    expect(screen.getByRole('link', { name: 'Cell parts quiz' }).getAttribute('href')).toBe('/teacher/classes/c1/assignments/a1');
     await waitFor(() => expect(state.calls).toEqual(['/api/teacher/classes/c1/results']));
   });
 });

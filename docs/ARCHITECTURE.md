@@ -77,6 +77,7 @@ writes with the service-role key. Browsers read only what RLS allows (section 4)
 | `DELETE /api/student/classes/[id]` | Student in that class | Leave the class |
 | `GET /api/teacher/sets/[id]/assignments` | The set's owner (teacher, admin) | The owner's classes, marking which already have this set (#56) |
 | `POST /api/teacher/sets/[id]/assignments` | The set's owner (teacher, admin) | Assign: `{ classIds, dueAt \| null }` → `{ assigned, alreadyAssigned }` |
+| `GET /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | The assignment's questions, hardest first: % of current students who got each wrong (latest attempt each) and the most-picked wrong choice (#59) |
 | `PATCH /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | Change the due date: `{ dueAt \| null }` |
 | `DELETE /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | Unassign; students lose access right away |
 | `POST /api/attempts` | Signed in, can open the set | Save a finished study session: `{ id, setId, assignmentId?, answers }` → 201 with the scored attempt, or 200 if that `id` was already saved (#57) |
@@ -335,6 +336,25 @@ screen instead of shortening with "…".
   enforce this.
 - The summing-up rules (`summarizeAttempts`, `classAverage`, `resultsToCsv`) are in
   `lib/results-shared.ts`, shared by the server and the page.
+
+### Most-missed questions (#59)
+
+- In the results table, each assignment's title opens
+  `/teacher/classes/[id]/assignments/[assignmentId]`: the set's questions, hardest first,
+  so the teacher knows what to reteach.
+- **Each student counts once, by their latest attempt** on that assignment (the current
+  state of what they know, not their first try). Only the class's current students and
+  attempts made from this assignment count, as in #58.
+- For each question: the % of those students who got it wrong ("2 of 3 students wrong"),
+  the correct answer, and for multiple choice the **wrong answer picked most often**. A
+  skipped question counts as wrong but isn't a wrong answer. For flashcards, anything
+  but a "Got it" mark counts as wrong.
+- **Edited sets:** answers are matched to cards by id (`attempts.answers[].cardId`), so a
+  reworded card keeps its history, a deleted card disappears, and a card added since
+  shows "No answers yet" at the bottom. Right or wrong is what the student was scored
+  on at the time.
+- Ties are broken by how many students got it wrong, then by card order.
+  `questionStats()` in `lib/class-results.ts` does the counting.
 
 The plan for teacher and admin features is tracked in #50.
 

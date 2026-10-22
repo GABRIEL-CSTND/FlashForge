@@ -7,8 +7,8 @@ flashcards** (a clue on the front, a 1–4 word term on the back) or **multiple-
 questions** with instant feedback and a score at the end. Sign in with Google to save
 study guides, then rename, revisit, or delete them from **My Sets**. Signed in, every
 finished study session is saved with its score (flashcards are marked *Got it* or
-*Missed it*). Teachers can create classes, assign sets and see each student's scores;
-students join with a code.
+*Missed it*). Teachers can create classes, assign sets, and see each student's scores and
+the most-missed questions; students join with a code.
 
 Live site: https://flash-forge-one.vercel.app
 
@@ -83,6 +83,7 @@ app/
   teacher/page.tsx      Teacher dashboard: create classes, see join codes
   teacher/classes/[id]/ One class: join code, assigned sets, roster, rename, delete
   teacher/classes/[id]/results/  Student results: best scores, attempts, late / not started, averages, CSV
+  teacher/classes/[id]/assignments/[assignmentId]/  One assignment's questions, hardest first
   classes/page.tsx      My classes (students): join with a code, see assigned sets (done or not), leave
   api/generate/         POST: extract text from the file, generate items with AI
   api/save-set/         POST: save a generated guide (signed-in users only)
@@ -90,7 +91,8 @@ app/
   api/attempts/         POST: save a finished study session (scored on the server); GET: my recent scores
   api/profile/role/     POST: one-time student/teacher choice at sign-up
   api/teacher/classes/  Teacher class API (list/create, rename/delete, new code, remove student,
-                        change due date / unassign, student results, one student's attempts)
+                        change due date / unassign, student results, one student's attempts,
+                        an assignment's hardest questions)
   api/teacher/sets/[id]/assignments/  Assign a set to the teacher's classes
   api/student/classes/  Student class API (list with assignments and my progress, join with a code, leave)
 components/
