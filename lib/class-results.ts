@@ -146,3 +146,118 @@ export async function getStudentResults(
     }),
   };
 }
+
+export interface QuestionStat {
+  cardId: string;
+  question: string;
+  answer: string;
+  // Students whose latest attempt included this card.
+  answered: number;
+  wrong: number;
+  // Null when nobody has answered it yet (e.g. a card added since).
+  percentWrong: number | null;
+  // Multiple choice: the wrong option picked most often. A skipped question
+  // counts as wrong but isn't an option.
+  topWrongChoice: { choice: string; count: number } | null;
+}
+
+interface StoredAnswer {
+  cardId: string;
+  chosen?: string | null;
+  correct: boolean;
+}
+
+// Hardest first (#59). Each student counts once, by their latest attempt, and
+// answers are matched to the set's current cards by id, so deleted cards drop
+// out and edited ones keep their history.
+export function questionStats(
+  cards: { id: string; question: string; answer: string }[],
+  latestAnswers: StoredAnswer[][]
+): QuestionStat[] {
+  const stats = cards.map((card, position) => {
+    let answered = 0;
+    let wrong = 0;
+    const wrongChoices = new Map<string, number>();
+    for (const answers of latestAnswers) {
+      const a = answers.find((x) => x.cardId === card.id);
+      if (!a) continue;
+      answered += 1;
+      if (a.correct) continue;
+      wrong += 1;
+      if (typeof a.chosen === 'string' && a.chosen) wrongChoices.set(a.chosen, (wrongChoices.get(a.chosen) ?? 0) + 1);
+    }
+    let topWrongChoice: QuestionStat['topWrongChoice'] = null;
+    for (const [choice, count] of wrongChoices) {
+      if (!topWrongChoice || count > topWrongChoice.count) topWrongChoice = { choice, count };
+    }
+    const percentWrong = answered > 0 ? Math.round((wrong / answered) * 100) : null;
+    return { position, stat: { cardId: card.id, question: card.question, answer: card.answer, answered, wrong, percentWrong, topWrongChoice } };
+  });
+  return stats
+    .sort(
+      (a, b) =>
+        (b.stat.percentWrong ?? -1) - (a.stat.percentWrong ?? -1) || b.stat.wrong - a.stat.wrong || a.position - b.position
+    )
+    .map((s) => s.stat);
+}
+
+export type AssignmentQuestionsLookup =
+  | {
+      kind: 'ok';
+      class: { id: string; name: string };
+      assignment: ClassAssignment;
+      studentCount: number;
+      // Current students with at least one attempt on this assignment.
+      studentsDone: number;
+      questions: QuestionStat[];
+    }
+  | { kind: 'not-found' };
+
+// One assignment's questions for the teacher, hardest first. Not found if the
+// class isn't the teacher's or the assignment isn't in it.
+export async function getAssignmentQuestions(
+  teacherId: string,
+  classId: string,
+  assignmentId: string,
+  client: SupabaseClient = supabaseAdmin
+): Promise<AssignmentQuestionsLookup> {
+  const cls = await getClass(teacherId, classId, client);
+  if (!cls) return { kind: 'not-found' };
+  const assignment = ((await listClassAssignments(teacherId, classId, client)) ?? []).find((a) => a.id === assignmentId);
+  if (!assignment) return { kind: 'not-found' };
+
+  const { data: cards, error: cardsError } = await client
+    .from('flashcards')
+    .select('id, question, answer, position')
+    .eq('set_id', assignment.setId)
+    .order('position', { ascending: true });
+  if (cardsError) throw cardsError;
+
+  const latest: StoredAnswer[][] = [];
+  const studentIds = cls.students.map((s) => s.studentId);
+  if (studentIds.length > 0) {
+    const { data: rows, error } = await client
+      .from('attempts')
+      .select('user_id, answers, completed_at')
+      .eq('assignment_id', assignment.id)
+      .in('user_id', studentIds)
+      .order('completed_at', { ascending: false });
+    if (error) throw error;
+    const seen = new Set<string>();
+    for (const row of rows ?? []) {
+      // Newest first, so the first row per student is their latest attempt.
+      if (seen.has(row.user_id)) continue;
+      seen.add(row.user_id);
+      latest.push(Array.isArray(row.answers) ? (row.answers as StoredAnswer[]) : []);
+    }
+  }
+
+  return {
+    kind: 'ok',
+    class: { id: cls.id, name: cls.name },
+    assignment,
+    studentCount: studentIds.length,
+    studentsDone: latest.length,
+    questions: questionStats(cards ?? [], latest),
+  };
+}

@@ -4,9 +4,29 @@ import { TEACHER_ROLES } from '@/lib/role-types';
 import { isUuid } from '@/lib/ids';
 import { parseDueAt } from '@/lib/due-dates';
 import { unassign, updateAssignmentDue } from '@/lib/assignments';
+import { getAssignmentQuestions } from '@/lib/class-results';
 import { errorResponse, notFound, readJsonBody } from '@/lib/route-helpers';
 
 type Context = { params: Promise<{ id: string; assignmentId: string }> };
+
+// The assignment's questions, hardest first (#59): how many current students
+// got each one wrong (by their latest attempt) and, for multiple choice, the
+// wrong answer picked most often.
+export async function GET(req: NextRequest, { params }: Context) {
+  try {
+    const user = await requireRole(req, TEACHER_ROLES);
+    const { id, assignmentId } = await params;
+    const result =
+      isUuid(id) && isUuid(assignmentId)
+        ? await getAssignmentQuestions(user.id, id, assignmentId)
+        : ({ kind: 'not-found' } as const);
+    if (result.kind === 'not-found') return notFound('Assignment');
+    const { class: cls, assignment, studentCount, studentsDone, questions } = result;
+    return NextResponse.json({ class: cls, assignment, studentCount, studentsDone, questions });
+  } catch (err) {
+    return errorResponse(err, 'teacher/classes/[id]/assignments/[assignmentId] GET');
+  }
+}
 
 // Change the due date: { dueAt: string | null } (#56).
 export async function PATCH(req: NextRequest, { params }: Context) {
