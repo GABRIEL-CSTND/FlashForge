@@ -17,6 +17,11 @@ export function cleanClassName(raw: unknown): string | null {
   return name.length > 0 && name.length <= CLASS_NAME_MAX_LENGTH ? name : null;
 }
 
+// How a student is named on teacher pages: display name, else email.
+export function studentLabel(s: { displayName: string | null; email: string | null }): string {
+  return s.displayName || s.email || 'Unnamed student';
+}
+
 // Stored as "K7M2QX", shown as "K7M-2QX".
 export function formatJoinCode(code: string): string {
   return `${code.slice(0, 3)}-${code.slice(3)}`;

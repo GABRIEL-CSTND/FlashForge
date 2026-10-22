@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import TeacherOnly from '@/components/TeacherOnly';
 import { apiFetch, errorMessage } from '@/lib/api-client';
-import { CLASS_NAME_MAX_LENGTH, formatJoinCode } from '@/lib/classes-shared';
+import { CLASS_NAME_MAX_LENGTH, formatJoinCode, studentLabel } from '@/lib/classes-shared';
 import { formatDueDate, fromLocalInputValue, isOverdue, parseDueAt, toLocalInputValue } from '@/lib/due-dates';
 
 interface Student {
@@ -54,9 +54,8 @@ async function fetchClass(id: string): Promise<LoadState> {
   }
 }
 
-const studentLabel = (s: Student) => s.displayName || s.email || 'Unnamed student';
-
-// One class (#53): its join code, its roster, and rename/delete.
+// One class (#53): its join code, assigned sets (#56), roster, rename/delete,
+// and a link to the students' results (#58).
 export default function TeacherClassPage() {
   const { id } = useParams<{ id: string }>();
   return (
@@ -201,7 +200,9 @@ function ClassView({ id }: { id: string }) {
   };
 
   return (
-    <main className="min-h-screen p-6 max-w-md mx-auto space-y-6">
+    // w-full: the body is a flex column, so without it a long set title would
+    // widen the page past a phone screen instead of truncating.
+    <main className="min-h-screen w-full p-6 max-w-md mx-auto space-y-6">
       <Link href="/teacher" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
         ← All classes
       </Link>
@@ -260,6 +261,13 @@ function ClassView({ id }: { id: string }) {
           </div>
         )}
       </div>
+
+      <Link
+        href={`/teacher/classes/${id}/results`}
+        className="block rounded-lg border p-3 text-center text-sm font-medium hover:border-blue-400"
+      >
+        📊 Student results
+      </Link>
 
       {actionError && (
         <p role="alert" className="text-sm text-red-500">

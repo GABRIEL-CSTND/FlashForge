@@ -7,7 +7,8 @@ flashcards** (a clue on the front, a 1–4 word term on the back) or **multiple-
 questions** with instant feedback and a score at the end. Sign in with Google to save
 study guides, then rename, revisit, or delete them from **My Sets**. Signed in, every
 finished study session is saved with its score (flashcards are marked *Got it* or
-*Missed it*). Teachers can create classes and assign sets; students join with a code.
+*Missed it*). Teachers can create classes, assign sets and see each student's scores;
+students join with a code.
 
 Live site: https://flash-forge-one.vercel.app
 
@@ -81,6 +82,7 @@ app/
   sets/[id]/page.tsx    A saved set: study and save the score; the owner can edit cards, rename, delete
   teacher/page.tsx      Teacher dashboard: create classes, see join codes
   teacher/classes/[id]/ One class: join code, assigned sets, roster, rename, delete
+  teacher/classes/[id]/results/  Student results: best scores, attempts, late / not started, averages, CSV
   classes/page.tsx      My classes (students): join with a code, see assigned sets (done or not), leave
   api/generate/         POST: extract text from the file, generate items with AI
   api/save-set/         POST: save a generated guide (signed-in users only)
@@ -88,13 +90,14 @@ app/
   api/attempts/         POST: save a finished study session (scored on the server); GET: my recent scores
   api/profile/role/     POST: one-time student/teacher choice at sign-up
   api/teacher/classes/  Teacher class API (list/create, rename/delete, new code, remove student,
-                        change due date / unassign)
+                        change due date / unassign, student results, one student's attempts)
   api/teacher/sets/[id]/assignments/  Assign a set to the teacher's classes
   api/student/classes/  Student class API (list with assignments and my progress, join with a code, leave)
 components/
   StudyViewer.tsx       Flashcard / multiple-choice study UI, Got it / Missed it marks, reports each finish
   CardEditor.tsx        Edit mode for a set: change, add, delete and reorder cards
   AssignPanel.tsx       "Assign to class" dialog on a set the teacher owns
+  StudentResultsPanel.tsx  One student's attempts, opened from the results table
   ProfileProvider.tsx   Shares the signed-in user's profile (role) with every page
   RoleChooser.tsx       "Student or teacher?" screen for users who haven't chosen
   RoleGate.tsx          Shows a page only to the allowed roles (sign-in/denied messages otherwise)
@@ -107,11 +110,13 @@ lib/
   sets.ts               Study sets scoped to their owner; saving edited cards (server-only)
   ids.ts                isUuid() and newId(), shared by server and client
   classes.ts            Class logic, always scoped to the acting teacher (server-only)
-  classes-shared.ts     Class name and join-code rules shared by server and client
+  classes-shared.ts     Class name, join-code and student-name rules shared by server and client
   student-classes.ts    Joining/leaving classes and the wrong-code rate limit (server-only)
   assignments.ts        Assigning sets to classes, scoped to the teacher/student (server-only)
   due-dates.ts          Due-date checks, local-time display, Overdue, sorting (shared)
   attempts.ts           Saving study results, scored from the real cards; recent scores, progress (server-only)
+  class-results.ts      A teacher's view of student results, scoped like the attempts RLS (server-only)
+  results-shared.ts     Done / late / not started, best score, class average, CSV (shared)
   api-client.ts         apiFetch(): calls our API routes with the user's token
   route-helpers.ts      Shared error/404 responses for API routes
   supabase.ts           Browser Supabase client (anon key)

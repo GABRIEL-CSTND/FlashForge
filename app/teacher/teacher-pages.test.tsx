@@ -194,6 +194,12 @@ describe('class page', () => {
     expect(screen.getByRole('heading', { name: 'Students (2)' })).toBeTruthy();
   });
 
+  it("links to the class's student results", async () => {
+    render(<TeacherClassPage />);
+    const link = await screen.findByRole('link', { name: '📊 Student results' });
+    expect(link.getAttribute('href')).toBe('/teacher/classes/c1/results');
+  });
+
   it('shows "Class not found" for a class the API won\'t return', async () => {
     state.params = { id: 'someone-elses' };
     render(<TeacherClassPage />);

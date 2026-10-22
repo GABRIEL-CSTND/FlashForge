@@ -11,7 +11,7 @@ flowchart LR
     U[Upload page<br/>app/page.tsx] --> SV[StudyViewer]
     MS[My Sets] --> SP["Set page<br/>/sets/[id]"]
     RC[RoleChooser<br/>one-time screen]
-    T["Teacher pages<br/>/teacher, /teacher/classes/[id]"]
+    T["Teacher pages<br/>/teacher, /teacher/classes/[id],<br/>/teacher/classes/[id]/results"]
     MC["My classes<br/>/classes"]
   end
   subgraph "Next.js server (Vercel)"
@@ -21,6 +21,7 @@ flowchart LR
     AS["/api/teacher/sets/[id]/assignments"] --> ASL[lib/assignments.ts]
     R["/api/profile/role"]
     TC["/api/teacher/classes/..."] --> CL[lib/classes.ts]
+    TC --> CR[lib/class-results.ts]
     SC["/api/student/classes/..."] --> SCL[lib/student-classes.ts]
     AT["/api/attempts"] --> ATL[lib/attempts.ts]
   end
@@ -46,6 +47,7 @@ flowchart LR
   RC --> R -->|service-role key| DB
   T --> TC
   CL -->|service-role key, scoped to the teacher| DB
+  CR -->|service-role key, own class and current students| DB
   MC --> SC
   SCL -->|service-role key, scoped to the student| DB
 ```
@@ -64,9 +66,11 @@ writes with the service-role key. Browsers read only what RLS allows (section 4)
 | `GET /api/teacher/classes` | Teacher, admin | The caller's classes, newest first, with student counts |
 | `POST /api/teacher/classes` | Teacher, admin | Create a class: `{ name }` → the class with its join code |
 | `GET /api/teacher/classes/[id]` | The class's teacher | Class details, roster (names, emails, join dates) and assignments (#56) |
+| `GET /api/teacher/classes/[id]/results` | The class's teacher | Every current student × assignment: best and latest score, attempts, done / late / not started, and each assignment's class average (#58) |
 | `PATCH /api/teacher/classes/[id]` | The class's teacher | Rename: `{ name }` |
 | `DELETE /api/teacher/classes/[id]` | The class's teacher | Delete the class and its memberships |
 | `POST /api/teacher/classes/[id]/join-code` | The class's teacher | Replace the join code; the old one stops working |
+| `GET /api/teacher/classes/[id]/students/[studentId]` | The class's teacher | One student's attempts on the class's assignments, grouped by assignment, newest first; 404 if they aren't in the class (#58) |
 | `DELETE /api/teacher/classes/[id]/students/[studentId]` | The class's teacher | Remove one student from the class |
 | `GET /api/student/classes` | Student | The classes the caller joined, most recent first, with teacher names and each class's assignments (#56), each with the caller's own `myProgress` (#57) |
 | `POST /api/student/classes` | Student | Join with a code: `{ code }` (any case, spaces or hyphen) → 201 joined, or 200 `alreadyMember` |
@@ -294,8 +298,36 @@ the 50-class limit), 429 (too many wrong join codes; includes a `Retry-After` he
 - **Who can read attempts (RLS):** the student, and the class's teacher only for attempts
   made from that class's assignment, and only while the student is still in the class.
   Private study is never visible to teachers, and unassigning a set keeps the attempts
-  but makes them private. Browsers can't write attempts at all. The teacher's results
-  view is #58.
+  but makes them private. Browsers can't write attempts at all. Teachers see these
+  results on the class's results page (#58, below).
+
+### Student results for teachers (#58)
+
+- On a class page, **📊 Student results** opens `/teacher/classes/[id]/results`: one row
+  per student in the class (by name) and one column per assignment (soonest due first).
+  On phones the table scrolls sideways and the student column stays in place.
+- **Each cell** shows the student's best score (e.g. *9/10 · 90%*), how many attempts
+  they made, and a **Late** badge if their first finish came after the due date. A
+  student who finished on time and practised again later is still on time. Lateness is
+  judged against the current due date, so moving the due date relabels past work.
+- **Not started is not 0%.** Those cells say *Not started* (red, with *Past due*, once
+  the due date has passed) and are left out of the class average.
+- **Class average** per assignment: the mean of each finisher's best percentage, with
+  "*n* of *m* done".
+- **Selecting a student** opens their attempts on each assignment, newest first, with
+  the time, score and a Late badge (`components/StudentResultsPanel.tsx`).
+- **Download CSV** builds the file in the browser from the same data: best %, attempts
+  and status for each assignment, plus the class average row. A cell starting with
+  `=`, `+`, `-` or `@` gets a leading `'` so spreadsheet apps don't run it as a
+  formula (student names are typed by users), and the file starts with a byte-order
+  mark so Excel keeps accents.
+- **Same rule as the attempts RLS** (`lib/class-results.ts`): only the teacher's own
+  class (404 otherwise, admins included), only students who are in it now, and only
+  attempts made from this class's assignments. Private study, and the same set
+  assigned to another class, never show up. The query filters and the grouping both
+  enforce this.
+- The summing-up rules (`summarizeAttempts`, `classAverage`, `resultsToCsv`) are in
+  `lib/results-shared.ts`, shared by the server and the page.
 
 The plan for teacher and admin features is tracked in #50.
 
@@ -351,9 +383,9 @@ transaction. Run them after every database change.
 ## 5. Testing
 
 - `npm test`: Vitest.
-  - Unit and route tests for roles, `/api/profile/role`, the class, assignment and
-    attempt APIs, using `test-utils/fake-supabase.ts`. That's an in-memory client with
-    unique keys (23505) and cascading deletes.
+  - Unit and route tests for roles, `/api/profile/role`, the class, assignment,
+    attempt and class-results APIs, using `test-utils/fake-supabase.ts`. That's an
+    in-memory client with unique keys (23505) and cascading deletes.
   - Component tests for `RoleChooser`, `StudyViewer`, `CardEditor`, `AssignPanel`, the
     set page and the teacher and student pages, in jsdom with React Testing Library.
     Component tests start with `// @vitest-environment jsdom`.
@@ -387,8 +419,10 @@ transaction. Run them after every database change.
   `app/my-sets/page.tsx`.
 - **Flashcard scores are self-reported** (*Got it* / *Missed it*). Only multiple-choice
   answers are checked against the real answers.
-- **Teachers can't see their students' results in the app yet.** The data and its RLS
-  are in place (#57); the results view is #58.
+- **Results list only students who are in the class now.** If a student leaves, their
+  results disappear from the teacher's view, and come back if they rejoin.
+- **Late is judged against the current due date**, so moving a due date relabels work
+  that was already done.
 - **The join-code guessing limit is per account** (10 wrong codes per 15 minutes).
   Someone with many Google accounts could guess faster. With about 887 million possible
   codes, that's still impractical, and #63 will add wider rate limits.
