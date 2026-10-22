@@ -5,7 +5,9 @@ Upload your notes and get an AI-generated study guide in seconds.
 FlashForge turns a PDF or TXT file into 10 study items, either **identification-style
 flashcards** (a clue on the front, a 1–4 word term on the back) or **multiple-choice
 questions** with instant feedback and a score at the end. Sign in with Google to save
-study guides, then rename, revisit, or delete them from **My Sets**.
+study guides, then rename, revisit, or delete them from **My Sets**. Signed in, every
+finished study session is saved with its score (flashcards are marked *Got it* or
+*Missed it*). Teachers can create classes and assign sets; students join with a code.
 
 Live site: https://flash-forge-one.vercel.app
 
@@ -76,20 +78,21 @@ Open http://localhost:3000.
 app/
   page.tsx              Upload page; also shows a freshly generated guide
   my-sets/page.tsx      Signed-in user's saved sets
-  sets/[id]/page.tsx    A saved set: study; the owner can edit cards, rename, delete
+  sets/[id]/page.tsx    A saved set: study and save the score; the owner can edit cards, rename, delete
   teacher/page.tsx      Teacher dashboard: create classes, see join codes
   teacher/classes/[id]/ One class: join code, assigned sets, roster, rename, delete
-  classes/page.tsx      My classes (students): join with a code, see classes and assigned sets, leave
+  classes/page.tsx      My classes (students): join with a code, see assigned sets (done or not), leave
   api/generate/         POST: extract text from the file, generate items with AI
   api/save-set/         POST: save a generated guide (signed-in users only)
   api/sets/[id]/cards/  PUT: save the owner's edited cards, all at once
+  api/attempts/         POST: save a finished study session (scored on the server); GET: my recent scores
   api/profile/role/     POST: one-time student/teacher choice at sign-up
   api/teacher/classes/  Teacher class API (list/create, rename/delete, new code, remove student,
                         change due date / unassign)
   api/teacher/sets/[id]/assignments/  Assign a set to the teacher's classes
-  api/student/classes/  Student class API (list with assignments, join with a code, leave)
+  api/student/classes/  Student class API (list with assignments and my progress, join with a code, leave)
 components/
-  StudyViewer.tsx       Flashcard / multiple-choice study UI
+  StudyViewer.tsx       Flashcard / multiple-choice study UI, Got it / Missed it marks, reports each finish
   CardEditor.tsx        Edit mode for a set: change, add, delete and reorder cards
   AssignPanel.tsx       "Assign to class" dialog on a set the teacher owns
   ProfileProvider.tsx   Shares the signed-in user's profile (role) with every page
@@ -102,19 +105,20 @@ lib/
   role-types.ts         Role types and helpers shared by server and client
   card-rules.ts         Card rules shared by the editor and the server (validateCards)
   sets.ts               Study sets scoped to their owner; saving edited cards (server-only)
-  ids.ts                isUuid(), shared by server and client
+  ids.ts                isUuid() and newId(), shared by server and client
   classes.ts            Class logic, always scoped to the acting teacher (server-only)
   classes-shared.ts     Class name and join-code rules shared by server and client
   student-classes.ts    Joining/leaving classes and the wrong-code rate limit (server-only)
   assignments.ts        Assigning sets to classes, scoped to the teacher/student (server-only)
   due-dates.ts          Due-date checks, local-time display, Overdue, sorting (shared)
+  attempts.ts           Saving study results, scored from the real cards; recent scores, progress (server-only)
   api-client.ts         apiFetch(): calls our API routes with the user's token
   route-helpers.ts      Shared error/404 responses for API routes
-test-utils/
-  fake-supabase.ts      In-memory Supabase client for route tests
   supabase.ts           Browser Supabase client (anon key)
   supabase-admin.ts     Server-only Supabase client (service-role key)
   auth.ts               useUser hook, Google sign-in/out
+test-utils/
+  fake-supabase.ts      In-memory Supabase client for route tests
 supabase/
   migrations/           Database schema and RLS policies (see supabase/README.md)
   tests/                SQL checks that simulate users; always rolled back

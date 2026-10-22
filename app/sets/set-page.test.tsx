@@ -5,13 +5,19 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 const SET_ID = '00000000-0000-4000-8000-0000000000aa';
 const OWNER = '00000000-0000-4000-8000-0000000000bb';
 const CARD = '00000000-0000-4000-8000-0000000000cc';
+const STUDENT = '00000000-0000-4000-8000-0000000000dd';
+const ASSIGNMENT = '00000000-0000-4000-8000-0000000000ee';
+
+type ApiResult = { ok: boolean; status: number; data: Record<string, unknown> };
 
 const state = vi.hoisted(() => ({
   user: null as null | { id: string },
   set: null as null | Record<string, unknown>,
   cards: [] as Record<string, unknown>[],
   apiCalls: [] as { path: string; init: unknown }[],
-  apiResult: null as null | { ok: boolean; status: number; data: Record<string, unknown> },
+  apiResult: null as null | ApiResult,
+  // For tests that make more than one call: answers each call by path.
+  respond: null as null | ((path: string, init: unknown) => ApiResult | Promise<ApiResult>),
   role: 'student' as string,
 }));
 
@@ -40,7 +46,7 @@ vi.mock('@/lib/supabase', () => ({
 vi.mock('@/lib/api-client', () => ({
   apiFetch: vi.fn(async (path: string, init: unknown) => {
     state.apiCalls.push({ path, init });
-    return state.apiResult!;
+    return state.respond ? state.respond(path, init) : state.apiResult!;
   }),
   errorMessage: (data: { error?: string }) => data.error ?? 'Something went wrong. Please try again.',
 }));
@@ -53,12 +59,14 @@ beforeEach(() => {
   state.cards = [{ id: CARD, question: 'Pigment that absorbs light', answer: 'Chlorophyll', options: null, position: 0 }];
   state.apiCalls = [];
   state.apiResult = null;
+  state.respond = null;
   state.role = 'student';
   vi.stubGlobal('confirm', vi.fn(() => true));
 });
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  window.history.replaceState(null, '', '/');
 });
 
 describe('study set page', () => {
@@ -121,5 +129,116 @@ describe('study set page', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: '✏️ Edit cards' })).toBeNull());
     expect(screen.queryByRole('button', { name: 'Rename this set' })).toBeNull();
     expect(screen.queryByRole('button', { name: '📌 Assign to class' })).toBeNull();
+  });
+});
+
+describe('saving study results (#57)', () => {
+  const attempt = (overrides: Record<string, unknown> = {}) => ({
+    id: '00000000-0000-4000-8000-000000000111',
+    setId: SET_ID,
+    assignmentId: ASSIGNMENT,
+    studyType: 'flashcard',
+    score: 1,
+    total: 1,
+    completedAt: '2026-10-22T09:30:00Z',
+    ...overrides,
+  });
+
+  // A student studying a set their teacher assigned.
+  beforeEach(() => {
+    state.user = { id: STUDENT };
+  });
+
+  const finishByMarkingGotIt = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: /Tap to flip/ }));
+    fireEvent.click(screen.getByRole('button', { name: '✓ Got it' }));
+  };
+
+  it('saves the run to the assignment it was opened from, then lists recent scores', async () => {
+    window.history.replaceState(null, '', `/sets/${SET_ID}?assignment=${ASSIGNMENT}`);
+    let finishSave: (r: ApiResult) => void = () => {};
+    state.respond = (path) =>
+      path === '/api/attempts'
+        ? new Promise<ApiResult>((resolve) => (finishSave = resolve))
+        : { ok: true, status: 200, data: { attempts: [attempt(), attempt({ id: '00000000-0000-4000-8000-000000000222', score: 0 })] } };
+    render(<SetPage />);
+    await finishByMarkingGotIt();
+
+    expect((await screen.findByRole('status')).textContent).toBe('Saving your score...');
+    finishSave({ ok: true, status: 201, data: { attempt: attempt() } });
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('✓ Saved to your scores. Your teacher can see it.'));
+
+    const [save, recent] = state.apiCalls;
+    expect(save.path).toBe('/api/attempts');
+    expect(save.init).toMatchObject({
+      method: 'POST',
+      body: { setId: SET_ID, assignmentId: ASSIGNMENT, answers: [{ cardId: CARD, result: 'got' }] },
+    });
+    expect((save.init as { body: { id: string } }).body.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(recent.path).toBe(`/api/attempts?setId=${SET_ID}`);
+    const scores = await screen.findByRole('list', { name: 'Your recent scores' });
+    expect(within(scores).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      expect.stringContaining('1 / 1 got it'),
+      expect.stringContaining('0 / 1 got it'),
+    ]);
+  });
+
+  it('says only the student can see a run that is not for an assignment', async () => {
+    state.respond = (path) =>
+      path === '/api/attempts'
+        ? { ok: true, status: 201, data: { attempt: attempt({ assignmentId: null }) } }
+        : { ok: true, status: 200, data: { attempts: [attempt({ assignmentId: null })] } };
+    render(<SetPage />);
+    await finishByMarkingGotIt();
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('✓ Saved to your scores. Only you can see this one.'));
+    expect(state.apiCalls[0].init).toMatchObject({ body: { assignmentId: null } });
+  });
+
+  it('uses a new attempt id for each finish, so retries are the only duplicates', async () => {
+    state.respond = (path) =>
+      path === '/api/attempts'
+        ? { ok: true, status: 201, data: { attempt: attempt() } }
+        : { ok: true, status: 200, data: { attempts: [] } };
+    render(<SetPage />);
+    await finishByMarkingGotIt();
+    await screen.findByText('✓ Saved to your scores. Your teacher can see it.');
+    fireEvent.click(screen.getByRole('button', { name: 'Review Again' }));
+    await finishByMarkingGotIt();
+    await waitFor(() => expect(state.apiCalls.filter((c) => c.path === '/api/attempts')).toHaveLength(2));
+    const [first, second] = state.apiCalls
+      .filter((c) => c.path === '/api/attempts')
+      .map((c) => (c.init as { body: { id: string } }).body.id);
+    expect(first).not.toBe(second);
+  });
+
+  it('asks a signed-out visitor to sign in instead of saving', async () => {
+    state.user = null;
+    state.set = { ...state.set!, user_id: null };
+    render(<SetPage />);
+    await finishByMarkingGotIt();
+    expect((await screen.findByRole('status')).textContent).toBe('Sign in to save your scores.');
+    expect(state.apiCalls).toEqual([]);
+  });
+
+  it("shows the server's reason when the score can't be saved", async () => {
+    state.respond = () => ({
+      ok: false,
+      status: 409,
+      data: { error: 'This set changed while you were studying, so the score couldn’t be saved.' },
+    });
+    render(<SetPage />);
+    await finishByMarkingGotIt();
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'This set changed while you were studying, so the score couldn’t be saved.'
+    );
+    // No history fetch after a failed save.
+    expect(state.apiCalls).toHaveLength(1);
+  });
+
+  it('says so when the server is unreachable', async () => {
+    state.respond = () => Promise.reject(new TypeError('Failed to fetch'));
+    render(<SetPage />);
+    await finishByMarkingGotIt();
+    expect((await screen.findByRole('alert')).textContent).toBe("Couldn't reach the server, so your score wasn't saved.");
   });
 });

@@ -10,6 +10,23 @@ export interface StudyItem {
   options?: string[] | null;
 }
 
+export type FlashcardMark = 'got' | 'missed';
+
+// What the student did with one card, in study order (#57).
+export interface StudyAnswer {
+  cardId?: string;
+  // Multiple choice: the option picked, or null if skipped.
+  chosen?: string | null;
+  // Flashcards: the student's own mark, or null if not marked.
+  result?: FlashcardMark | null;
+}
+
+export interface StudyResult {
+  answers: StudyAnswer[];
+  correct: number;
+  total: number;
+}
+
 interface StudyViewerProps {
   title: string;
   studyType: 'flashcard' | 'multiple_choice';
@@ -19,6 +36,10 @@ interface StudyViewerProps {
   // is already rendered on "/" (a freshly generated guide), where a link to "/"
   // would do nothing.
   onExit?: () => void;
+  // Called once each time the student finishes the set (#57).
+  onComplete?: (result: StudyResult) => void;
+  // Shown on the finish screen, e.g. "Saved to your scores" and past scores.
+  completionSlot?: React.ReactNode;
   saveSlot?: React.ReactNode;
 }
 
@@ -39,11 +60,23 @@ function ExitButton({ onExit }: { onExit?: () => void }) {
   );
 }
 
-export default function StudyViewer({ title, studyType, cards, onFinish, onExit, saveSlot }: StudyViewerProps) {
+export default function StudyViewer({
+  title,
+  studyType,
+  cards,
+  onFinish,
+  onExit,
+  onComplete,
+  completionSlot,
+  saveSlot,
+}: StudyViewerProps) {
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
-  const [results, setResults] = useState<Record<number, boolean>>({});
+  // Multiple choice: the option picked for each card, by index.
+  const [choices, setChoices] = useState<Record<number, string>>({});
+  // Flashcards: the student's own "got it / missed it" marks, by index.
+  const [marks, setMarks] = useState<Record<number, FlashcardMark>>({});
   const [view, setView] = useState<'card' | 'summary' | 'complete'>('card');
 
   const isMultipleChoice = studyType === 'multiple_choice';
@@ -55,15 +88,29 @@ export default function StudyViewer({ title, studyType, cards, onFinish, onExit,
     setSelectedOption(null);
   };
 
+  const advance = () => {
+    resetCardState();
+    setIndex((i) => i + 1);
+  };
+
+  // Reports the run once (from the click that finishes it) and shows the
+  // finish screen.
+  const finish = (finalMarks: Record<number, FlashcardMark> = marks) => {
+    const answers: StudyAnswer[] = cards.map((c, i) =>
+      isMultipleChoice
+        ? { cardId: c.id, chosen: choices[i] ?? null }
+        : { cardId: c.id, result: finalMarks[i] ?? null }
+    );
+    const correct = isMultipleChoice
+      ? cards.filter((c, i) => choices[i] === c.answer).length
+      : Object.values(finalMarks).filter((m) => m === 'got').length;
+    onComplete?.({ answers, correct, total: cards.length });
+    setView(isMultipleChoice ? 'summary' : 'complete');
+  };
+
   const goNext = () => {
-    if (index < cards.length - 1) {
-      resetCardState();
-      setIndex((i) => i + 1);
-    } else if (isMultipleChoice) {
-      setView('summary');
-    } else {
-      setView('complete');
-    }
+    if (index < cards.length - 1) advance();
+    else finish();
   };
 
   const goPrev = () => {
@@ -74,7 +121,8 @@ export default function StudyViewer({ title, studyType, cards, onFinish, onExit,
   };
 
   const restart = () => {
-    setResults({});
+    setChoices({});
+    setMarks({});
     setIndex(0);
     resetCardState();
     setView('card');
@@ -83,7 +131,15 @@ export default function StudyViewer({ title, studyType, cards, onFinish, onExit,
   const selectMcOption = (opt: string) => {
     if (selectedOption !== null) return;
     setSelectedOption(opt);
-    setResults((r) => ({ ...r, [index]: opt === card.answer }));
+    setChoices((c) => ({ ...c, [index]: opt }));
+  };
+
+  // Marking a flashcard moves on to the next one (or finishes on the last).
+  const markCard = (mark: FlashcardMark) => {
+    const next = { ...marks, [index]: mark };
+    setMarks(next);
+    if (isLast) finish(next);
+    else advance();
   };
 
   if (cards.length === 0) {
@@ -100,8 +156,8 @@ export default function StudyViewer({ title, studyType, cards, onFinish, onExit,
   }
 
   if (view === 'summary') {
-    const answered = Object.keys(results).length;
-    const correct = Object.values(results).filter(Boolean).length;
+    const answered = Object.keys(choices).length;
+    const correct = cards.filter((c, i) => choices[i] === c.answer).length;
     const pct = cards.length > 0 ? Math.round((correct / cards.length) * 100) : 0;
 
     return (
@@ -122,6 +178,7 @@ export default function StudyViewer({ title, studyType, cards, onFinish, onExit,
               </p>
             )}
           </div>
+          {completionSlot}
           {saveSlot}
           <button
             onClick={restart}
@@ -135,6 +192,10 @@ export default function StudyViewer({ title, studyType, cards, onFinish, onExit,
   }
 
   if (view === 'complete') {
+    const got = Object.values(marks).filter((m) => m === 'got').length;
+    const missed = Object.values(marks).filter((m) => m === 'missed').length;
+    const unmarked = cards.length - got - missed;
+
     return (
       <main className="min-h-screen flex items-center justify-center p-6">
         <div className="w-full max-w-md text-center space-y-6">
@@ -143,8 +204,21 @@ export default function StudyViewer({ title, studyType, cards, onFinish, onExit,
           </div>
           <h1 className="text-xl font-semibold">{title}</h1>
           <div className="border rounded-xl p-8 space-y-2">
-            <p className="text-2xl font-bold">You&apos;ve reviewed all {cards.length} cards! 🎉</p>
+            {got + missed > 0 ? (
+              <>
+                <p className="text-4xl font-bold">
+                  {got} / {cards.length}
+                </p>
+                <p className="text-gray-500">got it</p>
+                <p className="text-xs text-gray-400 mt-2">
+                  {missed} missed{unmarked > 0 ? ` · ${unmarked} not marked` : ''}
+                </p>
+              </>
+            ) : (
+              <p className="text-2xl font-bold">You&apos;ve reviewed all {cards.length} cards! 🎉</p>
+            )}
           </div>
+          {completionSlot}
           {saveSlot}
           <button
             onClick={restart}
@@ -238,6 +312,31 @@ export default function StudyViewer({ title, studyType, cards, onFinish, onExit,
             <p className="text-lg font-medium">{flipped ? card.answer : card.question}</p>
             {!flipped && <p className="text-xs text-gray-400 mt-4">Tap to flip</p>}
           </button>
+
+          {flipped && (
+            <div className="flex gap-4" role="group" aria-label="Did you know it?">
+              <button
+                type="button"
+                onClick={() => markCard('missed')}
+                aria-pressed={marks[index] === 'missed'}
+                className={`flex-1 py-3 rounded-lg border font-medium transition-colors ${
+                  marks[index] === 'missed' ? 'border-red-500 bg-red-500/10' : 'hover:border-red-400'
+                }`}
+              >
+                ✗ Missed it
+              </button>
+              <button
+                type="button"
+                onClick={() => markCard('got')}
+                aria-pressed={marks[index] === 'got'}
+                className={`flex-1 py-3 rounded-lg border font-medium transition-colors ${
+                  marks[index] === 'got' ? 'border-green-500 bg-green-500/10' : 'hover:border-green-400'
+                }`}
+              >
+                ✓ Got it
+              </button>
+            </div>
+          )}
 
           <div className="flex justify-between items-center gap-4">
             <button

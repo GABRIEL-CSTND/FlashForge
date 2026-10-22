@@ -10,6 +10,9 @@ into `main`. There is only one Supabase database, so changes marked **(live)** a
 already applied there.
 
 ### Security
+- Study results can only be written by the server, which scores them from the real cards
+  (#57). Teachers can read a student's results only for their own class's assignments,
+  and never private study. All 6 database check files pass (86 cases).
 - Card access now always follows set access (#56): the cards policy checks the set
   through the set's own RLS, so the two can't drift apart. All 5 database check files pass
   (69 cases), and they now reset the simulated sign-in before acting as anonymous.
@@ -51,6 +54,17 @@ already applied there.
     can open them.
   - New `assignments` table. Students can read a set and its cards only while it's
     assigned to a class they're in.
+- **Saved study results** (#57, live database):
+  - Finished study sessions are saved with their score for signed-in users. Flashcards
+    get **✓ Got it / ✗ Missed it** buttons after flipping (self-marking; flashcard scoring
+    was removed in September), and multiple choice is scored as before.
+  - The server works out multiple-choice scores from the real answers, so they can't be
+    faked (flashcard marks are the student's own), and a retried save never counts twice.
+  - The finish screen says whether the teacher can see the result (opened from a class
+    assignment) or only the student (private study), and lists recent scores.
+  - My classes marks finished assignments **Done · best 8/10** instead of Overdue.
+  - New `attempts` table: students read their own; teachers read their students' results
+    on their own class's assignments only (17 of 17 database checks pass).
 - **Card editor** (#55, live database): the owner of a set can edit questions and
   answers, delete, add (up to 50) and reorder cards, and for multiple choice edit the 4
   choices and pick the correct one. Everything saves at once in one transaction
@@ -68,7 +82,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 215 tests):
+- **Automated tests** (`npm test`, 261 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),

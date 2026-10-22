@@ -11,20 +11,31 @@ import {
   recordFailedJoin,
 } from '@/lib/student-classes';
 import { listStudentAssignments } from '@/lib/assignments';
+import { progressForAssignments } from '@/lib/attempts';
 import { errorResponse, readJsonBody } from '@/lib/route-helpers';
 
 // The signed-in student's classes (#54), most recently joined first, each
-// with its assignments, soonest due first (#56).
+// with its assignments, soonest due first (#56), and the student's own
+// progress on each assignment, or null if not done yet (#57).
 export async function GET(req: NextRequest) {
   try {
     const user = await requireRole(req, STUDENT_ROLES);
     const [classes, assignments] = await Promise.all([listJoinedClasses(user.id), listStudentAssignments(user.id)]);
+    const progress = await progressForAssignments(user.id, assignments.map((a) => a.id));
     return NextResponse.json({
       classes: classes.map((c) => ({
         ...c,
         assignments: assignments
           .filter((a) => a.classId === c.id)
-          .map(({ id, setId, setTitle, studyType, dueAt, createdAt }) => ({ id, setId, setTitle, studyType, dueAt, createdAt })),
+          .map(({ id, setId, setTitle, studyType, dueAt, createdAt }) => ({
+            id,
+            setId,
+            setTitle,
+            studyType,
+            dueAt,
+            createdAt,
+            myProgress: progress.get(id) ?? null,
+          })),
       })),
     });
   } catch (err) {

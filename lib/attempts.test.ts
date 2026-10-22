@@ -1,0 +1,94 @@
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/lib/supabase-admin', () => ({ supabaseAdmin: {} }));
+
+import { MAX_ANSWERS, parseAnswers, scoreAnswers } from '@/lib/attempts';
+
+const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+describe('parseAnswers', () => {
+  it('accepts multiple-choice picks, with null for skipped cards', () => {
+    expect(parseAnswers([{ cardId: id(1), chosen: 'Network' }, { cardId: id(2) }], 'multiple_choice')).toEqual({
+      ok: true,
+      answers: [
+        { cardId: id(1), chosen: 'Network' },
+        { cardId: id(2), chosen: null },
+      ],
+    });
+  });
+
+  it('accepts flashcard marks, with null for unmarked cards', () => {
+    expect(parseAnswers([{ cardId: id(1), result: 'got' }, { cardId: id(2), result: null }], 'flashcard')).toEqual({
+      ok: true,
+      answers: [
+        { cardId: id(1), result: 'got' },
+        { cardId: id(2), result: null },
+      ],
+    });
+  });
+
+  it.each([
+    ['not a list', 'nope', 'multiple_choice'],
+    ['an empty list', [], 'multiple_choice'],
+    ['a bad card id', [{ cardId: 'x' }], 'multiple_choice'],
+    ['a repeated card', [{ cardId: id(1) }, { cardId: id(1) }], 'multiple_choice'],
+    ['a non-string choice', [{ cardId: id(1), chosen: 3 }], 'multiple_choice'],
+    ['an unknown mark', [{ cardId: id(1), result: 'maybe' }], 'flashcard'],
+    ['too many answers', Array.from({ length: MAX_ANSWERS + 1 }, (_, i) => ({ cardId: id(i + 1) })), 'multiple_choice'],
+  ] as const)('rejects %s', (_label, raw, type) => {
+    expect(parseAnswers(raw, type).ok).toBe(false);
+  });
+});
+
+describe('scoreAnswers', () => {
+  const cards = [
+    { id: id(1), answer: 'Network' },
+    { id: id(2), answer: 'Tennis Court Oath' },
+    { id: id(3), answer: 'Stroma' },
+  ];
+
+  it('scores multiple choice from the real answers, ignoring case and trailing periods', () => {
+    const result = scoreAnswers(
+      [
+        { cardId: id(1), chosen: 'network' },
+        { cardId: id(2), chosen: 'Tennis court oath.' },
+        { cardId: id(3), chosen: 'Thylakoid' },
+      ],
+      cards,
+      'multiple_choice'
+    );
+    expect(result.score).toBe(2);
+    expect(result.total).toBe(3);
+    expect(result.stored.map((a) => a.correct)).toEqual([true, true, false]);
+  });
+
+  it('counts a skipped card as wrong', () => {
+    expect(scoreAnswers([{ cardId: id(1), chosen: null }], cards, 'multiple_choice')).toMatchObject({ score: 0, total: 1 });
+  });
+
+  it('scores flashcards by "got it" marks', () => {
+    const result = scoreAnswers(
+      [
+        { cardId: id(1), result: 'got' },
+        { cardId: id(2), result: 'missed' },
+        { cardId: id(3), result: null },
+      ],
+      cards,
+      'flashcard'
+    );
+    expect(result).toMatchObject({ score: 1, total: 3 });
+  });
+
+  it('drops answers for cards that no longer exist', () => {
+    const result = scoreAnswers(
+      [
+        { cardId: id(1), chosen: 'Network' },
+        { cardId: id(99), chosen: 'Gone' },
+      ],
+      cards,
+      'multiple_choice'
+    );
+    expect(result).toMatchObject({ score: 1, total: 1 });
+    expect(result.stored.map((a) => a.cardId)).toEqual([id(1)]);
+  });
+});

@@ -6,7 +6,7 @@ const state = vi.hoisted(() => ({
   profile: null as unknown,
   calls: [] as { method: string; path: string; body?: unknown }[],
   // What the fake /api/student/classes knows about.
-  mine: [] as { id: string; name: string; teacherName: string | null; joinedAt: string; assignments: { id: string; setId: string; setTitle: string; studyType: string; dueAt: string | null; createdAt: string }[] }[],
+  mine: [] as { id: string; name: string; teacherName: string | null; joinedAt: string; assignments: { id: string; setId: string; setTitle: string; studyType: string; dueAt: string | null; createdAt: string; myProgress: null | { attempts: number; bestScore: number; bestTotal: number; lastCompletedAt: string } }[] }[],
   codes: {} as Record<string, { id: string; name: string; teacherName: string | null }>,
   failNext: null as null | { status: number; error?: string; offline?: boolean },
 }));
@@ -88,20 +88,31 @@ describe('my classes page', () => {
 
   it("lists each class's assigned sets with due dates and an Overdue badge, linking to the set", async () => {
     state.mine[0].assignments = [
-      { id: 'a1', setId: 'set-1', setTitle: 'Photosynthesis', studyType: 'flashcard', dueAt: '2099-01-15T17:00:00Z', createdAt: '2026-10-20' },
-      { id: 'a2', setId: 'set-2', setTitle: 'Cell parts', studyType: 'flashcard', dueAt: '2020-01-01T00:00:00Z', createdAt: '2026-10-19' },
-      { id: 'a3', setId: 'set-3', setTitle: 'Extra reading', studyType: 'flashcard', dueAt: null, createdAt: '2026-10-18' },
+      { id: 'a1', setId: 'set-1', setTitle: 'Photosynthesis', studyType: 'flashcard', dueAt: '2099-01-15T17:00:00Z', createdAt: '2026-10-20', myProgress: null },
+      { id: 'a2', setId: 'set-2', setTitle: 'Cell parts', studyType: 'flashcard', dueAt: '2020-01-01T00:00:00Z', createdAt: '2026-10-19', myProgress: null },
+      { id: 'a3', setId: 'set-3', setTitle: 'Extra reading', studyType: 'flashcard', dueAt: null, createdAt: '2026-10-18', myProgress: null },
     ];
     render(<MyClassesPage />);
     const list = await screen.findByRole('list', { name: 'Assigned in Biology 101' });
     const links = within(list).getAllByRole('link');
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/sets/set-1', '/sets/set-2', '/sets/set-3']);
+    // The assignment id travels with the link so the result is attributed to it (#57).
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/sets/set-1?assignment=a1', '/sets/set-2?assignment=a2', '/sets/set-3?assignment=a3']);
     // Shown in the viewer's own time zone, via toLocaleString.
     const due = new Date('2099-01-15T17:00:00Z').toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     expect(links[0].textContent).toContain(`Due ${due}`);
     expect(links[0].textContent).not.toContain('Overdue');
     expect(links[1].textContent).toContain('Overdue');
     expect(links[2].textContent).toContain('No due date');
+  });
+
+  it('marks finished assignments Done with the best score, instead of Overdue', async () => {
+    state.mine[0].assignments = [
+      { id: 'a2', setId: 'set-2', setTitle: 'Cell parts', studyType: 'multiple_choice', dueAt: '2020-01-01T00:00:00Z', createdAt: '2026-10-19', myProgress: { attempts: 2, bestScore: 8, bestTotal: 10, lastCompletedAt: '2026-10-21T10:00:00Z' } },
+    ];
+    render(<MyClassesPage />);
+    const link = within(await screen.findByRole('list', { name: 'Assigned in Biology 101' })).getByRole('link');
+    expect(link.textContent).toContain('Done · best 8/10');
+    expect(link.textContent).not.toContain('Overdue');
   });
 
   it('says when a class has nothing assigned', async () => {

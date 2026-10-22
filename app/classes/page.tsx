@@ -15,6 +15,8 @@ interface AssignedSet {
   studyType: string;
   dueAt: string | null;
   createdAt: string;
+  // The student's own results on this assignment, or null if not done (#57).
+  myProgress: { attempts: number; bestScore: number; bestTotal: number; lastCompletedAt: string } | null;
 }
 
 interface JoinedClass {
@@ -242,14 +244,20 @@ function MyClasses() {
                     {c.assignments.map((a) => (
                       <li key={a.id}>
                         <Link
-                          href={`/sets/${a.setId}`}
+                          href={`/sets/${a.setId}?assignment=${a.id}`}
                           className="block rounded-lg bg-gray-500/5 px-3 py-2 text-sm hover:bg-gray-500/10"
                         >
                           <span className="block truncate font-medium">{a.setTitle}</span>
                           <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-gray-400">
                             {a.dueAt ? `Due ${formatDueDate(a.dueAt)}` : 'No due date'}
-                            {isOverdue(a.dueAt) && (
-                              <span className="rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-500">Overdue</span>
+                            {a.myProgress ? (
+                              <span className="rounded bg-green-500/10 px-1.5 py-0.5 font-medium text-green-600">
+                                Done · best {a.myProgress.bestScore}/{a.myProgress.bestTotal}
+                              </span>
+                            ) : (
+                              isOverdue(a.dueAt) && (
+                                <span className="rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-500">Overdue</span>
+                              )
                             )}
                           </span>
                         </Link>

@@ -25,6 +25,7 @@ soon as it's applied.
 | `20261021000100_class_join_failures.sql` | #54 | 2026-10-21 |
 | `20261021000200_replace_set_cards.sql` | #55 | 2026-10-21 |
 | `20261021000300_assignments.sql` | #56 | 2026-10-21 |
+| `20261022000100_attempts.sql` | #57 | 2026-10-22 |
 
 Add a row here whenever you apply a new migration.
 

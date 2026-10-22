@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
-import StudyViewer from '@/components/StudyViewer';
+import StudyViewer, { type StudyResult } from '@/components/StudyViewer';
+import { newId } from '@/lib/ids';
 import CardEditor, { type CardPayload, type SaveResult } from '@/components/CardEditor';
 import { apiFetch, errorMessage } from '@/lib/api-client';
 import AssignPanel from '@/components/AssignPanel';
@@ -18,6 +19,22 @@ interface FlashcardSet {
   study_type: 'flashcard' | 'multiple_choice';
   user_id: string | null;
 }
+
+interface AttemptSummary {
+  id: string;
+  assignmentId: string | null;
+  studyType: string;
+  score: number;
+  total: number;
+  completedAt: string;
+}
+
+type SaveState =
+  | { status: 'idle' }
+  | { status: 'signed-out' }
+  | { status: 'saving' }
+  | { status: 'saved'; forAssignment: boolean }
+  | { status: 'error'; message: string };
 
 interface Flashcard {
   id: string;
@@ -45,6 +62,8 @@ export default function SetPage() {
   // Bumped after saving edited cards so the study view starts over on the new cards.
   const [viewerVersion, setViewerVersion] = useState(0);
   const [assigning, setAssigning] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>({ status: 'idle' });
+  const [history, setHistory] = useState<AttemptSummary[]>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -153,6 +172,35 @@ export default function SetPage() {
     }
   };
 
+  // Saves each finished run as an attempt (#57). The id is made once per
+  // finish, so a retried request can't create a second attempt.
+  const recordAttempt = async (result: StudyResult) => {
+    if (!set) return;
+    if (!user) {
+      setSaveState({ status: 'signed-out' });
+      return;
+    }
+    setSaveState({ status: 'saving' });
+    // Opened from My classes: /sets/[id]?assignment=<id>
+    const assignmentId = new URLSearchParams(window.location.search).get('assignment');
+    try {
+      const res = await apiFetch('/api/attempts', {
+        method: 'POST',
+        body: { id: newId(), setId: set.id, assignmentId, answers: result.answers },
+      });
+      if (!res.ok) {
+        setSaveState({ status: 'error', message: errorMessage(res.data, "Couldn't save your score.") });
+        return;
+      }
+      const attempt = res.data.attempt as AttemptSummary;
+      setSaveState({ status: 'saved', forAssignment: attempt.assignmentId !== null });
+      const recent = await apiFetch(`/api/attempts?setId=${set.id}`);
+      if (recent.ok) setHistory(recent.data.attempts as AttemptSummary[]);
+    } catch {
+      setSaveState({ status: 'error', message: "Couldn't reach the server, so your score wasn't saved." });
+    }
+  };
+
   if (loading) {
     return <main className="min-h-screen flex items-center justify-center">Loading...</main>;
   }
@@ -244,6 +292,42 @@ export default function SetPage() {
     </div>
   ) : null;
 
+  const scoreLabel = (a: AttemptSummary) =>
+    `${a.score} / ${a.total}${a.studyType === 'flashcard' ? ' got it' : ''}`;
+
+  const completionSlot =
+    saveState.status === 'idle' ? null : (
+      <div className="space-y-3 rounded-xl border p-4 text-left text-sm">
+        <p
+          role={saveState.status === 'error' ? 'alert' : 'status'}
+          className={
+            saveState.status === 'error' ? 'text-red-500' : saveState.status === 'saved' ? 'text-green-600' : 'text-gray-500'
+          }
+        >
+          {saveState.status === 'signed-out' && 'Sign in to save your scores.'}
+          {saveState.status === 'saving' && 'Saving your score...'}
+          {saveState.status === 'saved' &&
+            (saveState.forAssignment
+              ? '✓ Saved to your scores. Your teacher can see it.'
+              : '✓ Saved to your scores. Only you can see this one.')}
+          {saveState.status === 'error' && saveState.message}
+        </p>
+        {history.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-wide text-gray-400">Your recent scores</p>
+            <ul className="space-y-1" aria-label="Your recent scores">
+              {history.map((a) => (
+                <li key={a.id} className="flex justify-between gap-3">
+                  <span className="text-gray-500">{new Date(a.completedAt).toLocaleString()}</span>
+                  <span className="font-medium">{scoreLabel(a)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+
   return (
     <>
     <StudyViewer
@@ -253,6 +337,8 @@ export default function SetPage() {
       cards={cards}
       onFinish={() => router.push('/')}
       saveSlot={deleteSlot}
+      onComplete={recordAttempt}
+      completionSlot={completionSlot}
     />
     {isOwner && assigning && (
       <AssignPanel setId={set.id} setTitle={set.title} onClose={() => setAssigning(false)} />

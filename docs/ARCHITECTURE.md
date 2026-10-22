@@ -22,6 +22,7 @@ flowchart LR
     R["/api/profile/role"]
     TC["/api/teacher/classes/..."] --> CL[lib/classes.ts]
     SC["/api/student/classes/..."] --> SCL[lib/student-classes.ts]
+    AT["/api/attempts"] --> ATL[lib/attempts.ts]
   end
   subgraph Google
     AI --> M1[gemini-3.5-flash]
@@ -38,6 +39,8 @@ flowchart LR
   SP -->|anon key + user session| DB
   SP -->|Edit cards| EC -->|"service-role key, replace_set_cards()"| DB
   SP -->|Assign to class| AS
+  SP -->|Finish| AT
+  ATL -->|service-role key, scored on the server| DB
   ASL -->|service-role key, scoped to the teacher| DB
   U --> AUTH
   RC --> R -->|service-role key| DB
@@ -65,13 +68,15 @@ writes with the service-role key. Browsers read only what RLS allows (section 4)
 | `DELETE /api/teacher/classes/[id]` | The class's teacher | Delete the class and its memberships |
 | `POST /api/teacher/classes/[id]/join-code` | The class's teacher | Replace the join code; the old one stops working |
 | `DELETE /api/teacher/classes/[id]/students/[studentId]` | The class's teacher | Remove one student from the class |
-| `GET /api/student/classes` | Student | The classes the caller joined, most recent first, with teacher names and each class's assignments (#56) |
+| `GET /api/student/classes` | Student | The classes the caller joined, most recent first, with teacher names and each class's assignments (#56), each with the caller's own `myProgress` (#57) |
 | `POST /api/student/classes` | Student | Join with a code: `{ code }` (any case, spaces or hyphen) → 201 joined, or 200 `alreadyMember` |
 | `DELETE /api/student/classes/[id]` | Student in that class | Leave the class |
 | `GET /api/teacher/sets/[id]/assignments` | The set's owner (teacher, admin) | The owner's classes, marking which already have this set (#56) |
 | `POST /api/teacher/sets/[id]/assignments` | The set's owner (teacher, admin) | Assign: `{ classIds, dueAt \| null }` → `{ assigned, alreadyAssigned }` |
 | `PATCH /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | Change the due date: `{ dueAt \| null }` |
 | `DELETE /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | Unassign; students lose access right away |
+| `POST /api/attempts` | Signed in, can open the set | Save a finished study session: `{ id, setId, assignmentId?, answers }` → 201 with the scored attempt, or 200 if that `id` was already saved (#57) |
+| `GET /api/attempts?setId=…` | Signed in | The caller's own 10 most recent attempts on that set, newest first |
 
 Errors are JSON `{ error }` with 400 (bad input), 401 (not signed in), 403 (wrong role),
 404 (not found, *or* someone else's class), 409 (conflict, e.g. a role already chosen or
@@ -252,12 +257,45 @@ the 50-class limit), 429 (too many wrong join codes; includes a `Retry-After` he
   viewer's own time zone (`toLocaleString`). The server accepts no date, or a date that
   hasn't passed (5-minute grace) and is within 2 years.
 - **Students** see each class's assigned sets on **My classes**, with the due date and an
-  Overdue badge, and open them on `/sets/[id]`. They can't edit them.
+  Overdue badge (or **Done**, see #57 below), and open them on `/sets/[id]`. They can't
+  edit them.
 - **Access follows the assignment (RLS):** a new `flashcard_sets` policy lets a user read
   a set while it's assigned to a class they're in (`private.is_assigned_to_me()`). Cards
   are now readable exactly when their set is. Unassigning, leaving the class, or the
   teacher deleting the set or class removes access immediately.
-- "Done / not done" per student needs saved study results, which is #57.
+### Study results (#57)
+
+- **Every finish on a saved set is saved** for signed-in users. `StudyViewer` reports what
+  the student did (`onComplete`) and the set page sends it to `POST /api/attempts`.
+  Signed-out visitors can still study; the finish screen asks them to sign in to save
+  scores. A freshly generated guide that isn't saved yet records nothing.
+- **Flashcards are self-marked.** After flipping a card the student taps **✓ Got it** or
+  **✗ Missed it**, which moves on to the next card. Cards skipped with *Next* count as
+  not marked (and not correct). The finish screen shows "*n* / *total* got it".
+  Multiple choice is scored as before.
+- **The server does the scoring** (`lib/attempts.ts`). The browser sends only card ids
+  and what was picked (or the marks). The server checks that the caller can open the set
+  (they own it, it's a legacy set, or it's assigned to a class they're in: the same rule
+  as RLS), compares each pick with the real answer using `normalizeChoice`, and stores
+  the score plus a per-card `answers` list. Answers for cards that no longer exist are
+  dropped; if none are left (the owner rewrote the set mid-study), the route answers 409.
+- **Retries can't double-count.** The browser makes a new id (`newId()`) for each finish.
+  Sending the same id again returns the saved attempt (200) instead of adding one, and
+  an id that belongs to someone else is refused (409).
+- **Linking to an assignment:** links on My classes carry `?assignment=<id>`. The attempt
+  is linked only if that assignment is for this set and the student is in its class;
+  otherwise it's saved as private study. The finish screen says which: *"Your teacher
+  can see it"* or *"Only you can see this one."*
+- **Recent scores:** after saving, the finish screen lists the student's last 10 results
+  on that set (`GET /api/attempts`).
+- **Done / not done:** `GET /api/student/classes` adds `myProgress` (number of attempts,
+  best score, last finish) to each assignment, and My classes shows **Done · best 8/10**
+  in place of the Overdue badge. Finishing after the due date still counts as done.
+- **Who can read attempts (RLS):** the student, and the class's teacher only for attempts
+  made from that class's assignment, and only while the student is still in the class.
+  Private study is never visible to teachers, and unassigning a set keeps the attempts
+  but makes them private. Browsers can't write attempts at all. The teacher's results
+  view is #58.
 
 The plan for teacher and admin features is tracked in #50.
 
@@ -272,6 +310,7 @@ The plan for teacher and admin features is tracked in #50.
 | `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
 | `class_join_failures` | `id`, `user_id` → `auth.users` (cascade), `attempted_at` | Wrong join codes for the rate limit; indexed on (`user_id`, `attempted_at`); old rows are deleted as new ones arrive |
 | `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `due_at` (nullable), `created_at` | Unique (`class_id`, `set_id`); indexed on `set_id` |
+| `attempts` | `id` (made by the browser), `user_id` → `auth.users` (cascade), `set_id` → `flashcard_sets` (cascade), `assignment_id` → `assignments` (set null), `study_type`, `score`, `total`, `answers` (jsonb), `completed_at` | One row per finished study session (#57). `total > 0` and `0 ≤ score ≤ total`. Indexed on (`user_id`, `set_id`, `completed_at`) and on `assignment_id` |
 
 ## 4. Security model
 
@@ -281,7 +320,7 @@ The plan for teacher and admin features is tracked in #50.
 - The **service-role key** bypasses RLS. It's only used in `lib/supabase-admin.ts` and
   must never be imported by client code.
 
-**RLS policies** (as of 2026-10-20):
+**RLS policies** (as of 2026-10-22):
 
 | Table | Who | Can |
 |---|---|---|
@@ -295,10 +334,12 @@ The plan for teacher and admin features is tracked in #50.
 | `class_members` | Student / teacher | A student reads their own memberships; the teacher reads their roster; no direct writes (joining and leaving go through the server) |
 | `class_join_failures` | Nobody | Server-only: no grants or policies for anon or signed-in users |
 | `assignments` | Teacher / members | The class's teacher and its members read its assignments; no direct writes |
+| `attempts` | Student / teacher | A student reads their own attempts; the class's teacher reads attempts made from their class's assignments while the student is in the class (never private study); no direct writes (#57) |
 
 The `classes` and `class_members` policies need to check each other, which would make RLS
 recurse. So they use `private.is_class_teacher()` and `private.is_class_member()`:
-security-definer helpers in a schema the API doesn't expose.
+security-definer helpers in a schema the API doesn't expose. The `attempts` policy uses
+`private.teaches_student_in_assignment()` the same way.
 
 **Two holes fixed on 2026-10-20 (#46):**
 - An anon policy exposed **every** card, including private ones.
@@ -310,16 +351,21 @@ transaction. Run them after every database change.
 ## 5. Testing
 
 - `npm test`: Vitest.
-  - Unit and route tests for roles, `/api/profile/role` and the class API, using
-    `test-utils/fake-supabase.ts`. That's an in-memory client with unique keys (23505)
-    and cascading deletes.
-  - Component tests for `RoleChooser` and the teacher pages, in jsdom with React Testing
-    Library. Component tests start with `// @vitest-environment jsdom`.
+  - Unit and route tests for roles, `/api/profile/role`, the class, assignment and
+    attempt APIs, using `test-utils/fake-supabase.ts`. That's an in-memory client with
+    unique keys (23505) and cascading deletes.
+  - Component tests for `RoleChooser`, `StudyViewer`, `CardEditor`, `AssignPanel`, the
+    set page and the teacher and student pages, in jsdom with React Testing Library.
+    Component tests start with `// @vitest-environment jsdom`.
 - `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and
   classes. Each prints expected vs. actual (10, 10 and 21 cases).
 - `supabase/tests/assignments-rls-check.sql` (16 cases): an assigned student can open the
   set and its cards, a student outside the class can't, access ends on unassign, and
   only the owner can edit.
+- `supabase/tests/attempts-rls-check.sql` (17 cases): students read only their own
+  attempts and can't write any; a teacher sees attempts from their class's assignment but
+  not private study, and stops seeing them when the student leaves or the set is
+  unassigned; plus the score constraints and the cascade when a set is deleted.
 - `supabase/tests/sets-editing-check.sql`: `replace_set_cards()` (12 cases), covering a
   real edit, kept ids, each kind of refused save, that a refused save changes nothing,
   and that browsers can't call it.
@@ -339,8 +385,10 @@ transaction. Run them after every database change.
   uploaded to the server whole (#44), and only PDF and TXT are supported (#20).
 - **3 existing ESLint errors** (`react-hooks/set-state-in-effect`) in `app/page.tsx` and
   `app/my-sets/page.tsx`.
-- **"Done / not done" for assignments isn't shown yet.** It needs saved study results
-  (#57).
+- **Flashcard scores are self-reported** (*Got it* / *Missed it*). Only multiple-choice
+  answers are checked against the real answers.
+- **Teachers can't see their students' results in the app yet.** The data and its RLS
+  are in place (#57); the results view is #58.
 - **The join-code guessing limit is per account** (10 wrong codes per 15 minutes).
   Someone with many Google accounts could guess faster. With about 887 million possible
   codes, that's still impractical, and #63 will add wider rate limits.

@@ -189,7 +189,7 @@ describe('what students see', () => {
     const res = await json(await studentClasses.GET(req('GET', 'stu')));
     expect(res.body.classes).toHaveLength(1);
     expect(res.body.classes[0].assignments).toEqual([
-      { id: expect.any(String), setId: SETS.bio, setTitle: 'Photosynthesis', studyType: 'flashcard', dueAt: inDays(2), createdAt: NOW.toISOString() },
+      { id: expect.any(String), setId: SETS.bio, setTitle: 'Photosynthesis', studyType: 'flashcard', dueAt: inDays(2), createdAt: NOW.toISOString(), myProgress: null },
     ]);
     const outsider = await json(await studentClasses.GET(req('GET', 'out')));
     expect(outsider.body.classes).toEqual([]);
