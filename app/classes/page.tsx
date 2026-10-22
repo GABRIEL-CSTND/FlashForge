@@ -143,7 +143,9 @@ function MyClasses() {
   const feedbackColor = { success: 'text-green-600', info: 'text-gray-500', error: 'text-red-500' } as const;
 
   return (
-    <main className="min-h-screen p-6 max-w-md mx-auto space-y-6">
+    // w-full: the body is a flex column, so without it a long class name or set
+    // title would widen the page past a phone screen instead of truncating.
+    <main className="min-h-screen w-full p-6 max-w-md mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">My classes</h1>
         <Link href="/" className="text-sm text-blue-500 hover:underline">

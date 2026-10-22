@@ -87,6 +87,13 @@ Errors are JSON `{ error }` with 400 (bad input), 401 (not signed in), 403 (wron
 the 50-class limit), 429 (too many wrong join codes; includes a `Retry-After` header), and
 500 (a generic message; details only go to the server log).
 
+### Page layout
+
+The root `<body>` is a flex column (`app/layout.tsx`), so a centered `<main>`
+(`max-w-* mx-auto`) sizes to its content. Pages with one-line text that can be long
+(`truncate`) add `w-full` to it; otherwise a long title makes the page wider than a phone
+screen instead of shortening with "…".
+
 ## 1. Generating a study guide
 
 1. **Upload** (`app/page.tsx`): the user picks *Flashcards* or *Multiple Choice* and

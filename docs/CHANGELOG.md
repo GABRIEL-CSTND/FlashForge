@@ -120,6 +120,9 @@ already applied there.
   shorten with "…" instead.
 - Date pickers, checkboxes and other built-in controls were hard to see in dark mode
   (e.g. a dark calendar icon on a dark background). The page now sets `color-scheme`.
+- On phones, My Sets, My classes and the Teacher dashboard could be wider than the screen
+  when a set title or class name was long, cutting off buttons such as + New set, Create
+  class, Join, Leave and 🗑. Long names now shorten with "…" instead.
 - **The Exit button did nothing on a freshly generated study guide.** It now returns
   to the upload page and asks first if the guide hasn't been saved.
 - Network failures while generating now show an error instead of leaving the button
