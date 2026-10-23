@@ -10,6 +10,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['**/*.test.{ts,tsx}'],
-    exclude: ['node_modules', '.next'],
+    // .claude/ holds the Claude app's git worktrees (full copies of this
+    // project); node_modules at any depth holds other packages' own tests.
+    exclude: ['**/node_modules/**', '.next/**', '.claude/**'],
   },
 });
