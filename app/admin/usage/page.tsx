@@ -318,7 +318,7 @@ function LimitsEditor({ initial }: { initial: GenerationLimits | null }) {
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg border px-3 py-1.5 text-sm font-medium hover:border-blue-400 disabled:opacity-40"
+            className="btn btn-primary"
           >
             {saving ? 'Saving...' : 'Save limits'}
           </button>

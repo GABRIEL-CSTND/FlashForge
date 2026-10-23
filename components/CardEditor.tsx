@@ -270,7 +270,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
           type="button"
           onClick={handleCancel}
           disabled={saving}
-          className="flex-1 rounded-lg border py-3 font-medium disabled:opacity-40"
+          className="btn btn-secondary btn-lg flex-1"
         >
           Cancel
         </button>
@@ -278,7 +278,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
           type="button"
           onClick={handleSave}
           disabled={saving || !dirty}
-          className="flex-1 rounded-lg bg-blue-600 py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+          className="btn btn-primary btn-lg flex-1"
         >
           {saving ? 'Saving...' : 'Save changes'}
         </button>

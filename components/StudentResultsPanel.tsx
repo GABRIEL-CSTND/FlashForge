@@ -90,7 +90,7 @@ export default function StudentResultsPanel({
             type="button"
             autoFocus
             onClick={onClose}
-            className="shrink-0 rounded-lg border px-3 py-1.5 text-sm font-medium"
+            className="btn btn-secondary shrink-0"
           >
             Close
           </button>

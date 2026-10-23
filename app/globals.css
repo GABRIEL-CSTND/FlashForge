@@ -5,6 +5,12 @@
   --foreground: #171717;
   /* Default color of every border and divider (gray-300). */
   --border: #d1d5db;
+  /* Accent for buttons (blue-600, blue-700 on hover) and for links. The one
+     place to change when the team picks a brand color. Links are blue-600 on
+     white and blue-500 on black, so both stay readable. */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --link: #2563eb;
   /* Native controls (date pickers, checkboxes, scrollbars) follow the same
      light/dark preference as the rest of the page. */
   color-scheme: light dark;
@@ -14,6 +20,9 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-link: var(--link);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -24,6 +33,35 @@
     --foreground: #ededed;
     /* gray-700 */
     --border: #374151;
+    /* blue-500 */
+    --link: #3b82f6;
+  }
+}
+
+/* Buttons: .btn plus .btn-primary (the page's main action) or .btn-secondary
+   (everything else); .btn-lg for the big full-width ones. Layout classes on the
+   element (w-full, flex-1, shrink-0) still apply. */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors;
+  }
+  .btn:disabled {
+    @apply cursor-not-allowed opacity-40;
+  }
+  .btn-lg {
+    @apply py-3 text-base;
+  }
+  .btn-primary {
+    @apply bg-accent text-white;
+  }
+  .btn-primary:not(:disabled):hover {
+    @apply bg-accent-hover;
+  }
+  .btn-secondary {
+    @apply border;
+  }
+  .btn-secondary:not(:disabled):hover {
+    @apply border-accent;
   }
 }
 

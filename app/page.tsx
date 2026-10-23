@@ -336,7 +336,7 @@ export default function UploadPage() {
         <button
           onClick={handleSubmit}
           disabled={!file || status === 'generating'}
-          className="w-full py-3 rounded-lg bg-blue-600 text-white font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+          className="btn btn-primary btn-lg w-full"
         >
           {status === 'generating' && 'Generating (this can take ~20s)...'}
           {(status === 'idle' || status === 'error') && 'Generate Study Guide'}

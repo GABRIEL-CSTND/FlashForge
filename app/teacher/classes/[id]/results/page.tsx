@@ -126,7 +126,7 @@ function ResultsView({ id }: { id: string }) {
           <button
             type="button"
             onClick={downloadCsv}
-            className="rounded-lg border px-3 py-1.5 text-sm font-medium hover:border-blue-400"
+            className="btn btn-secondary"
           >
             Download CSV
           </button>

@@ -118,7 +118,7 @@ function Dashboard() {
           <button
             type="submit"
             disabled={!name.trim() || creating}
-            className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+            className="btn btn-primary shrink-0"
           >
             {creating ? 'Creating...' : 'Create class'}
           </button>

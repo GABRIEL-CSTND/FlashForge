@@ -264,7 +264,7 @@ function ClassView({ id }: { id: string }) {
 
       <Link
         href={`/teacher/classes/${id}/results`}
-        className="block rounded-lg border p-3 text-center text-sm font-medium hover:border-blue-400"
+        className="btn btn-secondary w-full"
       >
         📊 Student results
       </Link>
@@ -290,7 +290,7 @@ function ClassView({ id }: { id: string }) {
           <button
             type="button"
             onClick={copyCode}
-            className="rounded-lg border px-3 py-1.5 text-sm font-medium hover:border-blue-400"
+            className="btn btn-secondary"
           >
             Copy code
           </button>
@@ -298,7 +298,7 @@ function ClassView({ id }: { id: string }) {
             type="button"
             onClick={newCode}
             disabled={busy}
-            className="rounded-lg border px-3 py-1.5 text-sm font-medium hover:border-blue-400 disabled:opacity-40"
+            className="btn btn-secondary"
           >
             Get a new code
           </button>

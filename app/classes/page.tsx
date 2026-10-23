@@ -176,7 +176,7 @@ function MyClasses() {
           <button
             type="submit"
             disabled={!code.trim() || joining}
-            className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+            className="btn btn-primary shrink-0"
           >
             {joining ? 'Joining...' : 'Join'}
           </button>

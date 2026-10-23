@@ -190,7 +190,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
         )}
 
         <div className="flex gap-3">
-          <button type="button" onClick={onClose} className="flex-1 rounded-lg border py-2.5 font-medium">
+          <button type="button" onClick={onClose} className="btn btn-secondary flex-1">
             Close
           </button>
           {state.status === 'ready' && state.classes.length > 0 && (
@@ -198,7 +198,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
               type="button"
               onClick={handleAssign}
               disabled={selected.length === 0 || saving}
-              className="flex-1 rounded-lg bg-blue-600 py-2.5 font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+              className="btn btn-primary flex-1"
             >
               {saving ? 'Assigning...' : 'Assign'}
             </button>

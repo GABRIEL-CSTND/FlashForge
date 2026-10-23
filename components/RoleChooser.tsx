@@ -124,7 +124,7 @@ export default function RoleChooser() {
           type="button"
           onClick={handleContinue}
           disabled={!selected || submitting}
-          className="w-full rounded-lg bg-blue-600 py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+          className="btn btn-primary btn-lg w-full"
         >
           {submitting ? 'Saving...' : 'Continue'}
         </button>

@@ -182,7 +182,7 @@ export default function StudyViewer({
           {saveSlot}
           <button
             onClick={restart}
-            className="w-full py-3 rounded-lg border font-medium"
+            className="btn btn-secondary btn-lg w-full"
           >
             Try Again
           </button>
@@ -222,14 +222,14 @@ export default function StudyViewer({
           {saveSlot}
           <button
             onClick={restart}
-            className="w-full py-3 rounded-lg border font-medium"
+            className="btn btn-secondary btn-lg w-full"
           >
             Review Again
           </button>
           {onFinish && (
             <button
               onClick={onFinish}
-              className="w-full py-3 rounded-lg bg-blue-600 text-white font-medium"
+              className="btn btn-primary btn-lg w-full"
             >
               Done
             </button>
@@ -287,14 +287,14 @@ export default function StudyViewer({
             <button
               onClick={goPrev}
               disabled={index === 0}
-              className="flex-1 py-3 rounded-lg border font-medium disabled:opacity-30 disabled:cursor-not-allowed"
+              className="btn btn-secondary btn-lg flex-1"
             >
               ← Prev
             </button>
             <button
               onClick={goNext}
               disabled={selectedOption === null}
-              className="flex-1 py-3 rounded-lg bg-blue-600 text-white font-medium disabled:opacity-30 disabled:cursor-not-allowed"
+              className="btn btn-primary btn-lg flex-1"
             >
               {isLast ? 'Finish' : 'Next →'}
             </button>
@@ -342,13 +342,13 @@ export default function StudyViewer({
             <button
               onClick={goPrev}
               disabled={index === 0}
-              className="flex-1 py-3 rounded-lg border font-medium disabled:opacity-30 disabled:cursor-not-allowed"
+              className="btn btn-secondary btn-lg flex-1"
             >
               ← Prev
             </button>
             <button
               onClick={goNext}
-              className="flex-1 py-3 rounded-lg bg-blue-600 text-white font-medium"
+              className="btn btn-primary btn-lg flex-1"
             >
               {isLast ? 'Finish' : 'Next →'}
             </button>
