@@ -22,7 +22,8 @@ export interface FakeSupabaseOptions {
   tables?: Record<string, FakeTableConfig>;
   // token -> { id, email }
   users?: Record<string, { id: string; email: string }>;
-  rpc?: Record<string, (args: Record<string, unknown>, db: FakeDb) => unknown[]>;
+  // Rows for table functions, or a single value for scalar ones.
+  rpc?: Record<string, (args: Record<string, unknown>, db: FakeDb) => unknown>;
 }
 
 export interface FakeDb {
