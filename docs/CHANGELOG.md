@@ -133,6 +133,11 @@ already applied there.
   still forced), soft gray borders instead of black outlines (white in dark mode), a
   FlashForge icon instead of the starter template's, and a browser title per page
   ("My Sets · FlashForge").
+- **One set of buttons and one link color, UI polish phase 2:** about nine hand-written
+  button styles became `.btn-primary` / `.btn-secondary` (23 buttons). Links use one blue
+  that stays readable in dark mode. Selected options and hover outlines use the accent
+  color, which is now a single variable, so the team's brand color is a one-line change.
+  Fixed a few colors that were hard to read in dark mode.
 - `npm test` only runs this project's own tests: it skips the Claude app's worktrees
   in `.claude/` and `node_modules` at any depth (before, a side session's copy added 96
   false failures).

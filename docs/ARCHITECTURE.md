@@ -117,8 +117,18 @@ screen instead of shortening with "…".
   Components and can't export metadata, so each section has a small `layout.tsx` that only
   sets its title. The sections with titled pages below them (`teacher`, a class, `admin`)
   must pass the template on again, or Next drops it for deeper pages.
-- The rest of the polish plan (shared buttons, a top bar, icons instead of emoji, and a
-  page-by-page pass) waits on the team's choices of accent color, icon style and logo.
+- **Accent color (phase 2):** `--accent` (blue-600 for now, blue-700 on hover) and `--link`
+  (blue-600 on white, blue-500 on black, so links stay readable) in `globals.css`. They
+  become the classes `bg-accent`, `border-accent`, `text-link` and so on. Changing the brand
+  color later means editing these variables only.
+- **Buttons:** use `.btn` with `.btn-primary` (a page's main action) or `.btn-secondary`
+  (everything else), plus `.btn-lg` for the big full-width ones, instead of writing button
+  classes by hand. Layout classes on the element (`w-full`, `flex-1`, `shrink-0`) still
+  apply. Links use `text-link hover:underline`. Selected options use
+  `border-accent bg-accent/10`.
+- Still to do: consistent loading, empty and error states and card/badge styles. The top
+  bar and replacing the emoji with icons wait on the team's choices of accent color, icon
+  style and logo.
 
 ## 1. Generating a study guide
 
