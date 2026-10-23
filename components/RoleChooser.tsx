@@ -90,10 +90,10 @@ export default function RoleChooser() {
           {OPTIONS.map((opt) => (
             <label
               key={opt.value}
-              className={`block cursor-pointer rounded-lg border p-4 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 ${
+              className={`block cursor-pointer rounded-lg border p-4 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
                 selected === opt.value
-                  ? 'border-blue-500 bg-blue-500/10'
-                  : 'border-gray-300 hover:border-blue-400'
+                  ? 'border-accent bg-accent/10'
+                  : 'border-border hover:border-accent'
               }`}
             >
               <input

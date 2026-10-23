@@ -273,7 +273,7 @@ export default function StudyViewer({
                         ? 'border-green-500 bg-green-500/10'
                         : showState && isSelected && !isCorrect
                         ? 'border-red-500 bg-red-500/10'
-                        : 'border-gray-300'
+                        : 'border-border'
                     }`}
                   >
                     {opt}
@@ -304,7 +304,7 @@ export default function StudyViewer({
         <>
           <button
             onClick={() => setFlipped((f) => !f)}
-            className="w-full min-h-[220px] border rounded-xl p-8 flex flex-col items-center justify-center text-center hover:border-blue-400 transition-colors"
+            className="w-full min-h-[220px] border rounded-xl p-8 flex flex-col items-center justify-center text-center hover:border-accent transition-colors"
           >
             <p className="text-xs uppercase tracking-wide text-gray-400 mb-3">
               {flipped ? 'Answer' : 'Question'}

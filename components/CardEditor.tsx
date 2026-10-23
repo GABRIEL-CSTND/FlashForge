@@ -254,7 +254,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
         type="button"
         onClick={add}
         disabled={drafts.length >= CARD_LIMITS.maxCards || saving}
-        className="w-full rounded-xl border border-dashed py-3 text-sm font-medium hover:border-blue-400 disabled:opacity-40"
+        className="w-full rounded-xl border border-dashed py-3 text-sm font-medium hover:border-accent disabled:opacity-40"
       >
         + Add card
       </button>

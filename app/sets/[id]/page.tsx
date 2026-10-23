@@ -243,7 +243,7 @@ export default function SetPage() {
             <button
               onClick={saveTitle}
               disabled={savingTitle}
-              className="text-blue-600 hover:underline disabled:opacity-40"
+              className="text-link hover:underline disabled:opacity-40"
             >
               {savingTitle ? 'Saving...' : 'Save'}
             </button>

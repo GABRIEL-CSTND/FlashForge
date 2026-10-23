@@ -94,7 +94,7 @@ function Dashboard() {
     <main className="min-h-screen w-full p-6 max-w-md mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Teacher dashboard</h1>
-        <Link href="/" className="text-sm text-blue-500 hover:underline">
+        <Link href="/" className="text-sm text-link hover:underline">
           + New set
         </Link>
       </div>
@@ -136,7 +136,7 @@ function Dashboard() {
             <p role="alert" className="text-red-500">
               {state.message}
             </p>
-            <button type="button" onClick={retry} className="text-blue-500 hover:underline">
+            <button type="button" onClick={retry} className="text-link hover:underline">
               Try again
             </button>
           </div>
@@ -154,7 +154,7 @@ function Dashboard() {
               <li key={c.id}>
                 <Link
                   href={`/teacher/classes/${c.id}`}
-                  className="block rounded-lg border p-4 transition-colors hover:border-blue-400"
+                  className="block rounded-lg border p-4 transition-colors hover:border-accent"
                 >
                   <p className="truncate font-medium">{c.name}</p>
                   <p className="mt-1 text-xs text-gray-400">
@@ -169,7 +169,7 @@ function Dashboard() {
       </section>
 
       <p className="text-center text-sm">
-        <Link href="/my-sets" className="text-blue-500 hover:underline">
+        <Link href="/my-sets" className="text-link hover:underline">
           My Sets
         </Link>
       </p>

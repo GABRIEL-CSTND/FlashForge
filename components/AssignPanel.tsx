@@ -126,7 +126,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
         {state.status === 'ready' && state.classes.length === 0 && (
           <p className="text-sm text-gray-500">
             You don&apos;t have any classes yet.{' '}
-            <Link href="/teacher" className="text-blue-500 hover:underline">
+            <Link href="/teacher" className="text-link hover:underline">
               Create one on the Teacher dashboard
             </Link>
             , then come back to assign this set.
@@ -143,7 +143,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
                   <label
                     key={c.classId}
                     className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${
-                      assigned ? 'opacity-60' : 'cursor-pointer hover:border-blue-400'
+                      assigned ? 'opacity-60' : 'cursor-pointer hover:border-accent'
                     }`}
                   >
                     <input

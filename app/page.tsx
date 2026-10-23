@@ -205,7 +205,7 @@ export default function UploadPage() {
                 sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(result));
                 signInWithGoogle();
               }}
-              className="text-sm border rounded-lg px-4 py-2 font-medium hover:border-blue-400"
+              className="text-sm border rounded-lg px-4 py-2 font-medium hover:border-accent"
             >
               Sign in with Google
             </button>
@@ -214,7 +214,7 @@ export default function UploadPage() {
           <button
             onClick={handleSave}
             disabled={saveStatus === 'saving'}
-            className="text-sm border rounded-lg px-4 py-2 font-medium hover:border-blue-400 disabled:opacity-40"
+            className="text-sm border rounded-lg px-4 py-2 font-medium hover:border-accent disabled:opacity-40"
           >
             {saveStatus === 'saving' ? 'Saving...' : '💾 Save this study guide'}
           </button>
@@ -243,21 +243,21 @@ export default function UploadPage() {
           {user ? (
             <div className="flex items-center gap-3 text-sm">
               {profile?.role === 'admin' && (
-                <Link href="/admin" className="text-blue-500 hover:underline">
+                <Link href="/admin" className="text-link hover:underline">
                   Admin
                 </Link>
               )}
               {canUseTeacherTools(profile?.role) && (
-                <Link href="/teacher" className="text-blue-500 hover:underline">
+                <Link href="/teacher" className="text-link hover:underline">
                   Teacher dashboard
                 </Link>
               )}
               {profile?.role === 'student' && (
-                <Link href="/classes" className="text-blue-500 hover:underline">
+                <Link href="/classes" className="text-link hover:underline">
                   My Classes
                 </Link>
               )}
-              <Link href="/my-sets" className="text-blue-500 hover:underline">
+              <Link href="/my-sets" className="text-link hover:underline">
                 My Sets
               </Link>
               <span className="text-gray-400">{user.email}</span>
@@ -268,7 +268,7 @@ export default function UploadPage() {
           ) : (
             <button
               onClick={() => signInWithGoogle()}
-              className="text-sm border rounded-lg px-3 py-1.5 font-medium hover:border-blue-400"
+              className="text-sm border rounded-lg px-3 py-1.5 font-medium hover:border-accent"
             >
               Sign in with Google
             </button>
@@ -292,8 +292,8 @@ export default function UploadPage() {
                 onClick={() => setStudyType(opt.value)}
                 className={`py-2 px-2 rounded-lg border text-sm font-medium transition-colors ${
                   studyType === opt.value
-                    ? 'border-blue-500 bg-blue-500/10 text-blue-500'
-                    : 'border-gray-300 text-gray-600'
+                    ? 'border-accent bg-accent/10 text-link'
+                    : 'border-border text-gray-500'
                 }`}
               >
                 {opt.label}
@@ -307,7 +307,7 @@ export default function UploadPage() {
           onDragLeave={() => setDragActive(false)}
           onDrop={handleDrop}
           className={`border-2 border-dashed rounded-xl p-10 text-center transition-colors ${
-            dragActive ? 'border-blue-500 bg-blue-50/10' : 'border-gray-300'
+            dragActive ? 'border-accent bg-accent/10' : 'border-border'
           }`}
         >
           <input

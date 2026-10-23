@@ -86,7 +86,7 @@ function ResultsView({ id }: { id: string }) {
         <p className={state.status === 'error' ? 'text-red-500' : 'text-gray-500'}>
           {state.status === 'error' ? state.message : 'Class not found.'}
         </p>
-        <Link href="/teacher" className="text-blue-500 hover:underline">
+        <Link href="/teacher" className="text-link hover:underline">
           ← All classes
         </Link>
       </main>
@@ -136,7 +136,7 @@ function ResultsView({ id }: { id: string }) {
       {assignments.length === 0 ? (
         <div className="rounded-lg border p-6 text-center text-sm text-gray-500">
           Nothing assigned yet. To assign a set, open it from{' '}
-          <Link href="/my-sets" className="text-blue-500 hover:underline">
+          <Link href="/my-sets" className="text-link hover:underline">
             My Sets
           </Link>{' '}
           and choose <span className="font-medium">📌 Assign to class</span>.
@@ -144,7 +144,7 @@ function ResultsView({ id }: { id: string }) {
       ) : students.length === 0 ? (
         <div className="rounded-lg border p-6 text-center text-sm text-gray-500">
           No students yet. Share the join code from the{' '}
-          <Link href={`/teacher/classes/${id}`} className="text-blue-500 hover:underline">
+          <Link href={`/teacher/classes/${id}`} className="text-link hover:underline">
             class page
           </Link>
           .
@@ -165,7 +165,7 @@ function ResultsView({ id }: { id: string }) {
                       <Link
                         href={`/teacher/classes/${id}/assignments/${a.id}`}
                         title={`Hardest questions in ${a.setTitle}`}
-                        className="block max-w-48 truncate text-blue-600 hover:underline"
+                        className="block max-w-48 truncate text-link hover:underline"
                       >
                         {a.setTitle}
                       </Link>
@@ -183,7 +183,7 @@ function ResultsView({ id }: { id: string }) {
                       <button
                         type="button"
                         onClick={() => setSelected(s)}
-                        className="block max-w-32 sm:max-w-48 truncate text-left font-medium text-blue-600 hover:underline"
+                        className="block max-w-32 sm:max-w-48 truncate text-left font-medium text-link hover:underline"
                       >
                         {studentLabel(s)}
                       </button>

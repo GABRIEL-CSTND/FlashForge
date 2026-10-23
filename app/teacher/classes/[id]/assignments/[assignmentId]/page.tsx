@@ -81,7 +81,7 @@ function QuestionsView({ id, assignmentId }: { id: string; assignmentId: string 
         <p className={state.status === 'error' ? 'text-red-500' : 'text-gray-500'}>
           {state.status === 'error' ? state.message : 'Assignment not found.'}
         </p>
-        <Link href="/teacher" className="text-blue-500 hover:underline">
+        <Link href="/teacher" className="text-link hover:underline">
           ← All classes
         </Link>
       </main>

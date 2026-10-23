@@ -60,7 +60,7 @@ export default function MySetsPage() {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
         <p className="text-gray-500">Sign in to view your saved sets.</p>
-        <Link href="/" className="text-blue-500 hover:underline">
+        <Link href="/" className="text-link hover:underline">
           ← Back to upload
         </Link>
       </main>
@@ -73,7 +73,7 @@ export default function MySetsPage() {
     <main className="min-h-screen w-full p-6 max-w-md mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">My Sets</h1>
-        <Link href="/" className="text-sm text-blue-500 hover:underline">
+        <Link href="/" className="text-sm text-link hover:underline">
           + New set
         </Link>
       </div>
@@ -87,7 +87,7 @@ export default function MySetsPage() {
           {sets.map((s) => (
             <div
               key={s.id}
-              className="flex items-center justify-between border rounded-lg p-4 hover:border-blue-400 transition-colors"
+              className="flex items-center justify-between border rounded-lg p-4 hover:border-accent transition-colors"
             >
               <Link href={`/sets/${s.id}`} className="flex-1 min-w-0">
                 <p className="font-medium truncate">{s.title}</p>

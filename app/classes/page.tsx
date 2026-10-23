@@ -148,7 +148,7 @@ function MyClasses() {
     <main className="min-h-screen w-full p-6 max-w-md mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">My classes</h1>
-        <Link href="/" className="text-sm text-blue-500 hover:underline">
+        <Link href="/" className="text-sm text-link hover:underline">
           + New set
         </Link>
       </div>
@@ -205,7 +205,7 @@ function MyClasses() {
                 setState({ status: 'loading' });
                 await reload();
               }}
-              className="text-blue-500 hover:underline"
+              className="text-link hover:underline"
             >
               Try again
             </button>
@@ -274,7 +274,7 @@ function MyClasses() {
       </section>
 
       <p className="text-center text-sm">
-        <Link href="/my-sets" className="text-blue-500 hover:underline">
+        <Link href="/my-sets" className="text-link hover:underline">
           My Sets
         </Link>
       </p>

@@ -96,7 +96,7 @@ function ClassView({ id }: { id: string }) {
         <p className={state.status === 'error' ? 'text-red-500' : 'text-gray-500'}>
           {state.status === 'error' ? state.message : 'Class not found.'}
         </p>
-        <Link href="/teacher" className="text-blue-500 hover:underline">
+        <Link href="/teacher" className="text-link hover:underline">
           ← All classes
         </Link>
       </main>
@@ -231,7 +231,7 @@ function ClassView({ id }: { id: string }) {
                 type="button"
                 onClick={saveName}
                 disabled={busy || !nameDraft.trim()}
-                className="text-blue-600 hover:underline disabled:opacity-40"
+                className="text-link hover:underline disabled:opacity-40"
               >
                 {busy ? 'Saving...' : 'Save'}
               </button>
@@ -317,7 +317,7 @@ function ClassView({ id }: { id: string }) {
         {cls.assignments.length === 0 ? (
           <div className="rounded-lg border p-6 text-center text-sm text-gray-500">
             Nothing assigned yet. To assign a set, open it from{' '}
-            <Link href="/my-sets" className="text-blue-500 hover:underline">
+            <Link href="/my-sets" className="text-link hover:underline">
               My Sets
             </Link>{' '}
             and choose <span className="font-medium">📌 Assign to class</span>.
@@ -379,7 +379,7 @@ function ClassView({ id }: { id: string }) {
                       type="button"
                       onClick={() => saveDue(a, fromLocalInputValue(dueDraft))}
                       disabled={busy || !dueDraft}
-                      className="text-blue-600 hover:underline disabled:opacity-40"
+                      className="text-link hover:underline disabled:opacity-40"
                     >
                       Save
                     </button>
