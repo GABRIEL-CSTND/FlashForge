@@ -15,7 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FlashForge",
+  // Pages set their own title in their folder's layout.tsx: "My Sets · FlashForge".
+  title: { default: "FlashForge", template: "%s · FlashForge" },
   description: "Upload your notes and get an AI-generated study guide: flashcards or multiple choice.",
 };
 
