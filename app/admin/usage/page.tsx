@@ -160,7 +160,7 @@ function UsageView() {
               <table className="w-full text-sm">
                 <caption className="sr-only">Study guides generated per day</caption>
                 <thead>
-                  <tr className="border-b text-left text-xs text-gray-400">
+                  <tr className="border-b text-left text-xs whitespace-nowrap text-gray-400">
                     <th scope="col" className="px-3 py-2 font-medium">Day</th>
                     <th scope="col" className="px-3 py-2 font-medium">Guides</th>
                     <th scope="col" className="px-3 py-2 font-medium">Failed</th>
@@ -178,10 +178,16 @@ function UsageView() {
                       <td className={`px-3 py-2 ${d.failures > 0 ? 'text-red-500' : ''}`}>{d.failures}</td>
                       <td className="px-3 py-2">{seconds(d.avgMs)}</td>
                       <td className="px-3 py-2 text-xs text-gray-500">
-                        {models
-                          .filter((m) => d.answered[m])
-                          .map((m) => `${m}: ${d.answered[m]}`)
-                          .join(', ') || '—'}
+                        {/* One model per line, never broken mid-name (it scrolls on phones). */}
+                        {models.some((m) => d.answered[m])
+                          ? models
+                              .filter((m) => d.answered[m])
+                              .map((m) => (
+                                <span key={m} className="block whitespace-nowrap">
+                                  {m}: {d.answered[m]}
+                                </span>
+                              ))
+                          : '—'}
                       </td>
                     </tr>
                   ))}

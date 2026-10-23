@@ -60,7 +60,7 @@ describe('admin usage page', () => {
     expect(await screen.findByText('20 guides · 5% failed · average wait 8.0s · 2 signed out')).toBeTruthy();
     const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1);
     expect(rows.map((r) => within(r).getAllByRole('cell').map((c) => c.textContent))).toEqual([
-      ['12', '1', '6.0s', 'gemini-3.5-flash: 9, gemini-3.5-flash-lite: 2'],
+      ['12', '1', '6.0s', 'gemini-3.5-flash: 9gemini-3.5-flash-lite: 2'],
       ['8', '0', '11.0s', 'gemma-4-26b-a4b-it: 8'],
     ]);
     expect(within(screen.getByRole('list', { name: 'Top users' })).getByRole('listitem').textContent).toBe('Ana Reyesstudent7 guides · 1 failed');
