@@ -80,6 +80,10 @@ Open http://localhost:3000.
 ```
 app/
   page.tsx              Upload page; also shows a freshly generated guide
+  layout.tsx            Root layout: Geist font, profile provider, title template ("%s · FlashForge")
+  globals.css           Tailwind, colors for light/dark mode, the default border color
+  icon.svg              FlashForge icon (favicon.ico and apple-icon.png are the same design)
+  */layout.tsx          Section layouts that only set the browser title ("My Sets · FlashForge")
   my-sets/page.tsx      Signed-in user's saved sets
   sets/[id]/page.tsx    A saved set: study and save the score; the owner can edit cards, rename, delete
   teacher/page.tsx      Teacher dashboard: create classes, see join codes

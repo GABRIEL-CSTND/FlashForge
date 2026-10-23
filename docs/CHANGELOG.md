@@ -129,6 +129,10 @@ already applied there.
   sub-issues #51–#63.
 
 ### Changed
+- **Cleaner look, UI polish phase 1:** the Geist font (the starter template's Arial was
+  still forced), soft gray borders instead of black outlines (white in dark mode), a
+  FlashForge icon instead of the starter template's, and a browser title per page
+  ("My Sets · FlashForge").
 - `npm test` only runs this project's own tests: it skips the Claude app's worktrees
   in `.claude/` and `node_modules` at any depth (before, a side session's copy added 96
   false failures).

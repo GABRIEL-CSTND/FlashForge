@@ -106,6 +106,20 @@ The root `<body>` is a flex column (`app/layout.tsx`), so a centered `<main>`
 (`truncate`) add `w-full` to it; otherwise a long title makes the page wider than a phone
 screen instead of shortening with "…".
 
+**Look and feel (UI polish, phase 1):**
+- **Font:** Geist, loaded in `app/layout.tsx` and set on the body in `app/globals.css`.
+- **Borders:** Tailwind 4 draws a plain `border` in the text color, so `globals.css` sets a
+  default border color for everything: `--border`, gray-300 in light mode and gray-700 in
+  dark mode. Colored borders (`border-red-500`, `border-blue-400`) still override it.
+- **Icon:** `app/icon.svg` (stacked flashcards with a spark), plus the same design as
+  `favicon.ico` (32px) and `apple-icon.png` (180px). Next.js adds the `<link>` tags.
+- **Browser titles:** the root layout's template is `%s · FlashForge`. Pages are Client
+  Components and can't export metadata, so each section has a small `layout.tsx` that only
+  sets its title. The sections with titled pages below them (`teacher`, a class, `admin`)
+  must pass the template on again, or Next drops it for deeper pages.
+- The rest of the polish plan (shared buttons, a top bar, icons instead of emoji, and a
+  page-by-page pass) waits on the team's choices of accent color, icon style and logo.
+
 ## 1. Generating a study guide
 
 1. **Upload** (`app/page.tsx`): the user picks *Flashcards* or *Multiple Choice* and
