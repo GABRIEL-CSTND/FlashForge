@@ -50,10 +50,12 @@ Create `.env.local` in the project root. It's gitignored; never commit it.
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → `anon` key | Browser (safe to expose; RLS protects the data) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → `service_role` key | **Server only.** It bypasses RLS, so never use it in client code |
 | `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) | Server only (`lib/gemini.ts`) |
+| `IP_HASH_SECRET` | Optional: any long random string | Server only. Key for hashing signed-out visitors' IPs for the daily limits (#63); defaults to the service-role key |
 
 > **Use a separate Gemini key for local development if you can.** The free tier allows
 > only about **20 requests per day** on the main model, and testing with the production
-> key uses up the live site's quota (see #45). Admins can watch it on **/admin/usage**.
+> key uses up the live site's quota (see #45). Admins can watch it, and set each role's
+> daily limit, on **/admin/usage**.
 
 ### 4. Run it
 
@@ -96,7 +98,8 @@ app/
   api/profile/role/     POST: one-time student/teacher choice at sign-up
   api/admin/users/      Admin API: list users (GET), change a role (PATCH [id])
   api/admin/sets/       Admin API: list sets (GET), delete one (DELETE [id])
-  api/admin/usage/      Admin API: generation usage for the last 14 days
+  api/admin/usage/      Admin API: generation usage for the last 14 days, and the daily limits
+  api/admin/limits/     Admin API: change the daily generation limits (PUT)
   api/teacher/classes/  Teacher class API (list/create, rename/delete, new code, remove student,
                         change due date / unassign, student results, one student's attempts,
                         an assignment's hardest questions)
@@ -117,7 +120,8 @@ lib/
   roles.ts              getAuthedUser / requireRole / chooseOwnRole (server-only)
   role-types.ts         Role types and helpers shared by server and client
   admin.ts              Admin tools: users and roles, sets, AI usage (server-only)
-  generation-logs.ts    Logs each generation after the response is sent (server-only)
+  generation-logs.ts    Usage log and daily limit check for /api/generate (server-only)
+  generation-limits.ts  Daily limits per role: rules and message (shared)
   card-rules.ts         Card rules shared by the editor and the server (validateCards)
   sets.ts               Study sets scoped to their owner; saving edited cards (server-only)
   ids.ts                isUuid() and newId(), shared by server and client

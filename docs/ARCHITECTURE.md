@@ -89,7 +89,8 @@ writes with the service-role key. Browsers read only what RLS allows (section 4)
 | `GET /api/attempts?setId=…` | Signed in | The caller's own 10 most recent attempts on that set, newest first |
 | `GET /api/admin/users?q=…` | Admin | Users with role, sign-up date and number of sets, newest first; `q` matches part of an email or name (#60) |
 | `PATCH /api/admin/users/[id]` | Admin | Change a role: `{ role }` → `{ from, role }`; 409 if it would remove the last admin (#60) |
-| `GET /api/admin/usage` | Admin | Generations for the last 14 quota days (per day and model), top users, the models in fallback order and the main model's daily quota (#62) |
+| `GET /api/admin/usage` | Admin | Generations for the last 14 quota days (per day and model), top users, the models in fallback order and the main model's daily quota (#62), and the daily limits (#63) |
+| `PUT /api/admin/limits` | Admin | Replace the daily limits: `{ limits: { anonymous, student, teacher, admin } }`, each a whole number 0–1000 or `null` for none (#63) |
 | `GET /api/admin/sets?q=…` | Admin | Every set with owner, cards and number of classes it's assigned to, newest first; `q` matches a title or owner (#61) |
 | `DELETE /api/admin/sets/[id]` | Admin | Delete any set with its cards, assignments and saved results; logged → `{ deleted, assignments }` (#61) |
 
@@ -110,6 +111,8 @@ screen instead of shortening with "…".
 1. **Upload** (`app/page.tsx`): the user picks *Flashcards* or *Multiple Choice* and
    drops a `.pdf` or `.txt` file. Nothing is saved yet.
 2. **`POST /api/generate`** (`app/api/generate/route.ts`, `maxDuration = 90`):
+   - Checks the caller's **daily limit** first (#63). Over it, the answer is 429 and the AI
+     isn't called. See "Daily generation limits" below.
    - Extracts text: PDFs with `unpdf`, TXT as UTF-8. Unreadable files get HTTP 422
      with a friendly message.
    - Calls `generateStudyItems(text, studyType)` and returns
@@ -118,9 +121,9 @@ screen instead of shortening with "…".
 3. **Show it**: the upload page swaps to `StudyViewer` on the **same URL** (`/`), so
    *Exit* clears the result instead of navigating (it asks first if the guide isn't saved).
    After 15 seconds of waiting, the page explains that a slower backup AI may be in use.
-4. **Usage log** (#62): every request to `/api/generate`, successful or not, is written
-   to `generation_logs` with Next's `after()`, so it happens after the response has been
-   sent and never slows the user down. The upload page sends the user's token when signed
+4. **Usage log** (#62): every request to `/api/generate`, successful or not, gets a row in
+   `generation_logs`. The row is reserved by the limit check and filled in with Next's
+   `after()`, after the response has been sent, so logging never slows the user down. The upload page sends the user's token when signed
    in, so the log knows who generated it. See "Admin: AI usage" below.
 5. **Save** (optional, requires sign-in): `POST /api/save-set` verifies the user's token
    and inserts the set and cards with the **service-role** key. If the user signs in
@@ -426,6 +429,28 @@ screen instead of shortening with "…".
   (service role only). Logging never throws: a lost log line is only written to the
   server log.
 
+### Daily generation limits (#63)
+
+- **Per role, per quota day** (Pacific time): the defaults are signed out 2, student 5,
+  teacher 15 and admin no limit. They're stored in `app_settings` (server-only), and
+  admins change them in the **Daily limits** box on `/admin/usage`
+  (`PUT /api/admin/limits`). Changes apply from the next request, without a redeploy, and
+  each change is logged in `audit_log` (`settings_change`, from → to).
+- **Who's counted:** signed-in users by account. Signed-out visitors are counted by an
+  HMAC-SHA256 of their IP (`x-forwarded-for`, set by Vercel), keyed with
+  `IP_HASH_SECRET` or the service-role key, so IPs are never stored.
+- **No slipping past it with parallel requests:** `public.start_generation()` takes a lock
+  for that caller, counts today's finished guides plus requests still running, and then
+  either reserves a "running" log row (`success` null) or refuses. A refusal is logged as
+  `limit`, and the next Pacific midnight comes back as `resets_at`. Failed generations
+  don't count, and a running row older than 2 minutes (a crashed request) stops counting.
+- **Over the limit:** 429 with *"You've reached today's limit of N study guides."* The
+  upload page adds when more can be made, in the user's own time zone. If the check
+  itself fails (database trouble), the guide is generated anyway: the limits are about
+  sharing the quota fairly, not security.
+- The dashboard leaves out running requests and refusals, and shows refusals separately
+  ("refused by the daily limits").
+
 The plan for teacher and admin features is tracked in #50.
 
 ## 3. Data model
@@ -439,7 +464,8 @@ The plan for teacher and admin features is tracked in #50.
 | `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
 | `class_join_failures` | `id`, `user_id` → `auth.users` (cascade), `attempted_at` | Wrong join codes for the rate limit; indexed on (`user_id`, `attempted_at`); old rows are deleted as new ones arrive |
 | `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `due_at` (nullable), `created_at` | Unique (`class_id`, `set_id`); indexed on `set_id` |
-| `generation_logs` | `id`, `user_id` → `auth.users` (set null), `role`, `model`, `study_type`, `duration_ms`, `success`, `error_kind`, `requests` (jsonb), `created_at` | One row per `/api/generate` request (#62). Indexed on `created_at` and (`user_id`, `created_at`) |
+| `generation_logs` | `id`, `user_id` → `auth.users` (set null), `role`, `ip_hash` (signed out only), `model`, `study_type`, `duration_ms`, `success` (null while running), `error_kind` (incl. `limit`), `requests` (jsonb), `created_at` | One row per `/api/generate` request (#62, #63). Indexed on `created_at`, (`user_id`, `created_at`) and (`ip_hash`, `created_at`) |
+| `app_settings` | `key` (primary key), `value` (jsonb), `updated_at`, `updated_by` → `auth.users` (set null) | App-wide settings changed by admins; today just `generation_limits` (#63) |
 | `audit_log` | `id`, `actor_id` → `auth.users` (set null), `action` (`role_change` \| `set_delete`), `target_id`, `details` (jsonb), `created_at` | Admin actions (#60). `target_id` has no foreign key, so entries survive the target being deleted. Indexed on `created_at` |
 | `attempts` | `id` (made by the browser), `user_id` → `auth.users` (cascade), `set_id` → `flashcard_sets` (cascade), `assignment_id` → `assignments` (set null), `study_type`, `score`, `total`, `answers` (jsonb), `completed_at` | One row per finished study session (#57). `total > 0` and `0 ≤ score ≤ total`. Indexed on (`user_id`, `set_id`, `completed_at`) and on `assignment_id` |
 
@@ -468,6 +494,7 @@ The plan for teacher and admin features is tracked in #50.
 | `assignments` | Teacher / members | The class's teacher and its members read its assignments; no direct writes |
 | `audit_log` | Nobody | Server-only: no grants or policies for anon or signed-in users (#60) |
 | `generation_logs` | Nobody | Server-only, like `audit_log` (#62) |
+| `app_settings` | Nobody | Server-only; admins change limits through `PUT /api/admin/limits` (#63) |
 | `attempts` | Student / teacher | A student reads their own attempts; the class's teacher reads attempts made from their class's assignments while the student is in the class (never private study); no direct writes (#57) |
 
 The `classes` and `class_members` policies need to check each other, which would make RLS
@@ -496,6 +523,10 @@ transaction. Run them after every database change.
 - `supabase/tests/assignments-rls-check.sql` (16 cases): an assigned student can open the
   set and its cards, a student outside the class can't, access ends on unassign, and
   only the owner can edit.
+- `supabase/tests/generation-limits-check.sql` (20 cases): parallel requests count while
+  running and a third is refused; refusals are logged; failures and crashed requests
+  don't count; signed-out visitors are counted per IP hash; "no limit" for admins; bad
+  limits are rejected; a change takes effect on the next request and is logged.
 - `supabase/tests/generation-logs-check.sql` (12 cases): browsers can't read or write the
   log; rows at 00:30 and 23:30 Pacific time land on the right quota day; requests add up
   across retries and backups; the top-users list leaves out signed-out generations.
@@ -523,9 +554,10 @@ transaction. Run them after every database change.
 
 - **Free-tier AI quota:** about 20 requests a day on `gemini-3.5-flash`, shared by
   everyone. The backups help, but a paid tier is being discussed in #45.
-- **`/api/generate` has no rate limit yet** (#41 and #63), so anyone can use up the quota.
-  `/admin/usage` (#62) shows how close today is to it. Logging started on 2026-10-23, so
-  there's no usage history before that.
+- **The daily limits (#63) count signed-out visitors per IP**, so someone switching
+  networks or using many IPs gets more. Wider abuse protection is #41. `/admin/usage`
+  shows how close today is to the quota. Logging started on 2026-10-23, so there's no
+  usage history before that.
 - **Legacy sets with no owner (28 of them) are publicly readable**, and nobody can edit
   their cards.
 - **Text extraction:** only the first 30,000 characters are used (#38), PDFs are

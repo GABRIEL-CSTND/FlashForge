@@ -60,6 +60,12 @@ already applied there.
     can open them.
   - New `assignments` table. Students can read a set and its cards only while it's
     assigned to a class they're in.
+- **Daily generation limits** (#63, live database): signed out 2, students 5, teachers 15
+  and admins unlimited per day (Pacific time) by default. Admins change them on
+  `/admin/usage`, and changes apply from the next request. Over the limit the upload
+  page says *"You've reached today's limit of N study guides."* and when more can be made.
+  Parallel requests can't slip past it, and signed-out visitors are counted by a hash of
+  their IP (never stored as is).
 - **AI usage dashboard** (#62, live database): every generation is logged (after the
   response is sent, so it's never slower) with the model that answered and the requests
   made to each model. `/admin/usage` shows today's requests per model against the main
@@ -114,7 +120,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 359 tests):
+- **Automated tests** (`npm test`, 378 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),
@@ -123,6 +129,9 @@ already applied there.
   sub-issues #51–#63.
 
 ### Changed
+- `npm test` only runs this project's own tests: it skips the Claude app's worktrees
+  in `.claude/` and `node_modules` at any depth (before, a side session's copy added 96
+  false failures).
 - **Identification-style flashcards** (#35): the question is a clue or definition, and
   the answer is a 1–4 word term. In tests on three sample texts, 30 of 30 answers were
   4 words or fewer.
