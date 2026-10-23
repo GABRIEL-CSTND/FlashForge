@@ -53,7 +53,7 @@ Create `.env.local` in the project root. It's gitignored; never commit it.
 
 > **Use a separate Gemini key for local development if you can.** The free tier allows
 > only about **20 requests per day** on the main model, and testing with the production
-> key uses up the live site's quota (see #45).
+> key uses up the live site's quota (see #45). Admins can watch it on **/admin/usage**.
 
 ### 4. Run it
 
@@ -88,6 +88,7 @@ app/
   admin/page.tsx        Admin home (admins only)
   admin/users/          Users and roles: search users, change roles
   admin/sets/           Study sets: open or delete any set
+  admin/usage/          AI usage: guides per day, models used, today's quota, top users
   api/generate/         POST: extract text from the file, generate items with AI
   api/save-set/         POST: save a generated guide (signed-in users only)
   api/sets/[id]/cards/  PUT: save the owner's edited cards, all at once
@@ -95,6 +96,7 @@ app/
   api/profile/role/     POST: one-time student/teacher choice at sign-up
   api/admin/users/      Admin API: list users (GET), change a role (PATCH [id])
   api/admin/sets/       Admin API: list sets (GET), delete one (DELETE [id])
+  api/admin/usage/      Admin API: generation usage for the last 14 days
   api/teacher/classes/  Teacher class API (list/create, rename/delete, new code, remove student,
                         change due date / unassign, student results, one student's attempts,
                         an assignment's hardest questions)
@@ -114,7 +116,8 @@ lib/
   gemini.ts             AI model chain, prompts, retries, output validation
   roles.ts              getAuthedUser / requireRole / chooseOwnRole (server-only)
   role-types.ts         Role types and helpers shared by server and client
-  admin.ts              Admin tools: users and roles, listing and deleting sets (server-only)
+  admin.ts              Admin tools: users and roles, sets, AI usage (server-only)
+  generation-logs.ts    Logs each generation after the response is sent (server-only)
   card-rules.ts         Card rules shared by the editor and the server (validateCards)
   sets.ts               Study sets scoped to their owner; saving edited cards (server-only)
   ids.ts                isUuid() and newId(), shared by server and client

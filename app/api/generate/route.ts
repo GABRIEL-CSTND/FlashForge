@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { generateStudyItems, GeminiError, StudyType } from '@/lib/gemini';
+import { logGeneration, type GenerationLog } from '@/lib/generation-logs';
 
 export const runtime = 'nodejs';
 // Model retries are capped at ~75s (see lib/gemini.ts); leave headroom for upload + PDF parsing.
@@ -20,58 +21,89 @@ async function extractText(file: File): Promise<string> {
 
 const VALID_TYPES: StudyType[] = ['flashcard', 'multiple_choice'];
 
-// Pure generation endpoint — no database writes here.
-// Nothing is persisted until the user explicitly saves via /api/save-set.
+// Pure generation endpoint: nothing is saved until the user explicitly saves
+// via /api/save-set. The only write is the usage log (#62), made after the
+// response has been sent.
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
+  const log: GenerationLog = {
+    studyType: 'flashcard',
+    model: null,
+    success: false,
+    errorKind: 'server_error',
+    durationMs: 0,
+    requests: {},
+  };
+  const done = (res: NextResponse, outcome: Pick<GenerationLog, 'success' | 'errorKind'> & { model?: string }) => {
+    Object.assign(log, outcome, { durationMs: Date.now() - startedAt });
+    return res;
+  };
+  // Runs once the response has gone out, so it never slows generation down.
+  after(() => logGeneration(req, log));
+
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     const studyTypeRaw = formData.get('studyType') as string | null;
-
-    if (!file) {
-      return NextResponse.json({ error: 'Missing file' }, { status: 400 });
-    }
-
     const studyType: StudyType = VALID_TYPES.includes(studyTypeRaw as StudyType)
       ? (studyTypeRaw as StudyType)
       : 'flashcard';
+    log.studyType = studyType;
+
+    if (!file) {
+      return done(NextResponse.json({ error: 'Missing file' }, { status: 400 }), { success: false, errorKind: 'no_file' });
+    }
 
     let text: string;
     try {
       text = await extractText(file);
     } catch (err) {
       console.error('[generate] text extraction failed:', err);
-      return NextResponse.json(
-        { error: "We couldn't read this file. Please try a different PDF or TXT file." },
-        { status: 422 }
+      return done(
+        NextResponse.json(
+          { error: "We couldn't read this file. Please try a different PDF or TXT file." },
+          { status: 422 }
+        ),
+        { success: false, errorKind: 'unreadable' }
       );
     }
     if (!text || text.trim().length < 20) {
-      return NextResponse.json(
-        { error: 'Could not extract enough readable text from this file.' },
-        { status: 422 }
+      return done(
+        NextResponse.json({ error: 'Could not extract enough readable text from this file.' }, { status: 422 }),
+        { success: false, errorKind: 'unreadable' }
       );
     }
 
-    const { items, model } = await generateStudyItems(text, studyType);
-
-    return NextResponse.json({
-      title: file.name.replace(/\.[^/.]+$/, ''),
-      sourceFilename: file.name,
-      studyType,
-      items,
-      // Which model produced this guide (Gemini, or the Gemma backup).
-      model,
+    const { items, model } = await generateStudyItems(text, studyType, (m) => {
+      log.requests[m] = (log.requests[m] ?? 0) + 1;
     });
+
+    return done(
+      NextResponse.json({
+        title: file.name.replace(/\.[^/.]+$/, ''),
+        sourceFilename: file.name,
+        studyType,
+        items,
+        // Which model produced this guide (Gemini, or the Gemma backup).
+        model,
+      }),
+      { success: true, errorKind: null, model }
+    );
   } catch (err) {
     // Never send raw API errors to the browser; log the details server-side instead.
     console.error('[generate] failed:', err);
     if (err instanceof GeminiError) {
-      return NextResponse.json({ error: err.userMessage }, { status: err.retryable ? 503 : 502 });
+      return done(NextResponse.json({ error: err.userMessage }, { status: err.retryable ? 503 : 502 }), {
+        success: false,
+        errorKind: err.retryable ? 'ai_busy' : 'ai_failed',
+      });
     }
-    return NextResponse.json(
-      { error: 'Something went wrong while generating your study guide. Please try again.' },
-      { status: 500 }
+    return done(
+      NextResponse.json(
+        { error: 'Something went wrong while generating your study guide. Please try again.' },
+        { status: 500 }
+      ),
+      { success: false, errorKind: 'server_error' }
     );
   }
 }

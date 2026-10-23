@@ -11,7 +11,7 @@ flowchart LR
     U[Upload page<br/>app/page.tsx] --> SV[StudyViewer]
     MS[My Sets] --> SP["Set page<br/>/sets/[id]"]
     RC[RoleChooser<br/>one-time screen]
-    AP["Admin pages<br/>/admin, /admin/users, /admin/sets"]
+    AP["Admin pages<br/>/admin, /admin/users,<br/>/admin/sets, /admin/usage"]
     T["Teacher pages<br/>/teacher, /teacher/classes/[id],<br/>/teacher/classes/[id]/results"]
     MC["My classes<br/>/classes"]
   end
@@ -37,6 +37,7 @@ flowchart LR
     AUTH[Google sign-in]
   end
   U -->|PDF/TXT| G
+  G -.->|"usage log, after the response"| DB
   SV -->|Save| S -->|service-role key| DB
   MS -->|anon key + user session| DB
   SP -->|anon key + user session| DB
@@ -88,6 +89,7 @@ writes with the service-role key. Browsers read only what RLS allows (section 4)
 | `GET /api/attempts?setId=…` | Signed in | The caller's own 10 most recent attempts on that set, newest first |
 | `GET /api/admin/users?q=…` | Admin | Users with role, sign-up date and number of sets, newest first; `q` matches part of an email or name (#60) |
 | `PATCH /api/admin/users/[id]` | Admin | Change a role: `{ role }` → `{ from, role }`; 409 if it would remove the last admin (#60) |
+| `GET /api/admin/usage` | Admin | Generations for the last 14 quota days (per day and model), top users, the models in fallback order and the main model's daily quota (#62) |
 | `GET /api/admin/sets?q=…` | Admin | Every set with owner, cards and number of classes it's assigned to, newest first; `q` matches a title or owner (#61) |
 | `DELETE /api/admin/sets/[id]` | Admin | Delete any set with its cards, assignments and saved results; logged → `{ deleted, assignments }` (#61) |
 
@@ -116,7 +118,11 @@ screen instead of shortening with "…".
 3. **Show it**: the upload page swaps to `StudyViewer` on the **same URL** (`/`), so
    *Exit* clears the result instead of navigating (it asks first if the guide isn't saved).
    After 15 seconds of waiting, the page explains that a slower backup AI may be in use.
-4. **Save** (optional, requires sign-in): `POST /api/save-set` verifies the user's token
+4. **Usage log** (#62): every request to `/api/generate`, successful or not, is written
+   to `generation_logs` with Next's `after()`, so it happens after the response has been
+   sent and never slows the user down. The upload page sends the user's token when signed
+   in, so the log knows who generated it. See "Admin: AI usage" below.
+5. **Save** (optional, requires sign-in): `POST /api/save-set` verifies the user's token
    and inserts the set and cards with the **service-role** key. If the user signs in
    mid-save, the unsaved result is kept in `sessionStorage` across the Google redirect
    and saved automatically afterwards.
@@ -401,6 +407,25 @@ screen instead of shortening with "…".
   the same transaction. Its cards, assignments and attempts cascade.
 - The optional "Report this set" button from #61 isn't built yet.
 
+### Admin: AI usage (#62)
+
+- Each row of `generation_logs` has the user (null when signed out), their role, the
+  study type, how long it took, success or the kind of failure (`no_file`,
+  `unreadable`, `ai_busy`, `ai_failed`, `server_error`), the model that made the guide,
+  and **`requests`**: how many requests went to each model, retries and backups
+  included. `generateStudyItems()` reports each request through an `onRequest`
+  callback. Requests are what use up the quota, so they're counted separately from guides.
+- **Days are quota days:** midnight to midnight **Pacific time**, when the free Gemini
+  quota resets (`quotaDay()` in `lib/admin.ts`, `private.quota_window_start()` in SQL).
+- `/admin/usage` shows **today** per model, in fallback order. For the main model it
+  shows "N of about 20 requests" (`MAIN_MODEL_DAILY_QUOTA`, from #45) with a bar that turns
+  amber at 75% and red at 100%, plus the guides each model made. Below that: the last 14
+  days (guides, failures, average wait, which models answered), the % failed, signed-out
+  generations, and the top 10 signed-in users.
+- The numbers come from `admin_generation_daily()` and `admin_top_generators()`
+  (service role only). Logging never throws: a lost log line is only written to the
+  server log.
+
 The plan for teacher and admin features is tracked in #50.
 
 ## 3. Data model
@@ -414,6 +439,7 @@ The plan for teacher and admin features is tracked in #50.
 | `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
 | `class_join_failures` | `id`, `user_id` → `auth.users` (cascade), `attempted_at` | Wrong join codes for the rate limit; indexed on (`user_id`, `attempted_at`); old rows are deleted as new ones arrive |
 | `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `due_at` (nullable), `created_at` | Unique (`class_id`, `set_id`); indexed on `set_id` |
+| `generation_logs` | `id`, `user_id` → `auth.users` (set null), `role`, `model`, `study_type`, `duration_ms`, `success`, `error_kind`, `requests` (jsonb), `created_at` | One row per `/api/generate` request (#62). Indexed on `created_at` and (`user_id`, `created_at`) |
 | `audit_log` | `id`, `actor_id` → `auth.users` (set null), `action` (`role_change` \| `set_delete`), `target_id`, `details` (jsonb), `created_at` | Admin actions (#60). `target_id` has no foreign key, so entries survive the target being deleted. Indexed on `created_at` |
 | `attempts` | `id` (made by the browser), `user_id` → `auth.users` (cascade), `set_id` → `flashcard_sets` (cascade), `assignment_id` → `assignments` (set null), `study_type`, `score`, `total`, `answers` (jsonb), `completed_at` | One row per finished study session (#57). `total > 0` and `0 ≤ score ≤ total`. Indexed on (`user_id`, `set_id`, `completed_at`) and on `assignment_id` |
 
@@ -441,6 +467,7 @@ The plan for teacher and admin features is tracked in #50.
 | `class_join_failures` | Nobody | Server-only: no grants or policies for anon or signed-in users |
 | `assignments` | Teacher / members | The class's teacher and its members read its assignments; no direct writes |
 | `audit_log` | Nobody | Server-only: no grants or policies for anon or signed-in users (#60) |
+| `generation_logs` | Nobody | Server-only, like `audit_log` (#62) |
 | `attempts` | Student / teacher | A student reads their own attempts; the class's teacher reads attempts made from their class's assignments while the student is in the class (never private study); no direct writes (#57) |
 
 The `classes` and `class_members` policies need to check each other, which would make RLS
@@ -469,6 +496,9 @@ transaction. Run them after every database change.
 - `supabase/tests/assignments-rls-check.sql` (16 cases): an assigned student can open the
   set and its cards, a student outside the class can't, access ends on unassign, and
   only the owner can edit.
+- `supabase/tests/generation-logs-check.sql` (12 cases): browsers can't read or write the
+  log; rows at 00:30 and 23:30 Pacific time land on the right quota day; requests add up
+  across retries and backups; the top-users list leaves out signed-out generations.
 - `supabase/tests/admin-sets-check.sql` (15 cases): an admin can read another user's
   private set and its cards but can't delete it directly; others can't call the admin
   functions; deleting through `admin_delete_set()` removes the cards, assignment and
@@ -494,6 +524,8 @@ transaction. Run them after every database change.
 - **Free-tier AI quota:** about 20 requests a day on `gemini-3.5-flash`, shared by
   everyone. The backups help, but a paid tier is being discussed in #45.
 - **`/api/generate` has no rate limit yet** (#41 and #63), so anyone can use up the quota.
+  `/admin/usage` (#62) shows how close today is to it. Logging started on 2026-10-23, so
+  there's no usage history before that.
 - **Legacy sets with no owner (28 of them) are publicly readable**, and nobody can edit
   their cards.
 - **Text extraction:** only the first 30,000 characters are used (#38), PDFs are

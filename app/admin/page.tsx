@@ -25,6 +25,12 @@ export default function AdminPage() {
               <span className="block text-sm text-gray-500">Open or delete any set.</span>
             </Link>
           </li>
+          <li>
+            <Link href="/admin/usage" className="block rounded-lg border p-4 hover:border-blue-400">
+              <span className="block font-medium">📈 AI usage</span>
+              <span className="block text-sm text-gray-500">Guides per day, backups used, and the daily quota.</span>
+            </Link>
+          </li>
         </ul>
       </main>
     </AdminOnly>

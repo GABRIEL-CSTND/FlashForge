@@ -97,7 +97,15 @@ export default function UploadPage() {
     const slowTimer = setTimeout(() => setSlowGeneration(true), SLOW_NOTICE_MS);
     let res: Response;
     try {
-      res = await fetch('/api/generate', { method: 'POST', body: formData });
+      // When signed in, send the session token so the usage log (#62) knows who
+      // generated it. Generating still works signed out.
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      res = await fetch('/api/generate', {
+        method: 'POST',
+        body: formData,
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
     } catch {
       setErrorMsg('Could not reach the server. Check your connection and try again.');
       setStatus('error');

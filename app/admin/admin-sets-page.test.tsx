@@ -107,6 +107,6 @@ describe('admin sets page', () => {
 
   it('is linked from the admin home', () => {
     render(<AdminPage />);
-    expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/', '/admin/users', '/admin/sets']);
+    expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/', '/admin/users', '/admin/sets', '/admin/usage']);
   });
 });

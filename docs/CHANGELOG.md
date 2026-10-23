@@ -60,6 +60,11 @@ already applied there.
     can open them.
   - New `assignments` table. Students can read a set and its cards only while it's
     assigned to a class they're in.
+- **AI usage dashboard** (#62, live database): every generation is logged (after the
+  response is sent, so it's never slower) with the model that answered and the requests
+  made to each model. `/admin/usage` shows today's requests per model against the main
+  model's ~20-a-day free quota, the last 14 days (guides, failures, average wait, backups
+  used) and the top users. Days follow Pacific time, when the quota resets.
 - **Admin: study sets** (#61, live database): `/admin/sets` lists every set with its
   owner, cards and how many classes it's assigned to, with search. Admins can open any set
   and delete it after a confirmation that warns when classes will lose it and students'
@@ -109,7 +114,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 346 tests):
+- **Automated tests** (`npm test`, 359 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),

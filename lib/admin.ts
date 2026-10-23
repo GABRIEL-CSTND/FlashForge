@@ -116,3 +116,86 @@ export async function deleteAnySet(
   if (error.code === 'P0002') return null;
   throw error;
 }
+
+// The Gemini free quota resets at midnight Pacific time, so usage is counted
+// by "quota day": the date in Pacific time, as YYYY-MM-DD (#62).
+export function quotaDay(at: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(at);
+}
+
+export interface UsageDay {
+  day: string;
+  generations: number;
+  failures: number;
+  signedOut: number;
+  avgMs: number;
+  // Guides produced by each model.
+  answered: Record<string, number>;
+  // Requests made to each model, retries and fallbacks included.
+  requests: Record<string, number>;
+}
+
+export interface TopGenerator {
+  id: string;
+  email: string | null;
+  displayName: string | null;
+  role: Role;
+  generations: number;
+  failures: number;
+}
+
+interface DailyRow {
+  day: string;
+  generations: number | string;
+  failures: number | string;
+  signed_out: number | string;
+  avg_ms: number;
+  answered: Record<string, number>;
+  requests: Record<string, number>;
+}
+
+interface TopRow {
+  user_id: string;
+  email: string | null;
+  display_name: string | null;
+  role: Role;
+  generations: number | string;
+  failures: number | string;
+}
+
+// Generation usage for the last `days` quota days, from generation_logs.
+export async function getUsage(
+  days: number,
+  client: SupabaseClient = supabaseAdmin
+): Promise<{ days: UsageDay[]; topUsers: TopGenerator[] }> {
+  const [daily, top] = await Promise.all([
+    client.rpc('admin_generation_daily', { p_days: days }),
+    client.rpc('admin_top_generators', { p_days: days, p_limit: 10 }),
+  ]);
+  if (daily.error) throw daily.error;
+  if (top.error) throw top.error;
+  return {
+    days: ((daily.data ?? []) as DailyRow[]).map((r) => ({
+      day: r.day,
+      generations: Number(r.generations),
+      failures: Number(r.failures),
+      signedOut: Number(r.signed_out),
+      avgMs: Number(r.avg_ms),
+      answered: r.answered ?? {},
+      requests: r.requests ?? {},
+    })),
+    topUsers: ((top.data ?? []) as TopRow[]).map((r) => ({
+      id: r.user_id,
+      email: r.email,
+      displayName: r.display_name,
+      role: r.role,
+      generations: Number(r.generations),
+      failures: Number(r.failures),
+    })),
+  };
+}

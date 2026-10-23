@@ -31,6 +31,10 @@ const MODEL_CHAIN: ModelConfig[] = [
   { id: 'gemini-3.5-flash-lite', family: 'gemini', attempts: 2, timeoutMs: 25_000 },
   { id: 'gemma-4-26b-a4b-it', family: 'gemma', attempts: 1, timeoutMs: 40_000 },
 ];
+// The models in the order they're tried: the main one first, then the backups (#62).
+export const MODEL_IDS = MODEL_CHAIN.map((m) => m.id);
+// About how many requests a day the free tier allows on the main model (#45).
+export const MAIN_MODEL_DAILY_QUOTA = 20;
 const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 // Gemini 3.x models "think" before answering by default. Flashcards don't need
 // deep reasoning, so keep it low to cut latency.
@@ -232,7 +236,10 @@ async function callModel(
 
 export async function generateStudyItems(
   sourceText: string,
-  studyType: StudyType
+  studyType: StudyType,
+  // Called before each request to a model, retries and fallbacks included, so
+  // callers can count what uses up the quota (#62).
+  onRequest?: (model: string) => void
 ): Promise<{ items: GeneratedItem[]; model: string }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new GeminiError('GEMINI_API_KEY is not set', { retryable: false });
@@ -297,6 +304,7 @@ ${sourceText.slice(0, 30000)}
 
       const startedAt = Date.now();
       try {
+        onRequest?.(model);
         const { items: rawItems, outputTokens } = await callModel(
           model,
           apiKey,

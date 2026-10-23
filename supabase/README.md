@@ -28,6 +28,7 @@ soon as it's applied.
 | `20261022000100_attempts.sql` | #57 | 2026-10-22 |
 | `20261023000100_admin_users.sql` | #60 | 2026-10-23 |
 | `20261023000200_admin_sets.sql` | #61 | 2026-10-23 |
+| `20261023000300_generation_logs.sql` | #62 | 2026-10-23 |
 
 Add a row here whenever you apply a new migration.
 
