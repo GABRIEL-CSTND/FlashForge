@@ -5,6 +5,14 @@ import { useEffect, useState } from 'react';
 import AdminOnly from '@/components/AdminOnly';
 import { apiFetch, errorMessage } from '@/lib/api-client';
 import { studentLabel } from '@/lib/classes-shared';
+import {
+  LIMIT_LABELS,
+  LIMIT_ROLES,
+  MAX_DAILY_LIMIT,
+  parseGenerationLimits,
+  type GenerationLimits,
+  type LimitRole,
+} from '@/lib/generation-limits';
 
 interface UsageDay {
   day: string;
@@ -14,6 +22,7 @@ interface UsageDay {
   avgMs: number;
   answered: Record<string, number>;
   requests: Record<string, number>;
+  limited: number;
 }
 
 interface TopGenerator {
@@ -30,6 +39,7 @@ interface Usage {
   periodDays: number;
   models: string[];
   mainModelDailyQuota: number;
+  limits: GenerationLimits | null;
   days: UsageDay[];
   topUsers: TopGenerator[];
 }
@@ -87,11 +97,12 @@ function UsageView() {
     );
   }
 
-  const { today, periodDays, models, mainModelDailyQuota, days, topUsers } = state.usage;
+  const { today, periodDays, models, mainModelDailyQuota, limits, days, topUsers } = state.usage;
   const todayRow = days.find((d) => d.day === today);
   const total = days.reduce((sum, d) => sum + d.generations, 0);
   const failed = days.reduce((sum, d) => sum + d.failures, 0);
   const signedOut = days.reduce((sum, d) => sum + d.signedOut, 0);
+  const limited = days.reduce((sum, d) => sum + d.limited, 0);
   const averageMs = total > 0 ? days.reduce((sum, d) => sum + d.avgMs * d.generations, 0) / total : 0;
 
   return (
@@ -142,7 +153,12 @@ function UsageView() {
         {todayRow && todayRow.failures > 0 && (
           <p className="text-sm text-red-500">{plural(todayRow.failures, 'generation')} failed today.</p>
         )}
+        {todayRow && todayRow.limited > 0 && (
+          <p className="text-sm text-amber-600">{plural(todayRow.limited, 'request')} refused by the daily limits today.</p>
+        )}
       </section>
+
+      <LimitsEditor initial={limits} />
 
       <section aria-labelledby="period-heading" className="space-y-2">
         <h2 id="period-heading" className="font-medium">
@@ -155,6 +171,7 @@ function UsageView() {
             <p className="text-sm text-gray-500">
               {plural(total, 'guide')} · {Math.round((failed / total) * 100)}% failed · average wait {seconds(averageMs)} ·{' '}
               {signedOut} signed out
+              {limited > 0 && ` · ${limited} refused by limits`}
             </p>
             <div className="overflow-x-auto rounded-lg border">
               <table className="w-full text-sm">
@@ -222,5 +239,99 @@ function UsageView() {
         )}
       </section>
     </main>
+  );
+}
+
+const LIMITS_INVALID = `Each limit must be a whole number from 0 to ${MAX_DAILY_LIMIT}, or empty for no limit.`;
+
+// Daily study guides per person for each role (#63). Saved limits apply from
+// the next request; no redeploy needed.
+function LimitsEditor({ initial }: { initial: GenerationLimits | null }) {
+  const [drafts, setDrafts] = useState<Record<LimitRole, string>>(
+    () =>
+      Object.fromEntries(LIMIT_ROLES.map((r) => [r, initial?.[r] == null ? '' : String(initial[r])])) as Record<
+        LimitRole,
+        string
+      >
+  );
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ kind: 'error' | 'status'; text: string } | null>(null);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const limits = parseGenerationLimits(
+      Object.fromEntries(LIMIT_ROLES.map((r) => [r, drafts[r].trim() === '' ? null : Number(drafts[r])]))
+    );
+    if (!limits) {
+      setMessage({ kind: 'error', text: LIMITS_INVALID });
+      return;
+    }
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await apiFetch('/api/admin/limits', { method: 'PUT', body: { limits } });
+      setMessage(
+        res.ok
+          ? { kind: 'status', text: 'Saved. The new limits apply from the next study guide.' }
+          : { kind: 'error', text: errorMessage(res.data) }
+      );
+    } catch {
+      setMessage({ kind: 'error', text: 'Could not reach the server. Check your connection and try again.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section aria-labelledby="limits-heading" className="space-y-3 rounded-xl border p-4">
+      <div className="space-y-1">
+        <h2 id="limits-heading" className="font-medium">
+          Daily limits
+        </h2>
+        <p className="text-xs text-gray-400">
+          Study guides each person can make per day (signed-out visitors are counted per IP address). Leave a box empty
+          for no limit. Anyone can choose &quot;teacher&quot; at sign-up, so keep that limit modest.
+        </p>
+      </div>
+      {/* noValidate: our own message explains every bad value, the same in all browsers. */}
+      <form onSubmit={save} noValidate className="space-y-2">
+        {LIMIT_ROLES.map((role) => (
+          <div key={role} className="flex items-center justify-between gap-3">
+            <label htmlFor={`limit-${role}`} className="text-sm">
+              {LIMIT_LABELS[role]}
+            </label>
+            <input
+              id={`limit-${role}`}
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={MAX_DAILY_LIMIT}
+              step={1}
+              placeholder="No limit"
+              value={drafts[role]}
+              onChange={(e) => setDrafts((d) => ({ ...d, [role]: e.target.value }))}
+              className="w-28 rounded-lg border bg-transparent px-2 py-1 text-right"
+            />
+          </div>
+        ))}
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-lg border px-3 py-1.5 text-sm font-medium hover:border-blue-400 disabled:opacity-40"
+          >
+            {saving ? 'Saving...' : 'Save limits'}
+          </button>
+          {message && (
+            <p
+              role={message.kind === 'error' ? 'alert' : 'status'}
+              className={`text-sm ${message.kind === 'error' ? 'text-red-500' : 'text-green-600'}`}
+            >
+              {message.text}
+            </p>
+          )}
+        </div>
+      </form>
+    </section>
   );
 }

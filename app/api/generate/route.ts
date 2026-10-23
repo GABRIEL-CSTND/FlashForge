@@ -1,6 +1,13 @@
 import { after, NextRequest, NextResponse } from 'next/server';
 import { generateStudyItems, GeminiError, StudyType } from '@/lib/gemini';
-import { logGeneration, type GenerationLog } from '@/lib/generation-logs';
+import {
+  identifyCaller,
+  recordGeneration,
+  startGeneration,
+  type GenerationLog,
+  type GenerationState,
+} from '@/lib/generation-logs';
+import { limitMessage } from '@/lib/generation-limits';
 
 export const runtime = 'nodejs';
 // Model retries are capped at ~75s (see lib/gemini.ts); leave headroom for upload + PDF parsing.
@@ -22,8 +29,8 @@ async function extractText(file: File): Promise<string> {
 const VALID_TYPES: StudyType[] = ['flashcard', 'multiple_choice'];
 
 // Pure generation endpoint: nothing is saved until the user explicitly saves
-// via /api/save-set. The only write is the usage log (#62), made after the
-// response has been sent.
+// via /api/save-set. The only writes are the usage log (#62) and the daily
+// limit check (#63).
 export async function POST(req: NextRequest) {
   const startedAt = Date.now();
   const log: GenerationLog = {
@@ -34,12 +41,13 @@ export async function POST(req: NextRequest) {
     durationMs: 0,
     requests: {},
   };
+  const state: GenerationState = { caller: null, reservedId: null, refused: false };
   const done = (res: NextResponse, outcome: Pick<GenerationLog, 'success' | 'errorKind'> & { model?: string }) => {
     Object.assign(log, outcome, { durationMs: Date.now() - startedAt });
     return res;
   };
-  // Runs once the response has gone out, so it never slows generation down.
-  after(() => logGeneration(req, log));
+  // Runs once the response has gone out, so logging never slows generation down.
+  after(() => recordGeneration(req, state, log));
 
   try {
     const formData = await req.formData();
@@ -49,6 +57,26 @@ export async function POST(req: NextRequest) {
       ? (studyTypeRaw as StudyType)
       : 'flashcard';
     log.studyType = studyType;
+
+    // Daily limit per role (#63), checked before any AI request.
+    state.caller = await identifyCaller(req);
+    try {
+      const slot = await startGeneration(state.caller, studyType);
+      if (!slot.allowed) {
+        state.refused = true;
+        return done(
+          NextResponse.json(
+            { error: limitMessage(slot.limit), limit: slot.limit, resetsAt: slot.resetsAt },
+            { status: 429 }
+          ),
+          { success: false, errorKind: 'limit' }
+        );
+      }
+      state.reservedId = slot.id;
+    } catch (err) {
+      // The limits are about fairness: if checking them fails, generate anyway.
+      console.error('[generate] daily limit check failed:', err);
+    }
 
     if (!file) {
       return done(NextResponse.json({ error: 'Missing file' }, { status: 400 }), { success: false, errorKind: 'no_file' });

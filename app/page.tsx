@@ -117,7 +117,12 @@ export default function UploadPage() {
     const body = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      setErrorMsg(body.error || 'Failed to generate study guide.');
+      // Daily limit (#63): say when more can be made, in the user's own time.
+      const reset =
+        res.status === 429 && typeof body.resetsAt === 'string'
+          ? ` You can make more after ${new Date(body.resetsAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.`
+          : '';
+      setErrorMsg((body.error || 'Failed to generate study guide.') + reset);
       setStatus('error');
       return;
     }

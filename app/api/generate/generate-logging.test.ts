@@ -26,16 +26,36 @@ vi.mock('@/lib/supabase-admin', () => ({
 
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/generate/route';
-import { GeminiError } from '@/lib/gemini';
+import { GeminiError, generateStudyItems } from '@/lib/gemini';
 
 const STUDENT = { id: fakeUuid(), email: 'sam@example.com' };
 const ITEMS = [{ question: 'Fluid inside the chloroplast', answer: 'Stroma' }];
+const RESETS_AT = '2026-10-24T07:00:00+00:00';
+
+// What start_generation() was asked, and how it answers. Its real counting is
+// checked in supabase/tests/generation-limits-check.sql.
+let limit: { refuse: boolean; fail: boolean; calls: Record<string, unknown>[] };
 
 beforeEach(() => {
   pending.callbacks = [];
+  limit = { refuse: false, fail: false, calls: [] };
   fake.current = createFakeSupabase({
-    tables: { profiles: { unique: [['id']] }, generation_logs: {} },
+    tables: { profiles: { unique: [['id']] }, generation_logs: { unique: [['id']] } },
     users: { sam: STUDENT },
+    rpc: {
+      start_generation: (args, db) => {
+        limit.calls.push(args);
+        if (limit.fail) throw { code: 'XX000', message: 'database down' };
+        const row = { user_id: args.p_user_id, role: args.p_role, ip_hash: args.p_ip_hash, study_type: args.p_study_type, duration_ms: 0 };
+        if (limit.refuse) {
+          db.rows.generation_logs.push({ ...row, id: db.rows.generation_logs.length + 1, success: false, error_kind: 'limit' });
+          return { allowed: false, limit: 5, resets_at: RESETS_AT };
+        }
+        const id = db.rows.generation_logs.length + 1;
+        db.rows.generation_logs.push({ ...row, id, success: null, error_kind: null, model: null, requests: {} });
+        return { allowed: true, id, limit: 5 };
+      },
+    },
   });
   fake.current.db.rows.profiles = [{ id: STUDENT.id, role: 'student' }];
   gemini.run = async (onRequest) => {
@@ -43,33 +63,31 @@ beforeEach(() => {
     onRequest('gemini-3.5-flash-lite');
     return { items: ITEMS, model: 'gemini-3.5-flash-lite' };
   };
+  vi.mocked(generateStudyItems).mockClear();
 });
 
-function generate(text: string | null, token?: string) {
+function generate(text: string | null, headers: Record<string, string> = {}) {
   const form = new FormData();
   if (text !== null) form.append('file', new File([text], 'notes.txt', { type: 'text/plain' }));
   form.append('studyType', 'multiple_choice');
-  return POST(
-    new NextRequest('http://localhost/api/generate', {
-      method: 'POST',
-      body: form,
-      headers: token ? { authorization: `Bearer ${token}` } : {},
-    })
-  );
+  return POST(new NextRequest('http://localhost/api/generate', { method: 'POST', body: form, headers }));
 }
+const asSam = { authorization: 'Bearer sam' };
 const LONG_TEXT = 'Photosynthesis happens in the chloroplast; the stroma holds the Calvin cycle.';
 const logged = () => fake.current!.db.rows.generation_logs;
 const runAfter = () => Promise.all(pending.callbacks.map((fn) => fn()));
 
-describe('/api/generate usage log (#62)', () => {
-  it('logs a signed-in success after the response, with the model and every request it made', async () => {
-    const res = await generate(LONG_TEXT, 'sam');
+describe('/api/generate usage log (#62) and daily limits (#63)', () => {
+  it('reserves a running row first, and fills it in after the response', async () => {
+    const res = await generate(LONG_TEXT, asSam);
     expect(res.status).toBe(200);
-    // Nothing is written while the response is being made.
-    expect(logged()).toEqual([]);
+    expect(limit.calls).toEqual([{ p_user_id: STUDENT.id, p_role: 'student', p_ip_hash: null, p_study_type: 'multiple_choice' }]);
+    // While the response is being made, the row is only reserved (still running).
+    expect(logged()).toEqual([expect.objectContaining({ id: 1, success: null })]);
     await runAfter();
     expect(logged()).toEqual([
       expect.objectContaining({
+        id: 1,
         user_id: STUDENT.id,
         role: 'student',
         model: 'gemini-3.5-flash-lite',
@@ -82,11 +100,34 @@ describe('/api/generate usage log (#62)', () => {
     expect(logged()[0].duration_ms).toEqual(expect.any(Number));
   });
 
+  it("refuses once the daily limit is reached, without calling the AI", async () => {
+    limit.refuse = true;
+    const res = await generate(LONG_TEXT, asSam);
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: "You've reached today's limit of 5 study guides.", limit: 5, resetsAt: RESETS_AT });
+    expect(generateStudyItems).not.toHaveBeenCalled();
+    await runAfter();
+    // Only the refusal start_generation() logged; nothing is added after.
+    expect(logged().map((r) => r.error_kind)).toEqual(['limit']);
+  });
+
+  it('counts signed-out visitors by a hash of their IP, never the IP itself', async () => {
+    await generate(LONG_TEXT, { 'x-forwarded-for': '203.0.113.7, 10.0.0.1' });
+    await generate(LONG_TEXT, { 'x-forwarded-for': '203.0.113.7' });
+    await generate(LONG_TEXT, { 'x-forwarded-for': '198.51.100.2' });
+    const [first, again, other] = limit.calls.map((c) => c.p_ip_hash as string);
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    expect(again).toBe(first);
+    expect(other).not.toBe(first);
+    expect(JSON.stringify(limit.calls)).not.toContain('203.0.113.7');
+    expect(limit.calls.every((c) => c.p_user_id === null && c.p_role === null)).toBe(true);
+  });
+
   it.each([
     ['all models busy', new GeminiError('429', { retryable: true, status: 429 }), 503, 'ai_busy'],
     ['a bad request to the AI', new GeminiError('400', { retryable: false, status: 400 }), 502, 'ai_failed'],
     ['an unexpected error', new Error('boom'), 500, 'server_error'],
-  ])('logs a failure when %s', async (_label, error, status, kind) => {
+  ])('fills in a failure when %s', async (_label, error, status, kind) => {
     gemini.run = async (onRequest) => {
       onRequest('gemini-3.5-flash');
       throw error;
@@ -96,11 +137,11 @@ describe('/api/generate usage log (#62)', () => {
     await runAfter();
     errorLog.mockRestore();
     expect(logged()).toEqual([
-      expect.objectContaining({ user_id: null, role: null, model: null, success: false, error_kind: kind, requests: { 'gemini-3.5-flash': 1 } }),
+      expect.objectContaining({ user_id: null, model: null, success: false, error_kind: kind, requests: { 'gemini-3.5-flash': 1 } }),
     ]);
   });
 
-  it('logs files that are missing or unreadable, with no AI requests', async () => {
+  it('fills in files that are missing or unreadable, with no AI requests', async () => {
     expect((await generate('too short')).status).toBe(422);
     expect((await generate(null)).status).toBe(400);
     await runAfter();
@@ -110,10 +151,20 @@ describe('/api/generate usage log (#62)', () => {
     ]);
   });
 
-  it('never lets a logging failure affect anything', async () => {
-    fake.current!.db.failNext('generation_logs', 'insert');
+  it('generates anyway if the limit check itself fails, and still logs it', async () => {
+    limit.fail = true;
     const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect((await generate(LONG_TEXT, 'sam')).status).toBe(200);
+    expect((await generate(LONG_TEXT, asSam)).status).toBe(200);
+    await runAfter();
+    expect(errorLog).toHaveBeenCalledWith('[generate] daily limit check failed:', expect.anything());
+    errorLog.mockRestore();
+    expect(logged()).toEqual([expect.objectContaining({ user_id: STUDENT.id, role: 'student', success: true, ip_hash: null })]);
+  });
+
+  it('never lets a logging failure affect anything', async () => {
+    fake.current!.db.failNext('generation_logs', 'update');
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect((await generate(LONG_TEXT, asSam)).status).toBe(200);
     await expect(runAfter()).resolves.toBeDefined();
     expect(errorLog).toHaveBeenCalledWith('[generation-logs] could not log a generation:', expect.anything());
     errorLog.mockRestore();

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import type { Role } from '@/lib/role-types';
+import { parseGenerationLimits, type GenerationLimits } from '@/lib/generation-limits';
 
 // SERVER-ONLY (service-role client). Admin tools (#60). Routes check that the
 // caller is an admin first, and the database functions check again.
@@ -138,6 +139,8 @@ export interface UsageDay {
   answered: Record<string, number>;
   // Requests made to each model, retries and fallbacks included.
   requests: Record<string, number>;
+  // Requests refused by the daily limits (#63).
+  limited: number;
 }
 
 export interface TopGenerator {
@@ -157,6 +160,7 @@ interface DailyRow {
   avg_ms: number;
   answered: Record<string, number>;
   requests: Record<string, number>;
+  limited: number | string;
 }
 
 interface TopRow {
@@ -188,6 +192,7 @@ export async function getUsage(
       avgMs: Number(r.avg_ms),
       answered: r.answered ?? {},
       requests: r.requests ?? {},
+      limited: Number(r.limited ?? 0),
     })),
     topUsers: ((top.data ?? []) as TopRow[]).map((r) => ({
       id: r.user_id,
@@ -198,4 +203,24 @@ export async function getUsage(
       failures: Number(r.failures),
     })),
   };
+}
+
+// The daily limits per role (#63), as admins last set them.
+export async function getGenerationLimits(client: SupabaseClient = supabaseAdmin): Promise<GenerationLimits | null> {
+  const { data, error } = await client.from('app_settings').select('value').eq('key', 'generation_limits').maybeSingle();
+  if (error) throw error;
+  return data ? parseGenerationLimits(data.value) : null;
+}
+
+// public.admin_set_generation_limits() checks the actor is an admin, validates
+// the limits again and logs the change. They apply from the next request.
+export async function setGenerationLimits(
+  actorId: string,
+  limits: GenerationLimits,
+  client: SupabaseClient = supabaseAdmin
+): Promise<GenerationLimits | null> {
+  const { data, error } = await client.rpc('admin_set_generation_limits', { p_actor_id: actorId, p_limits: limits });
+  if (error?.code === '22023') return null;
+  if (error) throw error;
+  return parseGenerationLimits(data);
 }
