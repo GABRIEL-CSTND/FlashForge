@@ -59,3 +59,60 @@ export async function changeUserRole(
   if (error.code === 'P0001' && error.message === 'last_admin') return { ok: false, reason: 'last-admin' };
   throw error;
 }
+
+export interface AdminSet {
+  id: string;
+  title: string;
+  studyType: string;
+  createdAt: string;
+  // Null for legacy sets made before sign-in was required.
+  ownerId: string | null;
+  ownerEmail: string | null;
+  ownerName: string | null;
+  cardCount: number;
+  assignmentCount: number;
+}
+
+interface SetRow {
+  set_id: string;
+  title: string;
+  study_type: string;
+  created_at: string;
+  owner_id: string | null;
+  owner_email: string | null;
+  owner_name: string | null;
+  card_count: number | string;
+  assignment_count: number | string;
+}
+
+// Every study set, newest first (#61); `search` matches part of a title or the
+// owner's email or name.
+export async function listSets(search: string, client: SupabaseClient = supabaseAdmin): Promise<AdminSet[]> {
+  const { data, error } = await client.rpc('admin_list_sets', { p_search: search.trim() || null, p_limit: 200 });
+  if (error) throw error;
+  return ((data ?? []) as SetRow[]).map((r) => ({
+    id: r.set_id,
+    title: r.title,
+    studyType: r.study_type,
+    createdAt: r.created_at,
+    ownerId: r.owner_id,
+    ownerEmail: r.owner_email,
+    ownerName: r.owner_name,
+    cardCount: Number(r.card_count),
+    assignmentCount: Number(r.assignment_count),
+  }));
+}
+
+// public.admin_delete_set() logs the deletion and deletes the set (its cards,
+// assignments and saved results cascade) in one transaction. Returns how many
+// classes it was assigned to, or null if there's no such set.
+export async function deleteAnySet(
+  actorId: string,
+  setId: string,
+  client: SupabaseClient = supabaseAdmin
+): Promise<{ assignments: number } | null> {
+  const { data, error } = await client.rpc('admin_delete_set', { p_actor_id: actorId, p_set_id: setId });
+  if (!error) return { assignments: Number(data) };
+  if (error.code === 'P0002') return null;
+  throw error;
+}

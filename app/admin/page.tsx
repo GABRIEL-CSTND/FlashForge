@@ -19,6 +19,12 @@ export default function AdminPage() {
               <span className="block text-sm text-gray-500">Find users, make teachers and admins.</span>
             </Link>
           </li>
+          <li>
+            <Link href="/admin/sets" className="block rounded-lg border p-4 hover:border-blue-400">
+              <span className="block font-medium">🗂 Study sets</span>
+              <span className="block text-sm text-gray-500">Open or delete any set.</span>
+            </Link>
+          </li>
         </ul>
       </main>
     </AdminOnly>

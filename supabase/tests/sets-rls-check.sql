@@ -10,7 +10,9 @@ declare
 begin
   select s.user_id, s.id into a, a_set from public.flashcard_sets s
     where s.user_id is not null and exists (select 1 from public.flashcards f where f.set_id = s.id) limit 1;
-  select id into b from auth.users where id <> a limit 1;
+  -- B must not be an admin: admins can read every set (#61, see admin-sets-check.sql).
+  select id into b from auth.users where id <> a
+    and id not in (select id from public.profiles where role = 'admin') limit 1;
   select array_agg(id) into owned from public.flashcard_sets where user_id is not null;
 
   -- 1-3: anonymous visitor

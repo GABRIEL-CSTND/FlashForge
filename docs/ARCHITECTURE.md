@@ -11,7 +11,7 @@ flowchart LR
     U[Upload page<br/>app/page.tsx] --> SV[StudyViewer]
     MS[My Sets] --> SP["Set page<br/>/sets/[id]"]
     RC[RoleChooser<br/>one-time screen]
-    AP["Admin pages<br/>/admin, /admin/users"]
+    AP["Admin pages<br/>/admin, /admin/users, /admin/sets"]
     T["Teacher pages<br/>/teacher, /teacher/classes/[id],<br/>/teacher/classes/[id]/results"]
     MC["My classes<br/>/classes"]
   end
@@ -88,6 +88,8 @@ writes with the service-role key. Browsers read only what RLS allows (section 4)
 | `GET /api/attempts?setId=…` | Signed in | The caller's own 10 most recent attempts on that set, newest first |
 | `GET /api/admin/users?q=…` | Admin | Users with role, sign-up date and number of sets, newest first; `q` matches part of an email or name (#60) |
 | `PATCH /api/admin/users/[id]` | Admin | Change a role: `{ role }` → `{ from, role }`; 409 if it would remove the last admin (#60) |
+| `GET /api/admin/sets?q=…` | Admin | Every set with owner, cards and number of classes it's assigned to, newest first; `q` matches a title or owner (#61) |
+| `DELETE /api/admin/sets/[id]` | Admin | Delete any set with its cards, assignments and saved results; logged → `{ deleted, assignments }` (#61) |
 
 Errors are JSON `{ error }` with 400 (bad input), 401 (not signed in), 403 (wrong role),
 404 (not found, *or* someone else's class), 409 (conflict, e.g. a role already chosen or
@@ -383,6 +385,22 @@ screen instead of shortening with "…".
 - If admins change their own role, the page reloads their profile, so the admin pages
   close right away if they're no longer an admin.
 
+### Admin: study sets (#61)
+
+- `/admin/sets` lists every set (newest first) with its owner, date, number of cards and
+  type, and an **Assigned to N classes** badge. It searches by title or owner. Legacy
+  sets show "No owner (old set)".
+- **Opening any set:** a new RLS policy lets admins read every set
+  (`private.is_admin()`), and cards follow their set, so the normal `/sets/[id]` page
+  works. Admins still can't edit or delete other people's sets through the database
+  API; edit controls stay owner-only.
+- **Deleting** asks first. For an assigned set, the confirmation says it will disappear
+  for those classes and that students' saved scores on it will be deleted.
+  `public.admin_delete_set()` (service role only) checks the actor is an admin, writes
+  the title, owner, type and number of classes to `audit_log`, and deletes the set in
+  the same transaction. Its cards, assignments and attempts cascade.
+- The optional "Report this set" button from #61 isn't built yet.
+
 The plan for teacher and admin features is tracked in #50.
 
 ## 3. Data model
@@ -414,6 +432,7 @@ The plan for teacher and admin features is tracked in #50.
 | `flashcard_sets` | Owner | Read, rename, delete their own sets |
 | `flashcard_sets` | Anyone | Read legacy sets with no owner |
 | `flashcard_sets` | Students in a class | Read a set while it's assigned to a class they're in (#56) |
+| `flashcard_sets` | Admins | Read every set, and so its cards (#61); no extra write rights |
 | `flashcard_sets` | Anyone | **Insert: nobody** (saves go through `/api/save-set`) |
 | `flashcards` | Anyone | Read a card exactly when they can read its set (the policy checks the set through the set's own RLS); no direct writes (edits go through `replace_set_cards()`, server-only) |
 | `profiles` | The user | Read their own row and update `display_name` only; anon has no access |
@@ -450,6 +469,11 @@ transaction. Run them after every database change.
 - `supabase/tests/assignments-rls-check.sql` (16 cases): an assigned student can open the
   set and its cards, a student outside the class can't, access ends on unassign, and
   only the owner can edit.
+- `supabase/tests/admin-sets-check.sql` (15 cases): an admin can read another user's
+  private set and its cards but can't delete it directly; others can't call the admin
+  functions; deleting through `admin_delete_set()` removes the cards, assignment and
+  results and is logged. `sets-rls-check.sql` picks a non-admin as its "other user",
+  since admins can now read every set.
 - `supabase/tests/admin-users-check.sql` (16 cases): browsers can't read `audit_log` or call
   the admin functions; a role change is logged; a non-admin is refused; the last admin
   can't step down (also after two admins demote each other in turn).

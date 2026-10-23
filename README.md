@@ -8,7 +8,7 @@ questions** with instant feedback and a score at the end. Sign in with Google to
 study guides, then rename, revisit, or delete them from **My Sets**. Signed in, every
 finished study session is saved with its score (flashcards are marked *Got it* or
 *Missed it*). Teachers can create classes, assign sets, and see each student's scores and
-the most-missed questions; students join with a code. Admins manage users' roles.
+the most-missed questions; students join with a code. Admins manage users' roles and can remove any study set.
 
 Live site: https://flash-forge-one.vercel.app
 
@@ -87,12 +87,14 @@ app/
   classes/page.tsx      My classes (students): join with a code, see assigned sets (done or not), leave
   admin/page.tsx        Admin home (admins only)
   admin/users/          Users and roles: search users, change roles
+  admin/sets/           Study sets: open or delete any set
   api/generate/         POST: extract text from the file, generate items with AI
   api/save-set/         POST: save a generated guide (signed-in users only)
   api/sets/[id]/cards/  PUT: save the owner's edited cards, all at once
   api/attempts/         POST: save a finished study session (scored on the server); GET: my recent scores
   api/profile/role/     POST: one-time student/teacher choice at sign-up
   api/admin/users/      Admin API: list users (GET), change a role (PATCH [id])
+  api/admin/sets/       Admin API: list sets (GET), delete one (DELETE [id])
   api/teacher/classes/  Teacher class API (list/create, rename/delete, new code, remove student,
                         change due date / unassign, student results, one student's attempts,
                         an assignment's hardest questions)
@@ -112,7 +114,7 @@ lib/
   gemini.ts             AI model chain, prompts, retries, output validation
   roles.ts              getAuthedUser / requireRole / chooseOwnRole (server-only)
   role-types.ts         Role types and helpers shared by server and client
-  admin.ts              Admin tools: list users, change roles (server-only)
+  admin.ts              Admin tools: users and roles, listing and deleting sets (server-only)
   card-rules.ts         Card rules shared by the editor and the server (validateCards)
   sets.ts               Study sets scoped to their owner; saving edited cards (server-only)
   ids.ts                isUuid() and newId(), shared by server and client

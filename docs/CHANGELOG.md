@@ -10,6 +10,9 @@ into `main`. There is only one Supabase database, so changes marked **(live)** a
 already applied there.
 
 ### Security
+- Admins can now read every study set (to check reported or broken content), but still
+  can't edit or delete other people's sets except through the logged admin delete
+  (#61). All 8 database check files pass (117 cases).
 - Role changes by admins happen in one locked database transaction that refuses to
   remove the last admin, and every change is written to a new server-only `audit_log`
   (#60, 16 of 16 database checks pass).
@@ -57,6 +60,10 @@ already applied there.
     can open them.
   - New `assignments` table. Students can read a set and its cards only while it's
     assigned to a class they're in.
+- **Admin: study sets** (#61, live database): `/admin/sets` lists every set with its
+  owner, cards and how many classes it's assigned to, with search. Admins can open any set
+  and delete it after a confirmation that warns when classes will lose it and students'
+  scores on it will be deleted. Deletions are logged in `audit_log`.
 - **Admin: users and roles** (#60, live database): admins get an **Admin** link and an
   `/admin/users` page to find any user (by email or name) and make them a student, teacher
   or admin, with a confirmation. The last admin can't be demoted, and each change is
@@ -102,7 +109,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 333 tests):
+- **Automated tests** (`npm test`, 346 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),
