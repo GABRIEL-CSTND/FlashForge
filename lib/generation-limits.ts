@@ -34,3 +34,12 @@ export function parseGenerationLimits(raw: unknown): GenerationLimits | null {
 export function limitMessage(limit: number): string {
   return `You've reached today's limit of ${limit} study guide${limit === 1 ? '' : 's'}.`;
 }
+
+// What the upload page shows when /api/generate fails. Over the daily limit it
+// adds when more can be made, in the viewer's own time zone.
+export function generateErrorText(status: number, body: { error?: unknown; resetsAt?: unknown }): string {
+  const message = typeof body.error === 'string' && body.error ? body.error : 'Failed to generate study guide.';
+  if (status !== 429 || typeof body.resetsAt !== 'string' || Number.isNaN(Date.parse(body.resetsAt))) return message;
+  const when = new Date(body.resetsAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  return `${message} You can make more after ${when}.`;
+}

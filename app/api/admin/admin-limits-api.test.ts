@@ -106,3 +106,17 @@ describe('limit rules', () => {
     expect(limitMessage(1)).toBe("You've reached today's limit of 1 study guide.");
   });
 });
+
+describe('upload page error text', () => {
+  it('adds when more can be made, only for the daily limit', async () => {
+    const { generateErrorText } = await import('@/lib/generation-limits');
+    const resetsAt = '2026-10-24T07:00:00Z';
+    const when = new Date(resetsAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+    expect(generateErrorText(429, { error: limitMessage(5), resetsAt })).toBe(
+      `You've reached today's limit of 5 study guides. You can make more after ${when}.`
+    );
+    expect(generateErrorText(503, { error: 'The AI is busy right now.', resetsAt })).toBe('The AI is busy right now.');
+    expect(generateErrorText(429, { error: limitMessage(5), resetsAt: 'soon' })).toBe(limitMessage(5));
+    expect(generateErrorText(500, {})).toBe('Failed to generate study guide.');
+  });
+});
