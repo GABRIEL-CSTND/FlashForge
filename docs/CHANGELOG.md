@@ -10,6 +10,9 @@ into `main`. There is only one Supabase database, so changes marked **(live)** a
 already applied there.
 
 ### Security
+- Role changes by admins happen in one locked database transaction that refuses to
+  remove the last admin, and every change is written to a new server-only `audit_log`
+  (#60, 16 of 16 database checks pass).
 - Study results can only be written by the server, which scores them from the real cards
   (#57). Teachers can read a student's results only for their own class's assignments,
   and never private study. All 6 database check files pass (86 cases).
@@ -54,6 +57,10 @@ already applied there.
     can open them.
   - New `assignments` table. Students can read a set and its cards only while it's
     assigned to a class they're in.
+- **Admin: users and roles** (#60, live database): admins get an **Admin** link and an
+  `/admin/users` page to find any user (by email or name) and make them a student, teacher
+  or admin, with a confirmation. The last admin can't be demoted, and each change is
+  logged with who, whom, from → to and when.
 - **Most-missed questions** (#59): from the results table, each assignment opens its
   questions hardest first, with the % of students who got each wrong (by their latest
   attempt) and, for multiple choice, the wrong answer picked most often. Edited sets are
@@ -95,7 +102,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 317 tests):
+- **Automated tests** (`npm test`, 333 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),

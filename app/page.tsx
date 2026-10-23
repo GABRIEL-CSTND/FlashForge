@@ -233,6 +233,11 @@ export default function UploadPage() {
         <div className="flex justify-end">
           {user ? (
             <div className="flex items-center gap-3 text-sm">
+              {profile?.role === 'admin' && (
+                <Link href="/admin" className="text-blue-500 hover:underline">
+                  Admin
+                </Link>
+              )}
               {canUseTeacherTools(profile?.role) && (
                 <Link href="/teacher" className="text-blue-500 hover:underline">
                   Teacher dashboard

@@ -27,11 +27,18 @@ describe('upload page header', () => {
     expect(links()).toEqual(['My Classes -> /classes', 'My Sets -> /my-sets']);
   });
 
-  it.each([['teacher'], ['admin']])('shows a %s the Teacher dashboard instead of My Classes', (role) => {
+  it.each([['teacher']])('shows a %s the Teacher dashboard instead of My Classes', (role) => {
     state.user = { id: 't', email: 't@example.com' };
     state.profile = { role, roleChosenAt: '2026-10-20' };
     render(<UploadPage />);
     expect(links()).toEqual(['Teacher dashboard -> /teacher', 'My Sets -> /my-sets']);
+  });
+
+  it('shows an admin the Admin pages and the Teacher dashboard', () => {
+    state.user = { id: 'a', email: 'a@example.com' };
+    state.profile = { role: 'admin', roleChosenAt: '2026-10-20' };
+    render(<UploadPage />);
+    expect(links()).toEqual(['Admin -> /admin', 'Teacher dashboard -> /teacher', 'My Sets -> /my-sets']);
   });
 
   it('shows only the sign-in button when signed out', () => {

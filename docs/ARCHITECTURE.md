@@ -11,6 +11,7 @@ flowchart LR
     U[Upload page<br/>app/page.tsx] --> SV[StudyViewer]
     MS[My Sets] --> SP["Set page<br/>/sets/[id]"]
     RC[RoleChooser<br/>one-time screen]
+    AP["Admin pages<br/>/admin, /admin/users"]
     T["Teacher pages<br/>/teacher, /teacher/classes/[id],<br/>/teacher/classes/[id]/results"]
     MC["My classes<br/>/classes"]
   end
@@ -20,6 +21,7 @@ flowchart LR
     EC["/api/sets/[id]/cards"]
     AS["/api/teacher/sets/[id]/assignments"] --> ASL[lib/assignments.ts]
     R["/api/profile/role"]
+    AA["/api/admin/..."] --> ADL[lib/admin.ts]
     TC["/api/teacher/classes/..."] --> CL[lib/classes.ts]
     TC --> CR[lib/class-results.ts]
     SC["/api/student/classes/..."] --> SCL[lib/student-classes.ts]
@@ -45,6 +47,8 @@ flowchart LR
   ASL -->|service-role key, scoped to the teacher| DB
   U --> AUTH
   RC --> R -->|service-role key| DB
+  AP --> AA
+  ADL -->|"service-role key, admin_* functions"| DB
   T --> TC
   CL -->|service-role key, scoped to the teacher| DB
   CR -->|service-role key, own class and current students| DB
@@ -82,6 +86,8 @@ writes with the service-role key. Browsers read only what RLS allows (section 4)
 | `DELETE /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | Unassign; students lose access right away |
 | `POST /api/attempts` | Signed in, can open the set | Save a finished study session: `{ id, setId, assignmentId?, answers }` → 201 with the scored attempt, or 200 if that `id` was already saved (#57) |
 | `GET /api/attempts?setId=…` | Signed in | The caller's own 10 most recent attempts on that set, newest first |
+| `GET /api/admin/users?q=…` | Admin | Users with role, sign-up date and number of sets, newest first; `q` matches part of an email or name (#60) |
+| `PATCH /api/admin/users/[id]` | Admin | Change a role: `{ role }` → `{ from, role }`; 409 if it would remove the last admin (#60) |
 
 Errors are JSON `{ error }` with 400 (bad input), 401 (not signed in), 403 (wrong role),
 404 (not found, *or* someone else's class), 409 (conflict, e.g. a role already chosen or
@@ -191,8 +197,8 @@ screen instead of shortening with "…".
     errors, so it can never block a sign-up.
   - Users can read their own profile and change only `display_name`, through a
     column-level grant. **They can never change their own role.**
-  - The first admins come from `supabase/seed-admins.sql`; later ones will be added
-    in-app (#60).
+  - The first admins come from `supabase/seed-admins.sql`; later ones are added in-app on
+    `/admin/users` (#60).
 - **Choosing a role at sign-up** (#52):
   - `components/ProfileProvider.tsx` (in the root layout) loads the user's own profile,
     which RLS allows, and shares it with every page through `useProfile()`.
@@ -230,7 +236,7 @@ screen instead of shortening with "…".
 - A teacher can have at most 50 classes (`MAX_CLASSES_PER_TEACHER`), since anyone can
   pick "teacher" at sign-up.
 - **Admins** can use all teacher features, but only on classes they created themselves.
-  Seeing other teachers' classes would be an admin feature (#60/#61).
+  Admins can't see other teachers' classes.
 
 ### Joining a class (#54)
 
@@ -356,6 +362,27 @@ screen instead of shortening with "…".
 - Ties are broken by how many students got it wrong, then by card order.
   `questionStats()` in `lib/class-results.ts` does the counting.
 
+### Admin: users and roles (#60)
+
+- Admins get an **Admin** link in the header, to `/admin` and `/admin/users`
+  (`components/AdminOnly.tsx`). The page lists every user (newest first) with their role,
+  sign-up date and number of saved sets, and searches by part of an email or name.
+- **Changing a role** (student, teacher or admin) asks first, then calls
+  `PATCH /api/admin/users/[id]`. This is how new admins are added after the seeded ones.
+- **All in one database function**, `public.admin_change_role()` (service role only):
+  - It checks the actor is an admin. The route has already checked with
+    `requireRole(req, ['admin'])`.
+  - It locks every admin row before counting, so two admins demoting each other at
+    the same moment can't both succeed.
+  - It refuses to demote the **last admin** (the route answers 409).
+  - It sets `role_chosen_at`, so the sign-up chooser (#52) never offers a demoted user
+    "teacher" again.
+  - It writes **who, whom, from → to and when** to `audit_log`. Setting the same role
+    again changes nothing and isn't logged.
+- Emails come from `public.admin_list_users()`, also service-role only.
+- If admins change their own role, the page reloads their profile, so the admin pages
+  close right away if they're no longer an admin.
+
 The plan for teacher and admin features is tracked in #50.
 
 ## 3. Data model
@@ -369,6 +396,7 @@ The plan for teacher and admin features is tracked in #50.
 | `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
 | `class_join_failures` | `id`, `user_id` → `auth.users` (cascade), `attempted_at` | Wrong join codes for the rate limit; indexed on (`user_id`, `attempted_at`); old rows are deleted as new ones arrive |
 | `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `due_at` (nullable), `created_at` | Unique (`class_id`, `set_id`); indexed on `set_id` |
+| `audit_log` | `id`, `actor_id` → `auth.users` (set null), `action` (`role_change` \| `set_delete`), `target_id`, `details` (jsonb), `created_at` | Admin actions (#60). `target_id` has no foreign key, so entries survive the target being deleted. Indexed on `created_at` |
 | `attempts` | `id` (made by the browser), `user_id` → `auth.users` (cascade), `set_id` → `flashcard_sets` (cascade), `assignment_id` → `assignments` (set null), `study_type`, `score`, `total`, `answers` (jsonb), `completed_at` | One row per finished study session (#57). `total > 0` and `0 ≤ score ≤ total`. Indexed on (`user_id`, `set_id`, `completed_at`) and on `assignment_id` |
 
 ## 4. Security model
@@ -393,6 +421,7 @@ The plan for teacher and admin features is tracked in #50.
 | `class_members` | Student / teacher | A student reads their own memberships; the teacher reads their roster; no direct writes (joining and leaving go through the server) |
 | `class_join_failures` | Nobody | Server-only: no grants or policies for anon or signed-in users |
 | `assignments` | Teacher / members | The class's teacher and its members read its assignments; no direct writes |
+| `audit_log` | Nobody | Server-only: no grants or policies for anon or signed-in users (#60) |
 | `attempts` | Student / teacher | A student reads their own attempts; the class's teacher reads attempts made from their class's assignments while the student is in the class (never private study); no direct writes (#57) |
 
 The `classes` and `class_members` policies need to check each other, which would make RLS
@@ -421,6 +450,9 @@ transaction. Run them after every database change.
 - `supabase/tests/assignments-rls-check.sql` (16 cases): an assigned student can open the
   set and its cards, a student outside the class can't, access ends on unassign, and
   only the owner can edit.
+- `supabase/tests/admin-users-check.sql` (16 cases): browsers can't read `audit_log` or call
+  the admin functions; a role change is logged; a non-admin is refused; the last admin
+  can't step down (also after two admins demote each other in turn).
 - `supabase/tests/attempts-rls-check.sql` (17 cases): students read only their own
   attempts and can't write any; a teacher sees attempts from their class's assignment but
   not private study, and stops seeing them when the student leaves or the set is

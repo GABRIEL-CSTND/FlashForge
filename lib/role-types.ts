@@ -15,6 +15,9 @@ export function isSelfSelectableRole(value: unknown): value is SelfSelectableRol
 // Roles that can use teacher features. Admins can do everything teachers can.
 export const TEACHER_ROLES: readonly Role[] = ['teacher', 'admin'];
 
+// Roles that can use the admin pages and routes (#60).
+export const ADMIN_ROLES: readonly Role[] = ['admin'];
+
 // Roles that join classes as members (#54).
 export const STUDENT_ROLES: readonly Role[] = ['student'];
 
