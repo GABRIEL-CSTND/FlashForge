@@ -38,6 +38,11 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **Paste text** (#70): the upload page has an *Upload a file / Paste text* switch, so notes
+  from Google Docs, a website or a chat can be used without making a file. Up to 30,000
+  characters (what the AI reads from a file), with a counter and a clear message when the
+  text is too short or too long. The guide is titled by the text's first line. Part of
+  more file types (#20).
 - **Mixed quiz** (#69, live database): a study guide laid out like a school exam, made with
   one AI request: Part I multiple choice (about 40%), Part II true or false (30%) and
   Part III identification (30%, typed and checked). Studied part by part, with each

@@ -192,3 +192,39 @@ describe('/api/generate options', () => {
     expect(sentOptions()).toEqual([['flashcard', 10]]);
   });
 });
+
+describe('/api/generate with pasted notes (#70)', () => {
+  const paste = (text: string) => {
+    const form = new FormData();
+    form.append('text', text);
+    form.append('studyType', 'flashcard');
+    return POST(new NextRequest('http://localhost/api/generate', { method: 'POST', body: form, headers: asSam }));
+  };
+
+  it('makes a guide from the text, titled by its first line', async () => {
+    const res = await paste('Photosynthesis basics\nThe stroma holds the Calvin cycle; chlorophyll absorbs light.');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ title: 'Photosynthesis basics', sourceFilename: null, studyType: 'flashcard' });
+    expect(vi.mocked(generateStudyItems).mock.calls[0][0]).toBe(
+      'Photosynthesis basics\nThe stroma holds the Calvin cycle; chlorophyll absorbs light.'
+    );
+  });
+
+  it('counts each line break as one character, as the upload page does', async () => {
+    const text = 'Photosynthesis line.\n'.repeat(1_428); // 29,988 characters with \n, 31,416 with \r\n
+    expect(text.length).toBe(29_988);
+    expect((await paste(text)).status).toBe(200);
+  });
+
+  it.each([
+    ['too short', 'Stroma', 'Paste at least a sentence or two of your notes.'],
+    ['too long', 'x'.repeat(30_001), "That's 30,001 characters. Paste up to 30,000, or upload it as a file."],
+  ])('refuses text that is %s, without calling the AI', async (_label, text, error) => {
+    const res = await paste(text);
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error });
+    expect(generateStudyItems).not.toHaveBeenCalled();
+    await runAfter();
+    expect(logged().map((r) => r.error_kind)).toEqual(['unreadable']);
+  });
+});

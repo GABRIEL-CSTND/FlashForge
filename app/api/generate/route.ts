@@ -1,6 +1,7 @@
 import { after, NextRequest, NextResponse } from 'next/server';
 import { generateStudyItems, GeminiError } from '@/lib/gemini';
 import { isStudyType, parseQuestionCount } from '@/lib/study-types';
+import { MIN_SOURCE_CHARS, pastedTextProblem, titleFromText } from '@/lib/sources';
 import {
   identifyCaller,
   recordGeneration,
@@ -51,6 +52,10 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
+    // Pasted notes (#70) come instead of a file. Forms send each line break as
+    // CR LF; count it as one character, like the upload page does.
+    const pastedRaw = formData.get('text');
+    const pasted = typeof pastedRaw === 'string' ? pastedRaw.replace(/\r\n?/g, '\n') : null;
     const studyTypeRaw = formData.get('studyType');
     const studyType = isStudyType(studyTypeRaw) ? studyTypeRaw : 'flashcard';
     log.studyType = studyType;
@@ -77,24 +82,37 @@ export async function POST(req: NextRequest) {
       console.error('[generate] daily limit check failed:', err);
     }
 
-    if (!file) {
-      return done(NextResponse.json({ error: 'Missing file' }, { status: 400 }), { success: false, errorKind: 'no_file' });
-    }
-
     let text: string;
-    try {
-      text = await extractText(file);
-    } catch (err) {
-      console.error('[generate] text extraction failed:', err);
-      return done(
-        NextResponse.json(
-          { error: "We couldn't read this file. Please try a different PDF or TXT file." },
-          { status: 422 }
-        ),
-        { success: false, errorKind: 'unreadable' }
-      );
+    let title: string;
+    let sourceFilename: string | null;
+    if (pasted !== null) {
+      const problem = pastedTextProblem(pasted);
+      if (problem) {
+        return done(NextResponse.json({ error: problem }, { status: 422 }), { success: false, errorKind: 'unreadable' });
+      }
+      text = pasted;
+      title = titleFromText(pasted);
+      sourceFilename = null;
+    } else {
+      if (!file) {
+        return done(NextResponse.json({ error: 'Missing file' }, { status: 400 }), { success: false, errorKind: 'no_file' });
+      }
+      try {
+        text = await extractText(file);
+      } catch (err) {
+        console.error('[generate] text extraction failed:', err);
+        return done(
+          NextResponse.json(
+            { error: "We couldn't read this file. Please try a different PDF or TXT file." },
+            { status: 422 }
+          ),
+          { success: false, errorKind: 'unreadable' }
+        );
+      }
+      title = file.name.replace(/\.[^/.]+$/, '');
+      sourceFilename = file.name;
     }
-    if (!text || text.trim().length < 20) {
+    if (!text || text.trim().length < MIN_SOURCE_CHARS) {
       return done(
         NextResponse.json({ error: 'Could not extract enough readable text from this file.' }, { status: 422 }),
         { success: false, errorKind: 'unreadable' }
@@ -110,8 +128,8 @@ export async function POST(req: NextRequest) {
 
     return done(
       NextResponse.json({
-        title: file.name.replace(/\.[^/.]+$/, ''),
-        sourceFilename: file.name,
+        title,
+        sourceFilename,
         studyType,
         items,
         // Which model produced this guide (Gemini, or the Gemma backup).

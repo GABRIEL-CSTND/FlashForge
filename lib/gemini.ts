@@ -1,4 +1,5 @@
 import { CARD_LIMITS, normalizeChoice, toTrueFalse, TRUE_FALSE_OPTIONS } from '@/lib/card-rules';
+import { MAX_SOURCE_CHARS } from '@/lib/sources';
 import {
   DEFAULT_QUESTION_COUNT,
   MIXED_PARTS,
@@ -438,7 +439,7 @@ Base everything strictly on the provided text. Avoid trivial or overly broad que
 
 TEXT:
 """
-${sourceText.slice(0, 30000)}
+${sourceText.slice(0, MAX_SOURCE_CHARS)}
 """`;
 
   const bodies: Record<ModelFamily, string> = {

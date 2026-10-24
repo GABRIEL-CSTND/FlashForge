@@ -17,13 +17,15 @@ import {
   STUDY_TYPES,
   type StudyType,
 } from '@/lib/study-types';
+import { MAX_SOURCE_CHARS, pastedTextProblem, SOURCE_KINDS, SOURCE_LABELS, type SourceKind } from '@/lib/sources';
 
 const ACCEPTED_TYPES = ['application/pdf', 'text/plain'];
 const ACCEPTED_EXT = ['.pdf', '.txt'];
 
 interface GeneratedResult {
   title: string;
-  sourceFilename: string;
+  // Null for pasted notes (#70).
+  sourceFilename: string | null;
   studyType: StudyType;
   items: StudyItem[];
 }
@@ -38,7 +40,9 @@ export default function UploadPage() {
   const router = useRouter();
   const { user } = useUser();
   const { profile } = useProfile();
+  const [source, setSource] = useState<SourceKind>('file');
   const [file, setFile] = useState<File | null>(null);
+  const [pasted, setPasted] = useState('');
   const [studyType, setStudyType] = useState<StudyType>('flashcard');
   const [count, setCount] = useState<number>(DEFAULT_QUESTION_COUNT);
   const [dragActive, setDragActive] = useState(false);
@@ -88,13 +92,27 @@ export default function UploadPage() {
     if (selected) validateAndSetFile(selected);
   };
 
+  const chooseSource = (kind: SourceKind) => {
+    setSource(kind);
+    setErrorMsg('');
+    setStatus('idle');
+  };
+
   const handleSubmit = async () => {
-    if (!file) return;
+    if (source === 'file' && !file) return;
+    // Pasted notes (#70) are checked here, before anything is sent.
+    const problem = source === 'text' ? pastedTextProblem(pasted) : null;
+    if (problem) {
+      setErrorMsg(problem);
+      setStatus('error');
+      return;
+    }
     setStatus('generating');
     setErrorMsg('');
 
     const formData = new FormData();
-    formData.append('file', file);
+    if (source === 'file') formData.append('file', file!);
+    else formData.append('text', pasted);
     formData.append('studyType', studyType);
     formData.append('count', String(count));
 
@@ -283,7 +301,7 @@ export default function UploadPage() {
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-semibold">FlashForge</h1>
           <p className="text-sm text-gray-500">
-            Upload a file and get an AI-generated study guide.
+            Upload a file or paste your notes, and get an AI-generated study guide.
           </p>
         </div>
 
@@ -330,6 +348,39 @@ export default function UploadPage() {
           </div>
         </div>
 
+        <div role="group" aria-label="Where are your notes?" className="grid grid-cols-2 gap-1 rounded-lg border p-1">
+          {SOURCE_KINDS.map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              onClick={() => chooseSource(kind)}
+              aria-pressed={source === kind}
+              className={`rounded-md py-1.5 text-sm font-medium transition-colors ${
+                source === kind ? 'bg-accent text-white' : 'text-gray-500 hover:text-foreground'
+              }`}
+            >
+              {SOURCE_LABELS[kind]}
+            </button>
+          ))}
+        </div>
+
+        {source === 'text' ? (
+          <div className="space-y-1">
+            <textarea
+              aria-label="Your notes"
+              value={pasted}
+              onChange={(e) => setPasted(e.target.value)}
+              rows={8}
+              placeholder="Paste your notes here, from Google Docs, a website, or a chat."
+              className="w-full rounded-xl border bg-transparent p-3 text-sm"
+            />
+            <p
+              className={`text-right text-xs tabular-nums ${pasted.length > MAX_SOURCE_CHARS ? 'text-red-500' : 'text-gray-400'}`}
+            >
+              {pasted.length.toLocaleString('en-US')} / {MAX_SOURCE_CHARS.toLocaleString('en-US')} characters
+            </p>
+          </div>
+        ) : (
         <div
           onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
           onDragLeave={() => setDragActive(false)}
@@ -356,6 +407,7 @@ export default function UploadPage() {
             )}
           </label>
         </div>
+        )}
 
         {status === 'error' && (
           <p className="text-sm text-red-500 text-center">{errorMsg}</p>
@@ -363,7 +415,7 @@ export default function UploadPage() {
 
         <button
           onClick={handleSubmit}
-          disabled={!file || status === 'generating'}
+          disabled={(source === 'file' ? !file : !pasted.trim()) || status === 'generating'}
           className="btn btn-primary btn-lg w-full"
         >
           {status === 'generating' &&

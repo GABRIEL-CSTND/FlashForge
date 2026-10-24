@@ -2,7 +2,7 @@
 
 Upload your notes and get an AI-generated study guide in seconds.
 
-FlashForge turns a PDF or TXT file into a study guide of 5 to 30 questions (10 by
+FlashForge turns a PDF or TXT file, or notes pasted as text, into a study guide of 5 to 30 questions (10 by
 default): **identification-style flashcards** (a clue on the front, a 1–4 word term on
 the back), **multiple-choice questions**, **true-or-false statements** with the
 correction shown after each false one, or a **mixed quiz** set out like a school exam
@@ -132,6 +132,7 @@ lib/
   generation-limits.ts  Daily limits per role: rules and message (shared)
   card-rules.ts         Card rules shared by the editor and the server (validateCards)
   study-types.ts        Study types, their labels, ways to study flashcards, question count rules (shared)
+  sources.ts            Where notes come from (file or pasted text) and their limits (shared)
   answer-check.ts       Checking typed answers (capitals, accents, one typo), shared by the study screen and server
   sets.ts               Study sets scoped to their owner; saving edited cards (server-only)
   ids.ts                isUuid() and newId(), shared by server and client

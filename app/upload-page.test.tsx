@@ -73,6 +73,33 @@ describe('upload page options', () => {
     expect(screen.getByText(/Part I multiple choice, Part II true or false, Part III identification/)).toBeTruthy();
   });
 
+  it('sends pasted notes instead of a file (#70)', async () => {
+    render(<UploadPage />);
+    expect(pressed('Where are your notes?')).toEqual(['Upload a file']);
+    fireEvent.click(screen.getByRole('button', { name: 'Paste text' }));
+    const box = screen.getByRole('textbox', { name: 'Your notes' });
+    const generate = screen.getByRole('button', { name: 'Generate Study Guide' }) as HTMLButtonElement;
+    expect(generate.disabled).toBe(true);
+
+    fireEvent.change(box, { target: { value: 'Stroma' } });
+    fireEvent.click(generate);
+    expect(screen.getByText('Paste at least a sentence or two of your notes.')).toBeTruthy();
+    expect(sentForms).toEqual([]);
+
+    fireEvent.change(box, { target: { value: 'x'.repeat(30_001) } });
+    expect(screen.getByText('30,001 / 30,000 characters').className).toContain('text-red-500');
+    fireEvent.click(generate);
+    expect(screen.getByText(/That's 30,001 characters/)).toBeTruthy();
+    expect(sentForms).toEqual([]);
+
+    fireEvent.change(box, { target: { value: 'The stroma is the fluid inside the chloroplast.' } });
+    fireEvent.click(generate);
+    expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
+    expect(sentForms).toEqual([
+      { text: 'The stroma is the fluid inside the chloroplast.', studyType: 'flashcard', count: '10' },
+    ]);
+  });
+
   it('sends the chosen study type and question count with the file (#65)', async () => {
     render(<UploadPage />);
     fireEvent.click(screen.getByRole('button', { name: 'Multiple choice' }));

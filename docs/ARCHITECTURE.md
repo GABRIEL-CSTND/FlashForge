@@ -134,13 +134,19 @@ screen instead of shortening with "…".
 
 1. **Upload** (`app/page.tsx`): the user picks *Flashcards*, *Multiple choice*, *True or
    false* (#68) or *Mixed quiz* (#69), with a line under the choice saying what it is, how many questions (5,
-   10, 15, 20 or 30; 10 by default, #65), and drops a `.pdf` or `.txt` file. Nothing is
-   saved yet.
+   10, 15, 20 or 30; 10 by default, #65), and drops a `.pdf` or `.txt` file, or switches to
+   **Paste text** (#70) and pastes their notes. Pasted text must be 20 to 30,000 characters
+   (`pastedTextProblem()` in `lib/sources.ts`), checked before anything is sent, with a
+   character counter under the box. Nothing is saved yet.
 2. **`POST /api/generate`** (`app/api/generate/route.ts`, `maxDuration = 90`):
    - Checks the caller's **daily limit** first (#63). Over it, the answer is 429 and the AI
      isn't called. See "Daily generation limits" below.
    - Extracts text: PDFs with `unpdf`, TXT as UTF-8. Unreadable files get HTTP 422
      with a friendly message.
+   - Or takes pasted notes from the `text` field (#70), with line breaks counted as one
+     character as on the page (forms send them as CR LF), and the same 20 to 30,000
+     character rule (422 otherwise). The title is the text's first line if it's short,
+     otherwise its first words (`titleFromText()`), and `sourceFilename` is null.
    - Calls `generateStudyItems(text, studyType, { count })` and returns
      `{ title, sourceFilename, studyType, items, model }`. `count` comes from the form:
      any whole number from 5 to 30, otherwise 10 (`parseQuestionCount()` in
@@ -697,7 +703,8 @@ transaction. Run them after every database change.
 - **Legacy sets with no owner (28 of them) are publicly readable**, and nobody can edit
   their cards.
 - **Text extraction:** only the first 30,000 characters are used (#38), PDFs are
-  uploaded to the server whole (#44), and only PDF and TXT are supported (#20).
+  uploaded to the server whole (#44), and files can only be PDF or TXT so far; notes can also
+  be pasted (#20, #70).
 - **3 existing ESLint errors** (`react-hooks/set-state-in-effect`) in `app/page.tsx` and
   `app/my-sets/page.tsx`.
 - **Flipped flashcard scores are self-reported** (*Got it* / *Missed it*). Typed (#66) and
