@@ -39,11 +39,13 @@ describe('file types (#71)', () => {
   const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
   it('knows each file by its extension or its type', () => {
-    expect(FILE_ACCEPT).toBe('.pdf,.docx,.pptx,.txt');
+    expect(FILE_ACCEPT).toBe('.pdf,.docx,.pptx,.txt,.jpg,.jpeg,.png,.webp');
     expect(fileKind('Lecture 3.PPTX', '')).toBe('pptx');
     expect(fileKind('handout', DOCX)).toBe('docx');
     expect(fileKind('notes.txt', 'text/plain')).toBe('txt');
-    expect(fileKind('photo.png', 'image/png')).toBeNull();
+    expect(fileKind('photo.png', 'image/png')).toBe('png');
+    expect(fileKind('IMG_2034.JPEG', '')).toBe('jpeg');
+    expect(fileKind('scan.heic', 'image/heic')).toBeNull();
   });
 
   it('explains what to do with files it cannot take', () => {
@@ -53,7 +55,9 @@ describe('file types (#71)', () => {
     expect(fileProblem('essay.doc', 'application/msword', 1000)).toBe(
       "Older Word (.doc) files can't be read. Save it as .docx or PDF first."
     );
-    expect(fileProblem('song.mp3', 'audio/mpeg', 1000)).toBe('Upload a PDF, Word, PowerPoint or TXT file.');
+    expect(fileProblem('song.mp3', 'audio/mpeg', 1000)).toBe(
+      'Upload a PDF, Word, PowerPoint or TXT file, or a photo (JPG, PNG or WebP).'
+    );
     expect(fileProblem('big.pdf', 'application/pdf', 5.5 * 1024 * 1024)).toBe(
       'This file is 5.5 MB. Files can be up to 4 MB; try a smaller file or paste the text instead.'
     );

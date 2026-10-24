@@ -187,3 +187,28 @@ describe('mixed quiz (#69)', () => {
     expect(kinds(items)).toBe('mc,mc,mc,mc,tf,tf,tf,id,id,id');
   });
 });
+
+describe('photos (#72)', () => {
+  const photo = { mimeType: 'image/jpeg', data: 'AAAA' };
+
+  it('sends the photo with the prompt instead of text', async () => {
+    mockModel(() => reply(flashcards(11)));
+    const { items } = await generateStudyItems('', 'flashcard', { attachment: photo });
+    expect(items).toHaveLength(10);
+    const parts = (sent[0].body.contents as { parts: Record<string, unknown>[] }[])[0].parts;
+    expect(parts[1]).toEqual({ inlineData: { mimeType: 'image/jpeg', data: 'AAAA' } });
+    expect(sent[0].prompt).toContain('from the attached photo');
+    expect(sent[0].prompt).toContain('If the photo has no readable study material, return an empty array []');
+    expect(sent[0].prompt).not.toContain('TEXT:');
+  });
+
+  it('says so right away when the AI finds nothing to study in the photo', async () => {
+    mockModel(() => reply([]));
+    await expect(generateStudyItems('', 'flashcard', { attachment: photo })).rejects.toMatchObject({
+      unreadable: true,
+      retryable: false,
+      userMessage: "We couldn't find any notes to study in this file. Try a clearer, brighter photo, or paste the text.",
+    });
+    expect(sent).toHaveLength(1);
+  });
+});

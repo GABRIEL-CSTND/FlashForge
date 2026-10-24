@@ -151,6 +151,11 @@ screen instead of shortening with "…".
      runs paragraph by paragraph. Slides come in order, then the speaker notes. A part over
      10 MB unzipped, or 40 MB in all, is refused, so a small "zip bomb" can't use up the
      server's memory. Unreadable files get HTTP 422 with a friendly message.
+   - Photos (JPG, PNG or WebP, #72) aren't turned into text: they go to the AI as an
+     attachment (`inlineData`) next to the prompt. The upload page shrinks them first
+     (`lib/shrink-image.ts`: longest side 1,600 pixels, JPEG at 85%; small photos are
+     sent as they are), so a 3–8 MB phone photo fits under the 4 MB limit. Browsers turn
+     the photo the right way up when decoding it.
    - Or takes pasted notes from the `text` field (#70), with line breaks counted as one
      character as on the page (forms send them as CR LF), and the same 20 to 30,000
      character rule (422 otherwise). The title is the text's first line if it's short,
@@ -220,6 +225,15 @@ screen instead of shortening with "…".
   as a failed attempt. In a test on sample history notes (2026-10-24), 10 questions came
   back as 4 + 3 + 3, all well formed (the main model was busy, so the lite backup wrote
   it, in 12.5 seconds with the retries).
+- *Photos* (#72): the prompt says the material is the attached photo and asks for an
+  empty list if it has no readable study material. An empty list from a photo is answered
+  straight away with 422 *"We couldn't find any notes to study in this file. Try a
+  clearer, brighter photo, or paste the text."* (`GeminiError.unreadable`), with no
+  retries. Each attempt gets 15 seconds more: a 5-question guide from a photo took 19.5
+  seconds on `gemini-3.5-flash` in a test (2026-10-24). In the same test the Gemma backup
+  read the photo too, so photos use the whole model chain. The upload page waits 15
+  seconds longer before showing the "slower backup" notice and says *"Reading your
+  photo…"*.
 - **Spares:** items that fail validation are dropped, so the prompt asks for 10% more
   flashcards or true-or-false statements, or 20% more multiple-choice questions, than the
   user chose (11 or 12 for 10),
@@ -712,7 +726,9 @@ transaction. Run them after every database change.
   their cards.
 - **Text extraction:** only the first 30,000 characters are used (#38), PDFs are
   uploaded to the server whole (#44), files are limited to 4 MB, and only PDF, Word,
-  PowerPoint and TXT files work so far; notes can also be pasted (#20, #70, #71). Text
+  PowerPoint and TXT files and JPG, PNG or WebP photos work so far (HEIC photos from a
+  computer aren't accepted; phones convert them when uploading); notes can also be
+  pasted (#20, #70, #71, #72). Text
   boxes in Word files may come out on their own lines.
 - **3 existing ESLint errors** (`react-hooks/set-state-in-effect`) in `app/page.tsx` and
   `app/my-sets/page.tsx`.

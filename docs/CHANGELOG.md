@@ -38,6 +38,11 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **Photos of notes** (#72): upload a JPG, PNG or WebP photo of notes, a whiteboard or a
+  textbook page. The AI reads the photo itself, still in one request. Big phone photos are
+  shrunk in the browser first (to 1,600 pixels), and a photo with nothing readable gets a
+  clear message instead of an error. In a test, a photo of handwritten-style cell biology
+  notes gave 5 good flashcards, and the Gemma backup could read it too.
 - **Word and PowerPoint files** (#71): the upload page takes `.docx` and `.pptx` (slides in
   order, then speaker notes) besides PDF and TXT. Old `.doc` and `.ppt` files get a clear
   "save it as .docx/.pptx or PDF first", and files over 4 MB are stopped before upload

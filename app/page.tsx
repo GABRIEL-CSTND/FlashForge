@@ -17,10 +17,13 @@ import {
   STUDY_TYPES,
   type StudyType,
 } from '@/lib/study-types';
+import { shrinkImage } from '@/lib/shrink-image';
 import {
   FILE_ACCEPT,
   FILE_TYPES_TEXT,
+  fileKind,
   fileProblem,
+  isPhoto,
   MAX_SOURCE_CHARS,
   pastedTextProblem,
   SOURCE_KINDS,
@@ -74,7 +77,18 @@ export default function UploadPage() {
     }
   }, []);
 
-  const validateAndSetFile = (f: File) => {
+  const validateAndSetFile = async (chosen: File) => {
+    // Photos (#72) are shrunk first, so a big phone photo still fits.
+    let f = chosen;
+    if (isPhoto(fileKind(chosen.name, chosen.type))) {
+      try {
+        f = await shrinkImage(chosen);
+      } catch {
+        setErrorMsg("We couldn't open this photo. Try a JPG or PNG.");
+        setStatus('error');
+        return;
+      }
+    }
     const problem = fileProblem(f.name, f.type, f.size);
     if (problem) {
       setErrorMsg(problem);
@@ -104,6 +118,8 @@ export default function UploadPage() {
     setStatus('idle');
   };
 
+  const sendingPhoto = source === 'file' && file !== null && isPhoto(fileKind(file.name, file.type));
+
   const handleSubmit = async () => {
     if (source === 'file' && !file) return;
     // Pasted notes (#70) are checked here, before anything is sent.
@@ -124,7 +140,8 @@ export default function UploadPage() {
 
     // Past this point the main AI is probably out of quota and the slower
     // backup model is answering, so tell the user it can take up to a minute.
-    const slowTimer = setTimeout(() => setSlowGeneration(true), slowNoticeMs(count));
+    // Photos (#72) take longer to read anyway.
+    const slowTimer = setTimeout(() => setSlowGeneration(true), slowNoticeMs(count) + (sendingPhoto ? 15_000 : 0));
     let res: Response;
     try {
       // When signed in, send the session token so the usage log (#62) knows who
@@ -425,9 +442,11 @@ export default function UploadPage() {
           className="btn btn-primary btn-lg w-full"
         >
           {status === 'generating' &&
-            (count > DEFAULT_QUESTION_COUNT
-              ? `Generating ${count} questions (this can take ~30s)...`
-              : 'Generating (this can take ~20s)...')}
+            (sendingPhoto
+              ? 'Reading your photo (this can take ~30s)...'
+              : count > DEFAULT_QUESTION_COUNT
+                ? `Generating ${count} questions (this can take ~30s)...`
+                : 'Generating (this can take ~20s)...')}
           {(status === 'idle' || status === 'error') && 'Generate Study Guide'}
         </button>
 

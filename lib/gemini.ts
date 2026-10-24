@@ -100,20 +100,40 @@ export interface GeneratedItem {
 }
 
 // `message` is the detailed reason for server logs; `userMessage` is safe to
-// show in the UI.
+// show in the UI. `unreadable`: the AI found nothing to study in an attached
+// file (#72), so trying again won't help.
 export class GeminiError extends Error {
   userMessage: string;
   retryable: boolean;
   status?: number;
+  unreadable: boolean;
 
-  constructor(message: string, opts: { retryable: boolean; status?: number; userMessage?: string }) {
+  constructor(
+    message: string,
+    opts: { retryable: boolean; status?: number; userMessage?: string; unreadable?: boolean }
+  ) {
     super(message);
     this.name = 'GeminiError';
     this.retryable = opts.retryable;
     this.status = opts.status;
+    this.unreadable = opts.unreadable ?? false;
     this.userMessage = opts.userMessage ?? (opts.retryable ? BUSY_MESSAGE : GENERIC_MESSAGE);
   }
 }
+
+// A photo (#72) the AI reads itself, instead of text taken out of a file.
+export interface Attachment {
+  mimeType: string;
+  // Base64.
+  data: string;
+}
+
+// Reading a photo takes longer: a 5-question guide from one took 19.5s on
+// gemini-3.5-flash (2026-10-24), against about 1.4-12s from text.
+const ATTACHMENT_EXTRA_MS = 15_000;
+
+const NOTHING_TO_READ =
+  "We couldn't find any notes to study in this file. Try a clearer, brighter photo, or paste the text.";
 
 const TYPE_INSTRUCTIONS: Record<SingleType, string> = {
   flashcard: `Create identification-style flashcards.
@@ -367,7 +387,9 @@ async function callModel(
   model: string,
   apiKey: string,
   body: string,
-  timeoutMs: number
+  timeoutMs: number,
+  // For an attachment, an empty list means the AI found nothing to study.
+  emptyMeansUnreadable = false
 ): Promise<{ items: GeneratedItem[]; outputTokens?: number }> {
   let res: Response;
   try {
@@ -410,6 +432,13 @@ async function callModel(
     throw new GeminiError('response was not valid JSON', { retryable: true });
   }
   if (!Array.isArray(items) || items.length === 0) {
+    if (emptyMeansUnreadable && Array.isArray(items)) {
+      throw new GeminiError('nothing to study in the attachment', {
+        retryable: false,
+        unreadable: true,
+        userMessage: NOTHING_TO_READ,
+      });
+    }
     throw new GeminiError('response contained no study items', { retryable: true });
   }
 
@@ -422,18 +451,26 @@ export async function generateStudyItems(
   {
     count = DEFAULT_QUESTION_COUNT,
     onRequest,
+    attachment,
   }: {
     // How many items the guide should have (#65); callers check the range.
     count?: number;
     // Called before each request to a model, retries and fallbacks included,
     // so callers can count what uses up the quota (#62).
     onRequest?: (model: string) => void;
+    // A photo to read instead of `sourceText` (#72).
+    attachment?: Attachment;
   } = {}
 ): Promise<{ items: GeneratedItem[]; model: string }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new GeminiError('GEMINI_API_KEY is not set', { retryable: false });
 
-  const prompt = `You are creating a study guide from the text below.
+  const prompt = attachment
+    ? `You are creating a study guide from the attached photo (of notes, a whiteboard, or a page).
+Produce exactly ${requestedCount(studyType, count)} items. ${instructionsFor(studyType, count)}
+Base everything strictly on what the photo shows. Avoid trivial or overly broad questions.
+If the photo has no readable study material, return an empty array [].`
+    : `You are creating a study guide from the text below.
 Produce exactly ${requestedCount(studyType, count)} items. ${instructionsFor(studyType, count)}
 Base everything strictly on the provided text. Avoid trivial or overly broad questions.
 
@@ -441,10 +478,11 @@ TEXT:
 """
 ${sourceText.slice(0, MAX_SOURCE_CHARS)}
 """`;
+  const attachmentParts = attachment ? [{ inlineData: { mimeType: attachment.mimeType, data: attachment.data } }] : [];
 
   const bodies: Record<ModelFamily, string> = {
     gemini: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts: [{ text: prompt }, ...attachmentParts] }],
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: { type: 'ARRAY', items: ITEM_SCHEMAS[studyType] },
@@ -452,7 +490,7 @@ ${sourceText.slice(0, MAX_SOURCE_CHARS)}
       },
     }),
     gemma: JSON.stringify({
-      contents: [{ parts: [{ text: `${prompt}\n\n${GEMMA_FORMAT[studyType]}` }] }],
+      contents: [{ parts: [{ text: `${prompt}\n\n${GEMMA_FORMAT[studyType]}` }, ...attachmentParts] }],
       generationConfig: { responseMimeType: 'application/json' },
     }),
   };
@@ -463,7 +501,8 @@ ${sourceText.slice(0, MAX_SOURCE_CHARS)}
   const minValid = minValidItems(count);
 
   for (const { id: model, family, attempts, timeoutMs, perExtraItemMs } of MODEL_CHAIN) {
-    const modelTimeoutMs = timeoutMs + Math.max(0, count - DEFAULT_QUESTION_COUNT) * perExtraItemMs;
+    const modelTimeoutMs =
+      timeoutMs + Math.max(0, count - DEFAULT_QUESTION_COUNT) * perExtraItemMs + (attachment ? ATTACHMENT_EXTRA_MS : 0);
     for (let attempt = 1; attempt <= attempts; attempt++) {
       const remaining = deadline - Date.now();
       if (remaining < 2_000) break;
@@ -475,7 +514,8 @@ ${sourceText.slice(0, MAX_SOURCE_CHARS)}
           model,
           apiKey,
           bodies[family],
-          Math.min(modelTimeoutMs, remaining)
+          Math.min(modelTimeoutMs, remaining),
+          attachment !== undefined
         );
         const items = finalItems(studyType, rawItems, count);
         if (items.length < minValid) {

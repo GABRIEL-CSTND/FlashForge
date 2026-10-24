@@ -1,7 +1,7 @@
 import { after, NextRequest, NextResponse } from 'next/server';
-import { generateStudyItems, GeminiError } from '@/lib/gemini';
+import { generateStudyItems, GeminiError, type Attachment } from '@/lib/gemini';
 import { isStudyType, parseQuestionCount } from '@/lib/study-types';
-import { fileKind, fileProblem, MIN_SOURCE_CHARS, pastedTextProblem, titleFromText } from '@/lib/sources';
+import { FILE_TYPES, fileKind, fileProblem, isPhoto, MIN_SOURCE_CHARS, pastedTextProblem, titleFromText } from '@/lib/sources';
 import { docxText, pptxText } from '@/lib/office-text';
 import {
   identifyCaller,
@@ -92,6 +92,8 @@ export async function POST(req: NextRequest) {
     let text: string;
     let title: string;
     let sourceFilename: string | null;
+    // Photos (#72) go to the AI as they are, with no text taken out first.
+    let attachment: Attachment | undefined;
     if (pasted !== null) {
       const problem = pastedTextProblem(pasted);
       if (problem) {
@@ -109,8 +111,14 @@ export async function POST(req: NextRequest) {
       if (problem) {
         return done(NextResponse.json({ error: problem }, { status: 422 }), { success: false, errorKind: 'unreadable' });
       }
+      const kind = fileKind(file.name, file.type);
       try {
-        text = await extractText(file);
+        if (isPhoto(kind)) {
+          attachment = { mimeType: FILE_TYPES[kind].mime, data: Buffer.from(await file.arrayBuffer()).toString('base64') };
+          text = '';
+        } else {
+          text = await extractText(file);
+        }
       } catch (err) {
         console.error('[generate] text extraction failed:', err);
         return done(
@@ -124,7 +132,7 @@ export async function POST(req: NextRequest) {
       title = file.name.replace(/\.[^/.]+$/, '');
       sourceFilename = file.name;
     }
-    if (!text || text.trim().length < MIN_SOURCE_CHARS) {
+    if (!attachment && (!text || text.trim().length < MIN_SOURCE_CHARS)) {
       return done(
         NextResponse.json({ error: 'Could not extract enough readable text from this file.' }, { status: 422 }),
         { success: false, errorKind: 'unreadable' }
@@ -133,6 +141,7 @@ export async function POST(req: NextRequest) {
 
     const { items, model } = await generateStudyItems(text, studyType, {
       count,
+      attachment,
       onRequest: (m) => {
         log.requests[m] = (log.requests[m] ?? 0) + 1;
       },
@@ -152,6 +161,12 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     // Never send raw API errors to the browser; log the details server-side instead.
     console.error('[generate] failed:', err);
+    if (err instanceof GeminiError && err.unreadable) {
+      return done(NextResponse.json({ error: err.userMessage }, { status: 422 }), {
+        success: false,
+        errorKind: 'unreadable',
+      });
+    }
     if (err instanceof GeminiError) {
       return done(NextResponse.json({ error: err.userMessage }, { status: err.retryable ? 503 : 502 }), {
         success: false,

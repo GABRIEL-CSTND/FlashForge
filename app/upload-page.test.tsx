@@ -12,6 +12,9 @@ vi.mock('@/lib/auth', () => ({
   signOut: vi.fn(),
 }));
 vi.mock('@/components/ProfileProvider', () => ({ useProfile: () => ({ profile: null }) }));
+// jsdom can't decode images; the real shrinking is checked in the browser.
+const shrink = vi.hoisted(() => ({ to: null as null | File }));
+vi.mock('@/lib/shrink-image', () => ({ shrinkImage: vi.fn(async (file: File) => shrink.to ?? file) }));
 
 import UploadPage from '@/app/page';
 
@@ -76,8 +79,8 @@ describe('upload page options', () => {
   it('takes Word and PowerPoint files, and explains the ones it cannot take (#71)', () => {
     render(<UploadPage />);
     const input = document.getElementById('file-input') as HTMLInputElement;
-    expect(input.accept).toBe('.pdf,.docx,.pptx,.txt');
-    expect(screen.getByText('or click to browse (PDF, Word, PowerPoint or TXT)')).toBeTruthy();
+    expect(input.accept).toBe('.pdf,.docx,.pptx,.txt,.jpg,.jpeg,.png,.webp');
+    expect(screen.getByText('or click to browse (PDF, Word, PowerPoint, TXT or a photo)')).toBeTruthy();
     const choose = (file: File) => fireEvent.change(input, { target: { files: [file] } });
 
     choose(new File(['x'], 'lecture.ppt'));
@@ -89,6 +92,19 @@ describe('upload page options', () => {
     choose(new File(['x'], 'Lecture 3.pptx'));
     expect(screen.getByText('Lecture 3.pptx')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Generate Study Guide' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('shrinks a photo before checking its size and sending it (#72)', async () => {
+    render(<UploadPage />);
+    const input = document.getElementById('file-input') as HTMLInputElement;
+    shrink.to = new File([new Uint8Array(900 * 1024)], 'IMG_2034.jpg', { type: 'image/jpeg' });
+    fireEvent.change(input, { target: { files: [new File([new Uint8Array(6 * 1024 * 1024)], 'IMG_2034.HEIC.png', { type: 'image/png' })] } });
+    expect(await screen.findByText('IMG_2034.jpg')).toBeTruthy();
+    expect(screen.queryByText(/This file is/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
+    expect(sentForms[0].file).toBe('file:IMG_2034.jpg');
+    shrink.to = null;
   });
 
   it('sends pasted notes instead of a file (#70)', async () => {

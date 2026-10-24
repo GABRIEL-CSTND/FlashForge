@@ -1,6 +1,6 @@
 // Where a study guide's material comes from (#20): an uploaded file (PDF,
-// Word, PowerPoint or TXT, #71) or pasted text (#70). Shared by the upload
-// page and /api/generate.
+// Word, PowerPoint, TXT #71, or a photo #72) or pasted text (#70). Shared by
+// the upload page and /api/generate.
 
 export const SOURCE_KINDS = ['file', 'text'] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
@@ -24,19 +24,27 @@ export function pastedTextProblem(text: string): string | null {
   return null;
 }
 
-// Files the upload page takes, by extension and MIME type.
+// Files the upload page takes, by extension and MIME type. Photos (#72) go to
+// the AI as they are; the others are turned into text first.
 export const FILE_TYPES = {
-  pdf: { ext: '.pdf', mime: 'application/pdf' },
-  docx: { ext: '.docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
-  pptx: { ext: '.pptx', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
-  txt: { ext: '.txt', mime: 'text/plain' },
+  pdf: { exts: ['.pdf'], mime: 'application/pdf' },
+  docx: { exts: ['.docx'], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+  pptx: { exts: ['.pptx'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' },
+  txt: { exts: ['.txt'], mime: 'text/plain' },
+  jpeg: { exts: ['.jpg', '.jpeg'], mime: 'image/jpeg' },
+  png: { exts: ['.png'], mime: 'image/png' },
+  webp: { exts: ['.webp'], mime: 'image/webp' },
 } as const;
 export type FileKind = keyof typeof FILE_TYPES;
 export const FILE_ACCEPT = Object.values(FILE_TYPES)
-  .map((t) => t.ext)
+  .flatMap((t) => t.exts)
   .join(',');
 // What the drop zone says it takes.
-export const FILE_TYPES_TEXT = 'PDF, Word, PowerPoint or TXT';
+export const FILE_TYPES_TEXT = 'PDF, Word, PowerPoint, TXT or a photo';
+
+export function isPhoto(kind: FileKind | null): kind is 'jpeg' | 'png' | 'webp' {
+  return kind === 'jpeg' || kind === 'png' || kind === 'webp';
+}
 
 // Vercel refuses requests over about 4.5 MB, so bigger files are stopped
 // before upload with a clear message (#44 tracks large PDFs).
@@ -47,7 +55,7 @@ const extensionOf = (name: string) => (name.includes('.') ? name.slice(name.last
 export function fileKind(name: string, type: string): FileKind | null {
   const ext = extensionOf(name);
   for (const [kind, t] of Object.entries(FILE_TYPES) as [FileKind, (typeof FILE_TYPES)[FileKind]][]) {
-    if (t.ext === ext || t.mime === type) return kind;
+    if ((t.exts as readonly string[]).includes(ext) || t.mime === type) return kind;
   }
   return null;
 }
@@ -60,7 +68,7 @@ export function fileProblem(name: string, type: string, size: number): string | 
       ext === '.doc' ? '.docx' : '.pptx'
     } or PDF first.`;
   }
-  if (!fileKind(name, type)) return `Upload a ${FILE_TYPES_TEXT} file.`;
+  if (!fileKind(name, type)) return 'Upload a PDF, Word, PowerPoint or TXT file, or a photo (JPG, PNG or WebP).';
   if (size > MAX_UPLOAD_BYTES) {
     return `This file is ${(size / 1024 / 1024).toFixed(1)} MB. Files can be up to ${MAX_UPLOAD_BYTES / 1024 / 1024} MB; try a smaller file or paste the text instead.`;
   }

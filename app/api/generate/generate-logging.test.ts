@@ -261,3 +261,40 @@ describe('/api/generate with Word and PowerPoint files (#71)', () => {
     expect(generateStudyItems).not.toHaveBeenCalled();
   });
 });
+
+describe('/api/generate with photos (#72)', () => {
+  const upload = (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('studyType', 'flashcard');
+    return POST(new NextRequest('http://localhost/api/generate', { method: 'POST', body: form, headers: asSam }));
+  };
+  const photo = () => new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'Whiteboard.jpg', { type: 'image/jpeg' });
+
+  it('sends the photo itself to the AI', async () => {
+    const res = await upload(photo());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ title: 'Whiteboard', sourceFilename: 'Whiteboard.jpg' });
+    const [text, , opts] = vi.mocked(generateStudyItems).mock.calls[0];
+    expect(text).toBe('');
+    expect(opts?.attachment).toEqual({ mimeType: 'image/jpeg', data: '/9j/4A==' });
+  });
+
+  it('answers 422 when the AI finds nothing to study in it', async () => {
+    gemini.run = async (onRequest) => {
+      onRequest('gemini-3.5-flash');
+      throw new GeminiError('nothing to study in the attachment', {
+        retryable: false,
+        unreadable: true,
+        userMessage: "We couldn't find any notes to study in this file. Try a clearer, brighter photo, or paste the text.",
+      });
+    };
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await upload(photo());
+    errorLog.mockRestore();
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toMatch(/Try a clearer, brighter photo/);
+    await runAfter();
+    expect(logged().map((r) => [r.error_kind, r.requests])).toEqual([['unreadable', { 'gemini-3.5-flash': 1 }]]);
+  });
+});
