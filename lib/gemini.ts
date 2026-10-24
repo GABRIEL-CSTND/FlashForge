@@ -153,7 +153,7 @@ Examples of the format (not the content):
   multiple_choice: `Create multiple-choice questions.
 - "question": a clue, description, or definition that points to exactly one specific term, name, date, number, or concept from the text.
 - "answer": the correct choice, 1 to 4 words. It must be copied exactly, character for character, from "options".
-- "options": exactly 4 different choices: the correct answer plus 3 wrong ones.
+- "options": exactly 4 different choices: the correct answer plus 3 wrong ones. Every choice is 1 to 4 words, never a sentence.
 - Wrong choices must be the same kind of thing as the answer (all dates, all people, all organelles, all protocols, etc.) and should come from the text when possible, so that none is obviously wrong.
 - Exactly one choice is correct. Never use "All of the above", "None of the above", or "Both A and B".`,
   true_false: `Create true-or-false statements.
@@ -183,7 +183,7 @@ function mixedInstructions(count: number): string {
   return `Create a quiz in three parts. Give every item a "type".
 Part I: exactly ${ask.multiple_choice} items with "type": "multiple_choice".
 - "question": a clue, description, or definition that points to exactly one specific term, name, date, number, or concept from the text.
-- "options": exactly 4 different choices of the same kind (all dates, all people, etc.), from the text when possible. Exactly one is correct. Never "All of the above" or "None of the above".
+- "options": exactly 4 different choices of the same kind (all dates, all people, etc.), each 1 to 4 words, from the text when possible. Exactly one is correct. Never "All of the above" or "None of the above".
 - "answer": the correct choice, 1 to 4 words, copied exactly from "options".
 Part II: exactly ${ask.true_false} items with "type": "true_false".
 - "question": one clear statement about a single fact from the text, never a question. About half are true and half false. A false statement changes one key detail (a term, name, number, or date) of a real fact; never just add "not".
@@ -224,12 +224,21 @@ function looksBroken(s: string, maxLength: number): boolean {
   );
 }
 
+// The prompt asks for answers of 1 to 4 words. The code allows a little more, so a
+// good card isn't lost over one extra word, but drops anything longer: every card
+// must stay short enough to identify at a glance. Used for flashcard and
+// identification answers and for every multiple-choice choice.
+export const ANSWER_LIMITS = { chars: 60, words: 6 } as const;
+
+function answerTooLong(s: string): boolean {
+  return looksBroken(s, ANSWER_LIMITS.chars) || s.trim().split(/\s+/).length > ANSWER_LIMITS.words;
+}
+
 function validateFlashcard(item: GeneratedItem): GeneratedItem | null {
   if (typeof item.question !== 'string' || typeof item.answer !== 'string') return null;
   const question = item.question.trim();
   const answer = item.answer.trim();
-  if (looksBroken(question, 300) || looksBroken(answer, 80)) return null;
-  if (answer.split(/\s+/).length > 8) return null;
+  if (looksBroken(question, 300) || answerTooLong(answer)) return null;
   return { question, answer };
 }
 
@@ -243,7 +252,7 @@ function validateMultipleChoice(item: GeneratedItem): GeneratedItem | null {
   const seen = new Set<string>();
   const options = item.options
     .map((o) => (typeof o === 'string' ? o.trim() : ''))
-    .filter((o) => o && !looksBroken(o, 80) && !seen.has(normalize(o)) && seen.add(normalize(o)));
+    .filter((o) => o && !answerTooLong(o) && !seen.has(normalize(o)) && seen.add(normalize(o)));
   if (options.length !== 4) return null;
 
   const matches = options.filter((o) => normalize(o) === normalize(item.answer));

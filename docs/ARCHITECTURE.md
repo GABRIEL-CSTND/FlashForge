@@ -258,7 +258,11 @@ screen instead of shortening with "…".
 **Validation**, applied to every model's output:
 - Thought parts and ```` ```json ```` fences are stripped before parsing.
 - **Garbage filter:** rejects HTML, a short chunk repeated 4+ times, slug-like tokens,
-  long whitespace runs, and over-long text. Flashcard answers over 8 words are dropped.
+  long whitespace runs, and over-long text. **Short answers only:** any answer over 6 words or 60
+  characters is dropped (`ANSWER_LIMITS` in `lib/gemini.ts`). That covers flashcard and
+  identification answers and every multiple-choice choice, so a card with one long
+  choice is dropped whole. The prompt asks for 1 to 4 words, so this only catches the
+  model ignoring it.
 - **Multiple choice:** options are trimmed and de-duplicated, exactly 4 are required,
   the answer must match exactly one option (ignoring case and spacing, and then stored
   as that option's text), and options are shuffled in code. The matching rule is
