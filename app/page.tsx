@@ -8,9 +8,7 @@ import { useUser, signInWithGoogle, signOut } from '@/lib/auth';
 import StudyViewer, { StudyItem } from '@/components/StudyViewer';
 import { useProfile } from '@/components/ProfileProvider';
 import { canUseTeacherTools } from '@/lib/role-types';
-
-const ACCEPTED_TYPES = ['application/pdf', 'text/plain'];
-const ACCEPTED_EXT = ['.pdf', '.txt'];
+import { ACCEPT_ATTR, SUPPORTED_LABEL, getFileKind } from '@/lib/file-types';
 
 type StudyType = 'flashcard' | 'multiple_choice';
 
@@ -60,9 +58,8 @@ export default function UploadPage() {
   }, []);
 
   const validateAndSetFile = (f: File) => {
-    const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
-    if (!ACCEPTED_TYPES.includes(f.type) && !ACCEPTED_EXT.includes(ext)) {
-      setErrorMsg('Only PDF and TXT files are supported right now.');
+    if (!getFileKind(f.name, f.type)) {
+      setErrorMsg(`Unsupported file. Please upload a ${SUPPORTED_LABEL} file.`);
       setStatus('error');
       return;
     }
@@ -299,7 +296,7 @@ export default function UploadPage() {
           <input
             id="file-input"
             type="file"
-            accept=".pdf,.txt"
+            accept={ACCEPT_ATTR}
             onChange={handleFileInput}
             className="hidden"
           />
@@ -309,7 +306,7 @@ export default function UploadPage() {
             ) : (
               <>
                 <p className="font-medium">Drag & drop a file here</p>
-                <p className="text-sm text-gray-500 mt-1">or click to browse (PDF or TXT)</p>
+                <p className="text-sm text-gray-500 mt-1">or click to browse ({SUPPORTED_LABEL})</p>
               </>
             )}
           </label>
