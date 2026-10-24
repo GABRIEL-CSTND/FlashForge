@@ -3,6 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getClass, type RosterEntry } from '@/lib/classes';
 import { listClassAssignments, type ClassAssignment } from '@/lib/assignments';
 import { classAverage, isLate, summarizeAttempts, type ResultSummary, type TimedScore } from '@/lib/results-shared';
+import { typedAnswerKey } from '@/lib/answer-check';
+import type { StudyMode } from '@/lib/study-types';
 
 // SERVER-ONLY (service-role client, which bypasses RLS). A teacher's view of
 // their students' results (#58), following the same rule as the attempts RLS
@@ -31,6 +33,7 @@ interface AttemptRow {
   id: string;
   user_id: string;
   assignment_id: string;
+  mode: StudyMode | null;
   score: number;
   total: number;
   completed_at: string;
@@ -45,7 +48,7 @@ async function attemptsFor(
   if (studentIds.length === 0 || assignmentIds.length === 0) return [];
   const { data, error } = await client
     .from('attempts')
-    .select('id, user_id, assignment_id, score, total, completed_at')
+    .select('id, user_id, assignment_id, mode, score, total, completed_at')
     .in('user_id', studentIds)
     .in('assignment_id', assignmentIds)
     .order('completed_at', { ascending: false });
@@ -99,8 +102,9 @@ export async function getClassResults(
 
 export interface StudentAssignmentResults extends ClassAssignment {
   result: ResultSummary;
-  // Newest first.
-  attempts: { id: string; score: number; total: number; completedAt: string; late: boolean }[];
+  // Newest first. mode: how a flashcard set was studied (#66), null for the
+  // normal way (self-marked flashcards).
+  attempts: { id: string; mode: StudyMode | null; score: number; total: number; completedAt: string; late: boolean }[];
 }
 
 export type StudentResultsLookup =
@@ -137,6 +141,7 @@ export async function getStudentResults(
         result: summarizeAttempts(mine.map(toTimedScore), a.dueAt),
         attempts: mine.map((t) => ({
           id: t.id,
+          mode: t.mode ?? null,
           score: t.score,
           total: t.total,
           completedAt: t.completed_at,
@@ -156,14 +161,16 @@ export interface QuestionStat {
   wrong: number;
   // Null when nobody has answered it yet (e.g. a card added since).
   percentWrong: number | null;
-  // Multiple choice: the wrong option picked most often. A skipped question
-  // counts as wrong but isn't an option.
+  // The wrong answer given most often: the option picked (multiple choice) or
+  // the text typed (#66, grouped ignoring capitals, spaces and punctuation). A
+  // skipped question counts as wrong but isn't an answer.
   topWrongChoice: { choice: string; count: number } | null;
 }
 
 interface StoredAnswer {
   cardId: string;
   chosen?: string | null;
+  typed?: string | null;
   correct: boolean;
 }
 
@@ -177,18 +184,24 @@ export function questionStats(
   const stats = cards.map((card, position) => {
     let answered = 0;
     let wrong = 0;
-    const wrongChoices = new Map<string, number>();
+    // By grouping key: the answer as first written, and how often it was given.
+    const wrongChoices = new Map<string, { choice: string; count: number }>();
+    const countWrong = (groupKey: string, choice: string) => {
+      const seen = wrongChoices.get(groupKey);
+      wrongChoices.set(groupKey, { choice: seen?.choice ?? choice, count: (seen?.count ?? 0) + 1 });
+    };
     for (const answers of latestAnswers) {
       const a = answers.find((x) => x.cardId === card.id);
       if (!a) continue;
       answered += 1;
       if (a.correct) continue;
       wrong += 1;
-      if (typeof a.chosen === 'string' && a.chosen) wrongChoices.set(a.chosen, (wrongChoices.get(a.chosen) ?? 0) + 1);
+      if (typeof a.chosen === 'string' && a.chosen) countWrong(`chosen:${a.chosen}`, a.chosen);
+      else if (typeof a.typed === 'string' && typedAnswerKey(a.typed)) countWrong(`typed:${typedAnswerKey(a.typed)}`, a.typed);
     }
     let topWrongChoice: QuestionStat['topWrongChoice'] = null;
-    for (const [choice, count] of wrongChoices) {
-      if (!topWrongChoice || count > topWrongChoice.count) topWrongChoice = { choice, count };
+    for (const entry of wrongChoices.values()) {
+      if (!topWrongChoice || entry.count > topWrongChoice.count) topWrongChoice = entry;
     }
     const percentWrong = answered > 0 ? Math.round((wrong / answered) * 100) : null;
     return { position, stat: { cardId: card.id, question: card.question, answer: card.answer, answered, wrong, percentWrong, topWrongChoice } };

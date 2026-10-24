@@ -46,7 +46,7 @@ describe('most-missed questions page', () => {
     render(<AssignmentQuestionsPage />);
     const items = within(await screen.findByRole('list', { name: 'Questions, hardest first' })).getAllByRole('listitem');
     expect(items.map((li) => li.textContent)).toEqual([
-      'Layer 3?100% wrongAnswer: Network · 2 of 2 students wrongMost picked wrong answer: Session (2 students)',
+      'Layer 3?100% wrongAnswer: Network · 2 of 2 students wrongMost common wrong answer: Session (2 students)',
       'Resolves IP to MAC?50% wrongAnswer: ARP · 1 of 2 students wrong',
       'Layer 7?No answers yetAnswer: Application',
     ]);

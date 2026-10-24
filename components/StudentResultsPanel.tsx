@@ -5,6 +5,7 @@ import { apiFetch, errorMessage } from '@/lib/api-client';
 import { studentLabel } from '@/lib/classes-shared';
 import { formatDueDate } from '@/lib/due-dates';
 import { percent, STATUS_LABELS, type ResultStatus, type ResultSummary } from '@/lib/results-shared';
+import type { StudyMode } from '@/lib/study-types';
 
 export interface ResultsStudent {
   studentId: string;
@@ -16,11 +17,18 @@ export interface ResultsStudent {
 interface AssignmentAttempts {
   id: string;
   setTitle: string;
+  studyType: string;
   dueAt: string | null;
   result: ResultSummary;
   // Newest first.
-  attempts: { id: string; score: number; total: number; completedAt: string; late: boolean }[];
+  attempts: { id: string; mode: StudyMode | null; score: number; total: number; completedAt: string; late: boolean }[];
 }
+
+// How a flashcard attempt was made (#66): marked by the student, or checked.
+const FLASHCARD_MODE_TAGS: Record<StudyMode | 'flip', string> = {
+  flip: 'Self-marked',
+  type: 'Typed',
+};
 
 type LoadState =
   | { status: 'loading' }
@@ -129,6 +137,9 @@ export default function StudentResultsPanel({
                         {/* Same format as the due date above, so late finishes are easy to spot. */}
                         <span className="text-gray-500">{formatDueDate(t.completedAt)}</span>
                         <span className="flex shrink-0 items-center gap-2">
+                          {a.studyType === 'flashcard' && (
+                            <span className="text-xs text-gray-400">{FLASHCARD_MODE_TAGS[t.mode ?? 'flip']}</span>
+                          )}
                           {t.late && (
                             <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-600">
                               Late

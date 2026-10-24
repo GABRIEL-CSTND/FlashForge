@@ -158,3 +158,86 @@ describe('flashcards', () => {
     expect(screen.getByRole('button', { name: '✗ Missed it' }).getAttribute('aria-pressed')).toBe('false');
   });
 });
+
+describe('type the answer (#66)', () => {
+  const typeIn = (text: string) =>
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: text } });
+  const modes = () =>
+    within(screen.getByRole('group', { name: 'How do you want to study?' }))
+      .getAllByRole('button')
+      .map((b) => `${b.textContent}${b.getAttribute('aria-pressed') === 'true' ? ' (on)' : ''}`);
+
+  it('lets flashcard sets be flipped or typed, starting with Flip', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    expect(modes()).toEqual(['Flip (on)', 'Type']);
+    cleanup();
+    render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
+    expect(screen.queryByRole('group', { name: 'How do you want to study?' })).toBeNull();
+  });
+
+  it('checks each typed answer, then reports what was typed', () => {
+    const onComplete = vi.fn<(r: StudyResult) => void>();
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} onComplete={onComplete} />);
+    click('Type');
+    expect(modes()).toEqual(['Flip', 'Type (on)']);
+    expect(screen.getByText('Fluid inside the chloroplast')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Next →' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Check' }) as HTMLButtonElement).disabled).toBe(true);
+
+    typeIn('stroma');
+    click('Check');
+    expect(screen.getByRole('status').textContent).toBe('✓ Correct');
+    click('Next →');
+
+    typeIn('Rubisko');
+    click('Check');
+    expect(screen.getByRole('status').textContent).toBe('✓ Almost. It\'s spelled RuBisCO.');
+    click('Next →');
+
+    click("I don't know");
+    expect(screen.getByRole('status').textContent).toBe('The answer is Chlorophyll.');
+    click('Finish');
+
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledWith({
+      mode: 'type',
+      answers: [
+        { cardId: 'f1', typed: 'stroma' },
+        { cardId: 'f2', typed: 'Rubisko' },
+        { cardId: 'f3', typed: null },
+      ],
+      correct: 2,
+      total: 3,
+    });
+    expect(screen.getByText('2 / 3')).toBeTruthy();
+    expect(screen.getByText('67% correct')).toBeTruthy();
+    expect(screen.getByText('1 with a small typo')).toBeTruthy();
+  });
+
+  it('shows the right answer after a wrong one, and keeps it when going back', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    click('Type');
+    typeIn('Thylakoid');
+    fireEvent.submit(screen.getByRole('textbox', { name: 'Your answer' }));
+    expect(screen.getByRole('status').textContent).toBe('✗ Not quite. The answer is Stroma.');
+    click('Next →');
+    click('← Prev');
+    const box = screen.getByRole('textbox', { name: 'Your answer' }) as HTMLInputElement;
+    expect([box.value, box.disabled]).toEqual(['Thylakoid', true]);
+    expect(screen.getByRole('status').textContent).toBe('✗ Not quite. The answer is Stroma.');
+    expect(screen.queryByRole('button', { name: 'Check' })).toBeNull();
+  });
+
+  it('starts over when switching how to study', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    flip();
+    mark('✓ Got it');
+    expect(screen.getByText('Card 2 of 3')).toBeTruthy();
+    click('Type');
+    expect(screen.getByText('Card 1 of 3')).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Your answer' })).toBeTruthy();
+    click('Flip');
+    flip();
+    expect(screen.getByRole('button', { name: '✓ Got it' }).getAttribute('aria-pressed')).toBe('false');
+  });
+});

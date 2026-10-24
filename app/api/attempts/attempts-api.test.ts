@@ -205,3 +205,49 @@ describe('done / not done on My classes', () => {
     expect((await json(await studentClasses.GET(req('GET', 'stu2')))).body.classes[0].assignments[0].myProgress).toBeNull();
   });
 });
+
+describe('typed answers (#66)', () => {
+  it('checks typed answers on the server and records how the set was studied', async () => {
+    const res = await post('owner', {
+      id: fakeUuid(),
+      setId: SETS.privateFlash,
+      mode: 'type',
+      score: 2,
+      answers: [
+        { cardId: CARDS.p1, typed: 'stroma', correct: false },
+        { cardId: CARDS.p2, typed: 'Chlorophyll', correct: true },
+      ],
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.attempt).toMatchObject({ studyType: 'flashcard', mode: 'type', score: 1, total: 2 });
+    expect(rowsFor('owner')[0]).toMatchObject({
+      mode: 'type',
+      answers: [
+        { cardId: CARDS.p1, typed: 'stroma', correct: true },
+        { cardId: CARDS.p2, typed: 'Chlorophyll', correct: false },
+      ],
+    });
+  });
+
+  it('records flipped flashcards and multiple choice with no mode', async () => {
+    await post('owner', { id: fakeUuid(), setId: SETS.privateFlash, answers: [{ cardId: CARDS.p1, result: 'got' }] });
+    await post('owner', { id: fakeUuid(), setId: SETS.mc, mode: null, answers: mcAnswers });
+    expect(rowsFor('owner').map((a) => a.mode)).toEqual([null, null]);
+  });
+
+  it.each([
+    ['typing a multiple-choice set', SETS.mc, 'type'],
+    ['an unknown way', SETS.privateFlash, 'guess'],
+    ['"flip" spelled out (the normal way has no mode)', SETS.privateFlash, 'flip'],
+  ])('refuses %s (400)', async (_label, setId, mode) => {
+    const res = await post('owner', { id: fakeUuid(), setId, mode, answers: [{ cardId: CARDS.p1, typed: 'Stroma' }] });
+    expect(res).toEqual({ status: 400, body: { error: "This set can't be studied that way." } });
+    expect(db.rows.attempts).toEqual([]);
+  });
+
+  it('includes the mode in my recent scores', async () => {
+    await post('owner', { id: fakeUuid(), setId: SETS.privateFlash, mode: 'type', answers: [{ cardId: CARDS.p1, typed: 'Stroma' }] });
+    const res = await history('owner', SETS.privateFlash);
+    expect(res.body.attempts.map((a: { mode: string | null; score: number }) => [a.mode, a.score])).toEqual([['type', 1]]);
+  });
+});

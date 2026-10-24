@@ -219,8 +219,9 @@ function ResultsView({ id }: { id: string }) {
           <p className="text-xs text-gray-400">
             Each cell shows the student&apos;s best score. <span className="font-medium">Late</span> means they first
             finished after the due date. Students who haven&apos;t started aren&apos;t counted in the average.
-            Flashcard scores are marked by the students themselves. Select a student to see every attempt, or an
-            assignment to see its hardest questions.
+            Flashcard scores are marked by the students themselves when they flip the cards, and checked when they
+            type the answers. Select a student to see every attempt and how it was made, or an assignment to see its
+            hardest questions.
           </p>
         </>
       )}

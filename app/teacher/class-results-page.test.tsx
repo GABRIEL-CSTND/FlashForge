@@ -135,6 +135,43 @@ describe('class results page', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('says how each flashcard attempt was made: self-marked or typed (#66)', async () => {
+    state.replies['/api/teacher/classes/c1/students/u1'] = ok({
+      student: { studentId: 'u1' },
+      assignments: [
+        {
+          id: 'a2',
+          setTitle: 'Photosynthesis',
+          studyType: 'flashcard',
+          dueAt: null,
+          result: done(4, 5, 2),
+          attempts: [
+            { id: 't2', mode: 'type', score: 4, total: 5, completedAt: '2026-10-21T10:00:00Z', late: false },
+            { id: 't1', mode: null, score: 3, total: 5, completedAt: '2026-10-20T10:00:00Z', late: false },
+          ],
+        },
+        {
+          id: 'a1',
+          setTitle: 'Cell parts quiz',
+          studyType: 'multiple_choice',
+          dueAt: null,
+          result: done(9, 10),
+          attempts: [{ id: 't3', mode: null, score: 9, total: 10, completedAt: '2026-10-21T10:00:00Z', late: false }],
+        },
+      ],
+    });
+    render(<ClassResultsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Ana Reyes' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Ana Reyes' });
+    const flash = await within(dialog).findByRole('list', { name: 'Attempts on Photosynthesis' });
+    expect(within(flash).getAllByRole('listitem').map((li) => (li.textContent ?? '').replace(/^.*?(Typed|Self-marked)/, '$1'))).toEqual([
+      'Typed4/580%',
+      'Self-marked3/560%',
+    ]);
+    const mc = within(dialog).getByRole('list', { name: 'Attempts on Cell parts quiz' });
+    expect(mc.textContent).not.toMatch(/Typed|Self-marked/);
+  });
+
   it("shows the error if a student's attempts can't be loaded", async () => {
     state.replies['/api/teacher/classes/c1/students/u3'] = { ok: false, status: 404, data: { error: 'Student not found.' } };
     render(<ClassResultsPage />);

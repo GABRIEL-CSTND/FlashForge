@@ -35,6 +35,13 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **Type the answer** (#66, live database): flashcard sets have a **Flip / Type** switch.
+  In Type, students type each term and the app checks it right away: capitals, accents,
+  spaces and punctuation don't matter, and one small typo is forgiven on longer words
+  (never on numbers or short terms). The server runs the same check for the saved score,
+  so typed scores can't be self-marked. Teachers see which attempts were typed or
+  self-marked, and the most-missed page shows the most common wrong typed answer. New
+  `attempts.mode` column.
 - **Choose how many questions** (#65): 5, 10, 15, 20 or 30 on the upload page (10 by
   default), for every kind of study guide. It's still one AI request per guide, so the
   daily limits don't change. Bigger guides give the AI a little more time, and the

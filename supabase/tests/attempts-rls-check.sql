@@ -100,6 +100,16 @@ begin
   begin insert into public.attempts (id, user_id, set_id, study_type, score, total) values (b_asg, b, s, 'multiple_choice', 1, 1); code := 'inserted';
   exception when others then code := sqlstate; end;
   insert into results values (16, 'the same attempt id twice', '23505', code);
+  -- How the set was studied (#66): only flashcard sets have other ways.
+  begin insert into public.attempts (id, user_id, set_id, study_type, mode, score, total) values (gen_random_uuid(), c, sc, 'flashcard', 'type', 2, 5); code := 'inserted';
+  exception when others then code := sqlstate; end;
+  insert into results values (18, 'typed attempt on a flashcard set', 'inserted', code);
+  begin insert into public.attempts (id, user_id, set_id, study_type, mode, score, total) values (gen_random_uuid(), b, s, 'multiple_choice', 'type', 1, 1); code := 'inserted';
+  exception when others then code := sqlstate; end;
+  insert into results values (19, 'typed attempt on a multiple-choice set', '23514', code);
+  begin insert into public.attempts (id, user_id, set_id, study_type, mode, score, total) values (gen_random_uuid(), c, sc, 'flashcard', 'guess', 1, 1); code := 'inserted';
+  exception when others then code := sqlstate; end;
+  insert into results values (20, 'unknown study mode', '23514', code);
 
   delete from public.flashcard_sets where id = sc;
   select count(*) into v from public.attempts where id = c_own;

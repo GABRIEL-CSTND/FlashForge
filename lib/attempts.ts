@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { normalizeChoice, type StudyType } from '@/lib/card-rules';
+import { CARD_LIMITS, normalizeChoice, type StudyType } from '@/lib/card-rules';
+import { checkTypedAnswer } from '@/lib/answer-check';
+import { isStudyMode, type StudyMode } from '@/lib/study-types';
 import { isUuid } from '@/lib/ids';
 
 // SERVER-ONLY (service-role client). Recording and reading study results (#57).
@@ -15,6 +17,8 @@ export interface AnswerInput {
   chosen?: string | null;
   // Flashcards: the student's own mark (null if not marked).
   result?: FlashcardMark | null;
+  // Typed answers (#66): what the student typed (null for "I don't know").
+  typed?: string | null;
 }
 
 export interface StoredAnswer extends AnswerInput {
@@ -26,6 +30,8 @@ export interface AttemptSummary {
   setId: string;
   assignmentId: string | null;
   studyType: StudyType;
+  // How the set was studied; null for the study type's normal way (#66).
+  mode: StudyMode | null;
   score: number;
   total: number;
   completedAt: string;
@@ -35,8 +41,9 @@ export const MAX_ANSWERS = 200;
 
 type ParseResult = { ok: true; answers: AnswerInput[] } | { ok: false; error: string };
 
-// Checks the shape of the answers for the set's study type (not the scoring).
-export function parseAnswers(raw: unknown, studyType: StudyType): ParseResult {
+// Checks the shape of the answers for the set's study type and how it was
+// studied (not the scoring).
+export function parseAnswers(raw: unknown, studyType: StudyType, mode: StudyMode | null = null): ParseResult {
   if (!Array.isArray(raw) || raw.length === 0) return { ok: false, error: 'Send at least one answer.' };
   if (raw.length > MAX_ANSWERS) return { ok: false, error: `Send at most ${MAX_ANSWERS} answers.` };
 
@@ -44,11 +51,16 @@ export function parseAnswers(raw: unknown, studyType: StudyType): ParseResult {
   const answers: AnswerInput[] = [];
   for (const item of raw) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return { ok: false, error: 'An answer is not valid.' };
-    const { cardId, chosen, result } = item as Record<string, unknown>;
+    const { cardId, chosen, result, typed } = item as Record<string, unknown>;
     if (!isUuid(cardId) || seen.has(cardId)) return { ok: false, error: 'An answer has a missing or repeated card id.' };
     seen.add(cardId);
 
-    if (studyType === 'multiple_choice') {
+    if (mode === 'type') {
+      if (typed != null && (typeof typed !== 'string' || typed.length > CARD_LIMITS.answer)) {
+        return { ok: false, error: 'A typed answer is too long.' };
+      }
+      answers.push({ cardId, typed: typeof typed === 'string' && typed.trim() ? typed.trim() : null });
+    } else if (studyType === 'multiple_choice') {
       if (chosen != null && (typeof chosen !== 'string' || chosen.length > 500)) {
         return { ok: false, error: 'An answer has an invalid choice.' };
       }
@@ -64,11 +76,14 @@ export function parseAnswers(raw: unknown, studyType: StudyType): ParseResult {
 }
 
 // Scores answers against the set's current cards. Answers for cards that no
-// longer exist (e.g. the owner edited the set mid-study) are dropped.
+// longer exist (e.g. the owner edited the set mid-study) are dropped. Typed
+// answers use the same check as the study screen (lib/answer-check.ts), where
+// one typo still counts as correct.
 export function scoreAnswers(
   answers: AnswerInput[],
   cards: { id: string; answer: string }[],
-  studyType: StudyType
+  studyType: StudyType,
+  mode: StudyMode | null = null
 ): { score: number; total: number; stored: StoredAnswer[] } {
   const byId = new Map(cards.map((c) => [c.id, c]));
   const stored: StoredAnswer[] = [];
@@ -76,9 +91,11 @@ export function scoreAnswers(
     const card = byId.get(a.cardId);
     if (!card) continue;
     const correct =
-      studyType === 'multiple_choice'
-        ? a.chosen != null && normalizeChoice(a.chosen) === normalizeChoice(card.answer)
-        : a.result === 'got';
+      mode === 'type'
+        ? checkTypedAnswer(a.typed, card.answer) !== 'wrong'
+        : studyType === 'multiple_choice'
+          ? a.chosen != null && normalizeChoice(a.chosen) === normalizeChoice(card.answer)
+          : a.result === 'got';
     stored.push({ ...a, correct });
   }
   return { score: stored.filter((a) => a.correct).length, total: stored.length, stored };
@@ -159,7 +176,7 @@ export type RecordResult =
   | { kind: 'stale' }
   | { kind: 'conflict' };
 
-const SUMMARY_COLUMNS = 'id, user_id, set_id, assignment_id, study_type, score, total, completed_at';
+const SUMMARY_COLUMNS = 'id, user_id, set_id, assignment_id, study_type, mode, score, total, completed_at';
 
 interface AttemptRow {
   id: string;
@@ -167,6 +184,7 @@ interface AttemptRow {
   set_id: string;
   assignment_id: string | null;
   study_type: StudyType;
+  mode: StudyMode | null;
   score: number;
   total: number;
   completed_at: string;
@@ -178,6 +196,7 @@ function toSummary(row: AttemptRow): AttemptSummary {
     setId: row.set_id,
     assignmentId: row.assignment_id,
     studyType: row.study_type,
+    mode: row.mode ?? null,
     score: row.score,
     total: row.total,
     completedAt: row.completed_at,
@@ -188,13 +207,18 @@ function toSummary(row: AttemptRow): AttemptSummary {
 // (one per finish), so retrying the same request can't create a second row.
 export async function recordAttempt(
   userId: string,
-  input: { attemptId: string; setId: string; assignmentId?: unknown; answers: unknown },
+  input: { attemptId: string; setId: string; assignmentId?: unknown; mode?: unknown; answers: unknown },
   client: SupabaseClient = supabaseAdmin
 ): Promise<RecordResult> {
   const set = await findStudySet(userId, input.setId, client);
   if (!set) return { kind: 'not-found' };
 
-  const parsed = parseAnswers(input.answers, set.studyType);
+  // Only flashcard sets can be studied another way (#66).
+  const mode = input.mode ?? null;
+  if (mode !== null && !(isStudyMode(mode) && set.studyType === 'flashcard')) {
+    return { kind: 'invalid', error: "This set can't be studied that way." };
+  }
+  const parsed = parseAnswers(input.answers, set.studyType, mode);
   if (!parsed.ok) return { kind: 'invalid', error: parsed.error };
 
   const { data: cards, error: cardsError } = await client
@@ -202,7 +226,7 @@ export async function recordAttempt(
     .select('id, answer')
     .eq('set_id', set.id);
   if (cardsError) throw cardsError;
-  const { score, total, stored } = scoreAnswers(parsed.answers, cards ?? [], set.studyType);
+  const { score, total, stored } = scoreAnswers(parsed.answers, cards ?? [], set.studyType, mode);
   if (total === 0) return { kind: 'stale' };
 
   const assignmentId = await resolveAssignment(userId, set.id, input.assignmentId, client);
@@ -215,6 +239,7 @@ export async function recordAttempt(
       set_id: set.id,
       assignment_id: assignmentId,
       study_type: set.studyType,
+      mode,
       score,
       total,
       answers: stored,

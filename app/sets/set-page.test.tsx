@@ -172,13 +172,35 @@ describe('saving study results (#57)', () => {
     expect(save.path).toBe('/api/attempts');
     expect(save.init).toMatchObject({
       method: 'POST',
-      body: { setId: SET_ID, assignmentId: ASSIGNMENT, answers: [{ cardId: CARD, result: 'got' }] },
+      body: { setId: SET_ID, assignmentId: ASSIGNMENT, mode: null, answers: [{ cardId: CARD, result: 'got' }] },
     });
     expect((save.init as { body: { id: string } }).body.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(recent.path).toBe(`/api/attempts?setId=${SET_ID}`);
     const scores = await screen.findByRole('list', { name: 'Your recent scores' });
     expect(within(scores).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
       expect.stringContaining('1 / 1 got it'),
+      expect.stringContaining('0 / 1 got it'),
+    ]);
+  });
+
+  it('saves a typed run with how it was studied, and labels typed scores (#66)', async () => {
+    state.respond = (path) =>
+      path === '/api/attempts'
+        ? { ok: true, status: 201, data: { attempt: attempt({ mode: 'type' }) } }
+        : { ok: true, status: 200, data: { attempts: [attempt({ mode: 'type' }), attempt({ id: '00000000-0000-4000-8000-000000000222', mode: null, score: 0 })] } };
+    render(<SetPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Type' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: 'chlorophyl' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Check' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+
+    const scores = await screen.findByRole('list', { name: 'Your recent scores' });
+    expect(state.apiCalls[0].init).toMatchObject({
+      method: 'POST',
+      body: { setId: SET_ID, mode: 'type', answers: [{ cardId: CARD, typed: 'chlorophyl' }] },
+    });
+    expect(within(scores).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      expect.stringContaining('1 / 1 typed'),
       expect.stringContaining('0 / 1 got it'),
     ]);
   });

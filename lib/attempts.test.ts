@@ -92,3 +92,61 @@ describe('scoreAnswers', () => {
     expect(result.stored.map((a) => a.cardId)).toEqual([id(1)]);
   });
 });
+
+describe('typed answers (#66)', () => {
+  const cards = [
+    { id: id(1), answer: 'Network' },
+    { id: id(2), answer: 'Tennis Court Oath' },
+    { id: id(3), answer: 'Stroma' },
+  ];
+
+  it('accepts typed answers, with null for "I don\'t know" or a blank answer', () => {
+    expect(
+      parseAnswers([{ cardId: id(1), typed: ' Stroma ' }, { cardId: id(2), typed: null }, { cardId: id(3), typed: '  ' }], 'flashcard', 'type')
+    ).toEqual({
+      ok: true,
+      answers: [
+        { cardId: id(1), typed: 'Stroma' },
+        { cardId: id(2), typed: null },
+        { cardId: id(3), typed: null },
+      ],
+    });
+  });
+
+  it('keeps only what was typed, not marks or picks', () => {
+    expect(parseAnswers([{ cardId: id(1), typed: 'Stroma', result: 'got', chosen: 'Stroma' }], 'flashcard', 'type')).toEqual({
+      ok: true,
+      answers: [{ cardId: id(1), typed: 'Stroma' }],
+    });
+  });
+
+  it.each([
+    ['a number', 5],
+    ['text over 200 characters', 'x'.repeat(201)],
+  ])('rejects a typed answer that is %s', (_label, typed) => {
+    expect(parseAnswers([{ cardId: id(1), typed }], 'flashcard', 'type').ok).toBe(false);
+  });
+
+  it('scores typed answers with the same check as the study screen, typos included', () => {
+    const result = scoreAnswers(
+      [
+        { cardId: id(1), typed: 'network' },
+        { cardId: id(2), typed: 'Tenis Court Oath' },
+        { cardId: id(3), typed: 'Thylakoid' },
+      ],
+      cards,
+      'flashcard',
+      'type'
+    );
+    expect(result).toMatchObject({ score: 2, total: 3 });
+    expect(result.stored).toEqual([
+      { cardId: id(1), typed: 'network', correct: true },
+      { cardId: id(2), typed: 'Tenis Court Oath', correct: true },
+      { cardId: id(3), typed: 'Thylakoid', correct: false },
+    ]);
+  });
+
+  it('counts "I don\'t know" as wrong', () => {
+    expect(scoreAnswers([{ cardId: id(3), typed: null }], cards, 'flashcard', 'type')).toMatchObject({ score: 0, total: 1 });
+  });
+});

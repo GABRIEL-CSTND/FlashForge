@@ -11,12 +11,13 @@ import { apiFetch, errorMessage } from '@/lib/api-client';
 import AssignPanel from '@/components/AssignPanel';
 import { useProfile } from '@/components/ProfileProvider';
 import { canUseTeacherTools } from '@/lib/role-types';
+import type { StudyMode, StudyType } from '@/lib/study-types';
 
 interface FlashcardSet {
   id: string;
   title: string;
   source_filename: string | null;
-  study_type: 'flashcard' | 'multiple_choice';
+  study_type: StudyType;
   user_id: string | null;
 }
 
@@ -24,6 +25,7 @@ interface AttemptSummary {
   id: string;
   assignmentId: string | null;
   studyType: string;
+  mode: StudyMode | null;
   score: number;
   total: number;
   completedAt: string;
@@ -186,7 +188,7 @@ export default function SetPage() {
     try {
       const res = await apiFetch('/api/attempts', {
         method: 'POST',
-        body: { id: newId(), setId: set.id, assignmentId, answers: result.answers },
+        body: { id: newId(), setId: set.id, assignmentId, mode: result.mode ?? null, answers: result.answers },
       });
       if (!res.ok) {
         setSaveState({ status: 'error', message: errorMessage(res.data, "Couldn't save your score.") });
@@ -292,8 +294,9 @@ export default function SetPage() {
     </div>
   ) : null;
 
+  // Flashcard scores say how they were made: marked by the student, or typed (#66).
   const scoreLabel = (a: AttemptSummary) =>
-    `${a.score} / ${a.total}${a.studyType === 'flashcard' ? ' got it' : ''}`;
+    `${a.score} / ${a.total}${a.studyType !== 'flashcard' ? '' : a.mode === 'type' ? ' typed' : ' got it'}`;
 
   const completionSlot =
     saveState.status === 'idle' ? null : (

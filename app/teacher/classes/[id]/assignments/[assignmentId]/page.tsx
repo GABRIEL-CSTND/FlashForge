@@ -111,7 +111,8 @@ function QuestionsView({ id, assignmentId }: { id: string; assignmentId: string 
       <p className="text-sm text-gray-500">
         Hardest questions first, from each student&apos;s latest attempt. {studentsDone} of {students(studentCount)}{' '}
         {studentsDone === 1 ? 'has' : 'have'} finished it.
-        {flashcards && ' Flashcards count as wrong unless the student marked “Got it”.'}
+        {flashcards &&
+          ' Flipped flashcards count as wrong unless the student marked “Got it”; typed answers are checked.'}
       </p>
 
       {studentsDone === 0 ? (
@@ -143,7 +144,7 @@ function QuestionsView({ id, assignmentId }: { id: string; assignmentId: string 
               </p>
               {q.topWrongChoice && (
                 <p className="break-words text-xs text-gray-500">
-                  Most picked wrong answer: <span className="font-medium">{q.topWrongChoice.choice}</span> (
+                  Most common wrong answer: <span className="font-medium">{q.topWrongChoice.choice}</span> (
                   {students(q.topWrongChoice.count)})
                 </p>
               )}
