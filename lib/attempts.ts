@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { CARD_LIMITS, normalizeChoice, type StudyType } from '@/lib/card-rules';
 import { checkTypedAnswer } from '@/lib/answer-check';
-import { isStudyMode, type StudyMode } from '@/lib/study-types';
+import { isStudyMode, toStudyType, type StudyMode } from '@/lib/study-types';
 import { isUuid } from '@/lib/ids';
 
 // SERVER-ONLY (service-role client). Recording and reading study results (#57).
@@ -66,7 +66,7 @@ export function parseAnswers(raw: unknown, studyType: StudyType, mode: StudyMode
         return { ok: false, error: 'An answer has an invalid term.' };
       }
       answers.push({ cardId, chosen: (chosen as string | null | undefined) ?? null });
-    } else if (studyType === 'multiple_choice') {
+    } else if (studyType === 'multiple_choice' || studyType === 'true_false') {
       if (chosen != null && (typeof chosen !== 'string' || chosen.length > 500)) {
         return { ok: false, error: 'An answer has an invalid choice.' };
       }
@@ -96,11 +96,12 @@ export function scoreAnswers(
   for (const a of answers) {
     const card = byId.get(a.cardId);
     if (!card) continue;
-    // Matching picks another card's term, so it's compared like a multiple-choice pick.
+    // Matching picks another card's term, so it's compared like a multiple-choice
+    // pick. True or false (#68) is a pick between two options.
     const correct =
       mode === 'type'
         ? checkTypedAnswer(a.typed, card.answer) !== 'wrong'
-        : mode === 'match' || studyType === 'multiple_choice'
+        : mode === 'match' || studyType === 'multiple_choice' || studyType === 'true_false'
           ? a.chosen != null && normalizeChoice(a.chosen) === normalizeChoice(card.answer)
           : a.result === 'got';
     stored.push({ ...a, correct });
@@ -127,7 +128,7 @@ export async function findStudySet(
     .maybeSingle();
   if (error) throw error;
   if (!set) return null;
-  const result = { id: set.id as string, studyType: set.study_type as StudyType };
+  const result = { id: set.id as string, studyType: toStudyType(set.study_type) };
   if (set.user_id === null || set.user_id === userId) return result;
 
   const { data: assigned, error: assignedError } = await client

@@ -1,4 +1,4 @@
-import { normalizeChoice } from '@/lib/card-rules';
+import { CARD_LIMITS, normalizeChoice, toTrueFalse, TRUE_FALSE_OPTIONS } from '@/lib/card-rules';
 import { DEFAULT_QUESTION_COUNT, type StudyType } from '@/lib/study-types';
 
 export type { StudyType };
@@ -57,6 +57,7 @@ const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 const SPARE_RATIO: Record<StudyType, number> = {
   flashcard: 0.1,
   multiple_choice: 0.2,
+  true_false: 0.1,
 };
 export function requestedCount(studyType: StudyType, count: number): number {
   return count + Math.ceil(count * SPARE_RATIO[studyType]);
@@ -74,6 +75,8 @@ export interface GeneratedItem {
   question: string;
   answer: string;
   options?: string[];
+  // True or false (#68): the corrected fact for a false statement.
+  explanation?: string;
 }
 
 // `message` is the detailed reason for server logs; `userMessage` is safe to
@@ -111,6 +114,13 @@ Examples of the format (not the content):
 - "options": exactly 4 different choices: the correct answer plus 3 wrong ones.
 - Wrong choices must be the same kind of thing as the answer (all dates, all people, all organelles, all protocols, etc.) and should come from the text when possible, so that none is obviously wrong.
 - Exactly one choice is correct. Never use "All of the above", "None of the above", or "Both A and B".`,
+  true_false: `Create true-or-false statements.
+- "question": one clear statement about a single fact from the text. Never a question.
+- Make about half of the statements true and half false, mixed together.
+- A false statement takes a real fact from the text and changes one key detail (a term, name, number, or date) so that it becomes wrong. Never make a statement false just by adding "not" or "never".
+- "answer": "True" or "False".
+- "explanation": for a false statement, the corrected true statement in one sentence. For a true statement, an empty string.
+- No opinions, and no "always", "never", "all", or "none" unless the text says so.`,
 };
 
 // Gemma gets no response schema (see top of file), so the format goes in the prompt.
@@ -119,6 +129,8 @@ const GEMMA_FORMAT: Record<StudyType, string> = {
     'Return ONLY a JSON array of objects with string fields "question" and "answer". No other text.',
   multiple_choice:
     'Return ONLY a JSON array of objects with fields "question" (string), "options" (array of exactly 4 strings), and "answer" (string, copied exactly from "options"). No other text.',
+  true_false:
+    'Return ONLY a JSON array of objects with string fields "question" (the statement), "answer" ("True" or "False"), and "explanation" (the corrected statement if false, otherwise ""). No other text.',
 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -175,6 +187,64 @@ function validateMultipleChoice(item: GeneratedItem): GeneratedItem | null {
 
   return { question: item.question.trim(), answer: matches[0], options: shuffle(options) };
 }
+
+// True or false (#68): stored like a multiple-choice card with the options
+// True and False. The explanation is optional: one that's missing or broken is
+// dropped, not the statement.
+function validateTrueFalse(item: GeneratedItem): GeneratedItem | null {
+  if (typeof item.question !== 'string') return null;
+  const question = item.question.trim();
+  const answer = toTrueFalse(item.answer);
+  if (looksBroken(question, 300) || !answer) return null;
+  const explanation = typeof item.explanation === 'string' ? item.explanation.trim() : '';
+  return {
+    question,
+    answer,
+    options: [...TRUE_FALSE_OPTIONS],
+    ...(explanation && !looksBroken(explanation, CARD_LIMITS.explanation) ? { explanation } : {}),
+  };
+}
+
+const VALIDATORS: Record<StudyType, (item: GeneratedItem) => GeneratedItem | null> = {
+  flashcard: validateFlashcard,
+  multiple_choice: validateMultipleChoice,
+  true_false: validateTrueFalse,
+};
+
+const ITEM_SCHEMAS: Record<StudyType, object> = {
+  flashcard: {
+    type: 'OBJECT',
+    properties: {
+      question: {
+        type: 'STRING',
+        description: 'A clue or definition that identifies one specific term from the text',
+      },
+      answer: {
+        type: 'STRING',
+        description: 'The term being identified: 1 to 4 words, never a full sentence',
+      },
+    },
+    required: ['question', 'answer'],
+  },
+  multiple_choice: {
+    type: 'OBJECT',
+    properties: {
+      question: { type: 'STRING' },
+      options: { type: 'ARRAY', items: { type: 'STRING' }, minItems: 4, maxItems: 4 },
+      answer: { type: 'STRING' },
+    },
+    required: ['question', 'options', 'answer'],
+  },
+  true_false: {
+    type: 'OBJECT',
+    properties: {
+      question: { type: 'STRING', description: 'A statement about one fact from the text' },
+      answer: { type: 'STRING', description: 'True or False' },
+      explanation: { type: 'STRING', description: 'If false, the corrected true statement; otherwise empty' },
+    },
+    required: ['question', 'answer', 'explanation'],
+  },
+};
 
 // Thinking models can return "thought" parts before the answer, and Gemma
 // sometimes wraps JSON in a markdown code fence.
@@ -270,38 +340,12 @@ TEXT:
 ${sourceText.slice(0, 30000)}
 """`;
 
-  const itemSchema =
-    studyType === 'multiple_choice'
-      ? {
-          type: 'OBJECT',
-          properties: {
-            question: { type: 'STRING' },
-            options: { type: 'ARRAY', items: { type: 'STRING' }, minItems: 4, maxItems: 4 },
-            answer: { type: 'STRING' },
-          },
-          required: ['question', 'options', 'answer'],
-        }
-      : {
-          type: 'OBJECT',
-          properties: {
-            question: {
-              type: 'STRING',
-              description: 'A clue or definition that identifies one specific term from the text',
-            },
-            answer: {
-              type: 'STRING',
-              description: 'The term being identified: 1 to 4 words, never a full sentence',
-            },
-          },
-          required: ['question', 'answer'],
-        };
-
   const bodies: Record<ModelFamily, string> = {
     gemini: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         responseMimeType: 'application/json',
-        responseSchema: { type: 'ARRAY', items: itemSchema },
+        responseSchema: { type: 'ARRAY', items: ITEM_SCHEMAS[studyType] },
         thinkingConfig: { thinkingLevel: THINKING_LEVEL },
       },
     }),
@@ -331,9 +375,7 @@ ${sourceText.slice(0, 30000)}
           bodies[family],
           Math.min(modelTimeoutMs, remaining)
         );
-        const items = rawItems
-          .map(studyType === 'multiple_choice' ? validateMultipleChoice : validateFlashcard)
-          .filter((i): i is GeneratedItem => i !== null);
+        const items = rawItems.map(VALIDATORS[studyType]).filter((i): i is GeneratedItem => i !== null);
         if (items.length < minValid) {
           throw new GeminiError(`only ${items.length}/${rawItems.length} items passed validation`, {
             retryable: true,
@@ -344,7 +386,9 @@ ${sourceText.slice(0, 30000)}
           `[gemini] ${model} generated ${items.length}/${rawItems.length} valid ${studyType} items in ${Date.now() - startedAt}ms` +
             ` (attempt ${attempt}, ${outputTokens ?? '?'} output tokens)`
         );
-        return { items: items.slice(0, count), model };
+        const kept = items.slice(0, count);
+        // The model tends to write its true statements first.
+        return { items: studyType === 'true_false' ? shuffle(kept) : kept, model };
       } catch (err) {
         const error =
           err instanceof GeminiError ? err : new GeminiError(String(err), { retryable: false });

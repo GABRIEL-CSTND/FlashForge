@@ -335,3 +335,43 @@ describe('matching (#67)', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('true or false (#68)', () => {
+  const TF_CARDS = [
+    { id: 't1', question: 'Chloroplasts make most of the cell’s ATP.', answer: 'False', options: ['True', 'False'], explanation: 'Mitochondria make most of the ATP.' },
+    { id: 't2', question: 'Plants give off oxygen.', answer: 'True', options: ['True', 'False'], explanation: null },
+  ];
+
+  it('shows each statement with True and False, then the verdict and correction', () => {
+    const onComplete = vi.fn<(r: StudyResult) => void>();
+    render(<StudyViewer title="Cells" studyType="true_false" cards={TF_CARDS} onComplete={onComplete} />);
+    expect(screen.queryByRole('group', { name: 'How do you want to study?' })).toBeNull();
+    expect(screen.getByText('True or false?')).toBeTruthy();
+    expect(screen.queryByText('Mitochondria make most of the ATP.')).toBeNull();
+
+    click('True');
+    expect(screen.getByRole('status').textContent).toBe("✗ Not quite. It's false.");
+    expect(screen.getByText('Mitochondria make most of the ATP.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'False' }) as HTMLButtonElement).disabled).toBe(true);
+    click('Next →');
+
+    click('True');
+    expect(screen.getByRole('status').textContent).toBe('✓ Correct');
+    click('Finish');
+    expect(onComplete).toHaveBeenCalledWith({
+      answers: [
+        { cardId: 't1', chosen: 'True' },
+        { cardId: 't2', chosen: 'True' },
+      ],
+      correct: 1,
+      total: 2,
+    });
+    expect(screen.getByText('1 / 2')).toBeTruthy();
+  });
+
+  it('shows a set with an old study type as flashcards', () => {
+    render(<StudyViewer title="Old" studyType={'identification' as 'flashcard'} cards={FLASH_CARDS} />);
+    expect(screen.getByRole('button', { name: /Tap to flip/ })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'How do you want to study?' })).toBeTruthy();
+  });
+});

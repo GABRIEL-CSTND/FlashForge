@@ -1,13 +1,21 @@
 'use client';
 
 import { useId, useMemo, useState } from 'react';
-import { CARD_LIMITS, normalizeChoice, validateCards, type StudyType } from '@/lib/card-rules';
+import {
+  CARD_LIMITS,
+  normalizeChoice,
+  toTrueFalse,
+  TRUE_FALSE_OPTIONS,
+  validateCards,
+  type StudyType,
+} from '@/lib/card-rules';
 
 export interface EditableCard {
   id: string;
   question: string;
   answer: string;
   options: string[] | null;
+  explanation?: string | null;
 }
 
 // What PUT /api/sets/[id]/cards expects, in the order the cards should appear.
@@ -16,6 +24,7 @@ export interface CardPayload {
   question: string;
   answer: string;
   options?: string[];
+  explanation?: string;
 }
 
 export type SaveResult = { ok: true } | { ok: false; error: string; cardIndex: number | null };
@@ -34,6 +43,7 @@ interface DraftCard {
   answer: string;
   choices: string[];
   correctIndex: number | null;
+  explanation: string;
 }
 
 // React list keys only (never rendered into the page). DOM ids use useId()
@@ -51,9 +61,11 @@ function toDraft(card: EditableCard, studyType: StudyType): DraftCard {
     key: newKey(),
     id: card.id,
     question: card.question,
-    answer: card.answer,
+    // True or false (#68): "True", "False", or "" until one is picked.
+    answer: studyType === 'true_false' ? (toTrueFalse(card.answer) ?? '') : card.answer,
     choices,
     correctIndex: correct === -1 ? null : correct,
+    explanation: card.explanation ?? '',
   };
 }
 
@@ -65,12 +77,22 @@ function emptyDraft(studyType: StudyType): DraftCard {
     answer: '',
     choices: studyType === 'multiple_choice' ? Array(CARD_LIMITS.choices).fill('') : [],
     correctIndex: null,
+    explanation: '',
   };
 }
 
 function toPayload(draft: DraftCard, studyType: StudyType): CardPayload {
   const base = draft.id ? { id: draft.id } : {};
   if (studyType === 'flashcard') return { ...base, question: draft.question, answer: draft.answer };
+  if (studyType === 'true_false') {
+    return {
+      ...base,
+      question: draft.question,
+      answer: draft.answer,
+      options: [...TRUE_FALSE_OPTIONS],
+      explanation: draft.explanation,
+    };
+  }
   return {
     ...base,
     question: draft.question,
@@ -89,6 +111,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
   const idBase = useId();
 
   const isMultipleChoice = studyType === 'multiple_choice';
+  const isTrueFalse = studyType === 'true_false';
   const payload = drafts.map((d) => toPayload(d, studyType));
   const dirty = JSON.stringify(payload) !== JSON.stringify(initial.map((d) => toPayload(d, studyType)));
 
@@ -182,7 +205,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
 
               <div className="space-y-1">
                 <label htmlFor={`${idBase}-${i}-question`} className="text-xs uppercase tracking-wide text-gray-400">
-                  Question
+                  {isTrueFalse ? 'Statement' : 'Question'}
                 </label>
                 <textarea
                   id={`${idBase}-${i}-question`}
@@ -195,7 +218,46 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
                 />
               </div>
 
-              {isMultipleChoice ? (
+              {isTrueFalse ? (
+                <>
+                  <fieldset className="space-y-2" disabled={saving}>
+                    <legend className="text-xs uppercase tracking-wide text-gray-400">Answer</legend>
+                    <div className="flex gap-4">
+                      {TRUE_FALSE_OPTIONS.map((value) => (
+                        <label key={value} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="radio"
+                            name={`${idBase}-${i}-truth`}
+                            checked={d.answer === value}
+                            onChange={() => update(d.key, { answer: value })}
+                            aria-label={`${label} is ${value.toLowerCase()}`}
+                            className="h-4 w-4 accent-green-600"
+                          />
+                          {value}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor={`${idBase}-${i}-explanation`}
+                      className="text-xs uppercase tracking-wide text-gray-400"
+                    >
+                      Explanation (optional)
+                    </label>
+                    <textarea
+                      id={`${idBase}-${i}-explanation`}
+                      value={d.explanation}
+                      onChange={(e) => update(d.key, { explanation: e.target.value })}
+                      maxLength={CARD_LIMITS.explanation}
+                      rows={2}
+                      disabled={saving}
+                      placeholder="Shown after answering, e.g. the correct fact"
+                      className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                    />
+                  </div>
+                </>
+              ) : isMultipleChoice ? (
                 <fieldset className="space-y-2" disabled={saving}>
                   <legend className="text-xs uppercase tracking-wide text-gray-400">
                     Choices: select the correct one

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import type { CleanCard, StudyType } from '@/lib/card-rules';
+import type { CleanCard } from '@/lib/card-rules';
+import { toStudyType, type StudyType } from '@/lib/study-types';
 
 // SERVER-ONLY (service-role client). Study sets, scoped to their owner.
 
@@ -14,6 +15,7 @@ export interface SavedCard {
   question: string;
   answer: string;
   options: string[] | null;
+  explanation: string | null;
   position: number;
 }
 
@@ -31,7 +33,7 @@ export async function getOwnedSet(
     .eq('user_id', ownerId)
     .maybeSingle();
   if (error) throw error;
-  return data ? { id: data.id, studyType: data.study_type as StudyType } : null;
+  return data ? { id: data.id, studyType: toStudyType(data.study_type) } : null;
 }
 
 export class SetCardsError extends Error {
@@ -58,6 +60,7 @@ export async function replaceSetCards(
     question: c.question,
     answer: c.answer,
     options: c.options,
+    explanation: c.explanation,
   }));
   const { data, error } = await client.rpc('replace_set_cards', {
     p_set_id: setId,

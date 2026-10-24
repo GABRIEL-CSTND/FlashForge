@@ -150,3 +150,50 @@ describe('CardEditor: cancel', () => {
     expect(onCancel).toHaveBeenCalled();
   });
 });
+
+describe('CardEditor: true or false (#68)', () => {
+  const TF: EditableCard[] = [
+    {
+      id: '00000000-0000-4000-8000-00000000000e',
+      question: 'Chloroplasts make most of the ATP.',
+      answer: 'False',
+      options: ['True', 'False'],
+      explanation: 'Mitochondria do.',
+    },
+  ];
+  const statementOf = (n: number) => within(card(n)).getByLabelText('Statement') as HTMLTextAreaElement;
+  const explanationOf = (n: number) => within(card(n)).getByLabelText('Explanation (optional)') as HTMLTextAreaElement;
+  const truth = (n: number, value: 'true' | 'false') =>
+    within(card(n)).getByRole('radio', { name: `Card ${n} is ${value}` }) as HTMLInputElement;
+
+  it('shows the statement, the answer and the explanation', () => {
+    render(<CardEditor studyType="true_false" cards={TF} onSave={onSave} onCancel={onCancel} />);
+    expect(statementOf(1).value).toBe('Chloroplasts make most of the ATP.');
+    expect([truth(1, 'true').checked, truth(1, 'false').checked]).toEqual([false, true]);
+    expect(explanationOf(1).value).toBe('Mitochondria do.');
+  });
+
+  it('saves a flipped answer, a cleared explanation and a new statement', async () => {
+    render(<CardEditor studyType="true_false" cards={TF} onSave={onSave} onCancel={onCancel} />);
+    fireEvent.click(truth(1, 'true'));
+    fireEvent.change(explanationOf(1), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '+ Add card' }));
+    fireEvent.change(statementOf(2), { target: { value: 'Plants give off oxygen.' } });
+    fireEvent.click(truth(2, 'true'));
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(savedCards()).toEqual([
+      { id: TF[0].id, question: 'Chloroplasts make most of the ATP.', answer: 'True', options: ['True', 'False'], explanation: '' },
+      { question: 'Plants give off oxygen.', answer: 'True', options: ['True', 'False'], explanation: '' },
+    ]);
+  });
+
+  it('needs True or False on a new statement', () => {
+    render(<CardEditor studyType="true_false" cards={TF} onSave={onSave} onCancel={onCancel} />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Add card' }));
+    fireEvent.change(statementOf(2), { target: { value: 'Plants give off oxygen.' } });
+    fireEvent.click(saveButton());
+    expect(within(card(2)).getByRole('alert').textContent).toBe('Card 2: pick True or False.');
+    expect(onSave).not.toHaveBeenCalled();
+  });
+});

@@ -12,7 +12,29 @@ export const CARD_LIMITS = {
   answer: 200,
   choice: 200,
   choices: 4,
+  explanation: 300,
 } as const;
+
+// A true-or-false card (#68) is stored like a multiple-choice card with these
+// two options, and its answer is one of them.
+export const TRUE_FALSE_OPTIONS = ['True', 'False'] as const;
+export type TrueFalse = (typeof TRUE_FALSE_OPTIONS)[number];
+
+export function isTrueFalseOptions(options: unknown): boolean {
+  return (
+    Array.isArray(options) &&
+    options.length === 2 &&
+    options.every((o, i) => typeof o === 'string' && o.trim().toLowerCase() === TRUE_FALSE_OPTIONS[i].toLowerCase())
+  );
+}
+
+// "true", " FALSE " and booleans become "True" / "False"; anything else is null.
+export function toTrueFalse(value: unknown): TrueFalse | null {
+  if (typeof value === 'boolean') return value ? 'True' : 'False';
+  if (typeof value !== 'string') return null;
+  const v = value.trim().toLowerCase();
+  return v === 'true' ? 'True' : v === 'false' ? 'False' : null;
+}
 
 // How multiple-choice text is compared: ignores case, extra spaces and
 // trailing periods. AI generation (lib/gemini.ts) uses the same rule.
@@ -26,6 +48,8 @@ export interface CleanCard {
   question: string;
   answer: string;
   options: string[] | null;
+  // Shown after answering (#68). Only true-or-false cards have one.
+  explanation: string | null;
 }
 
 export type CardsResult =
@@ -41,7 +65,8 @@ function text(value: unknown): string | null {
 
 // Checks a whole set's cards for its study type and returns them trimmed. For
 // multiple choice, `answer` must match exactly one of the 4 different choices
-// and is stored as that choice's text.
+// and is stored as that choice's text. A true-or-false card (#68) is a
+// statement whose answer is "True" or "False", with an optional explanation.
 export function validateCards(raw: unknown, studyType: StudyType): CardsResult {
   if (!Array.isArray(raw)) return fail('Send the cards as a list.');
   if (raw.length === 0) return fail('A set needs at least one card. Delete the set instead if you no longer need it.');
@@ -63,10 +88,30 @@ export function validateCards(raw: unknown, studyType: StudyType): CardsResult {
       seenIds.add(id);
     }
 
+    const isTrueFalse = studyType === 'true_false';
     const question = text(card.question);
-    if (!question) return fail(`${label}: write a question.`, i);
+    if (!question) return fail(`${label}: write ${isTrueFalse ? 'a statement' : 'a question'}.`, i);
     if (question.length > CARD_LIMITS.question) {
-      return fail(`${label}: the question is too long (up to ${CARD_LIMITS.question} characters).`, i);
+      return fail(
+        `${label}: the ${isTrueFalse ? 'statement' : 'question'} is too long (up to ${CARD_LIMITS.question} characters).`,
+        i
+      );
+    }
+
+    const explanation = text(card.explanation) || null;
+    if (explanation && !isTrueFalse) return fail(`${label}: only true-or-false cards have an explanation.`, i);
+    if (explanation && explanation.length > CARD_LIMITS.explanation) {
+      return fail(`${label}: the explanation is too long (up to ${CARD_LIMITS.explanation} characters).`, i);
+    }
+
+    if (isTrueFalse) {
+      if (card.options != null && !isTrueFalseOptions(card.options)) {
+        return fail(`${label}: a true-or-false card's only choices are True and False.`, i);
+      }
+      const answer = toTrueFalse(card.answer);
+      if (!answer) return fail(`${label}: pick True or False.`, i);
+      cards.push({ id, question, answer, options: [...TRUE_FALSE_OPTIONS], explanation });
+      continue;
     }
 
     if (studyType === 'flashcard') {
@@ -76,7 +121,7 @@ export function validateCards(raw: unknown, studyType: StudyType): CardsResult {
       if (answer.length > CARD_LIMITS.answer) {
         return fail(`${label}: the answer is too long (up to ${CARD_LIMITS.answer} characters).`, i);
       }
-      cards.push({ id, question, answer, options: null });
+      cards.push({ id, question, answer, options: null, explanation: null });
       continue;
     }
 
@@ -95,7 +140,7 @@ export function validateCards(raw: unknown, studyType: StudyType): CardsResult {
     const correct = answer ? options.filter((o) => normalizeChoice(o!) === normalizeChoice(answer)) : [];
     if (correct.length !== 1) return fail(`${label}: pick the correct choice.`, i);
 
-    cards.push({ id, question, answer: correct[0]!, options: options as string[] });
+    cards.push({ id, question, answer: correct[0]!, options: options as string[], explanation: null });
   }
 
   return { ok: true, cards };

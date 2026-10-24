@@ -3,9 +3,10 @@
 Upload your notes and get an AI-generated study guide in seconds.
 
 FlashForge turns a PDF or TXT file into a study guide of 5 to 30 questions (10 by
-default), either **identification-style flashcards** (a clue on the front, a 1–4 word
-term on the back) or **multiple-choice questions** with instant feedback and a score at
-the end. Flashcards can be studied by flipping them (and marking *Got it* or *Missed it*),
+default): **identification-style flashcards** (a clue on the front, a 1–4 word term on
+the back), **multiple-choice questions**, or **true-or-false statements** with the
+correction shown after each false one. Quizzes give instant feedback and a score at the
+end. Flashcards can be studied by flipping them (and marking *Got it* or *Missed it*),
 by **typing the answer**, which the app checks and forgives one small typo, or by
 **matching** clues to terms in rounds of up to 5. Sign in
 with Google to save study guides, then rename, revisit, or delete them from **My Sets**.
@@ -112,7 +113,7 @@ app/
   api/teacher/sets/[id]/assignments/  Assign a set to the teacher's classes
   api/student/classes/  Student class API (list with assignments and my progress, join with a code, leave)
 components/
-  StudyViewer.tsx       Study UI: flip (Got it / Missed it), type or match flashcards, multiple choice; reports each finish
+  StudyViewer.tsx       Study UI: flip (Got it / Missed it), type or match flashcards, multiple choice, true or false; reports each finish
   CardEditor.tsx        Edit mode for a set: change, add, delete and reorder cards
   AssignPanel.tsx       "Assign to class" dialog on a set the teacher owns
   StudentResultsPanel.tsx  One student's attempts, opened from the results table

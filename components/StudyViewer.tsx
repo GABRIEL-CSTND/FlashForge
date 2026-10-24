@@ -3,10 +3,11 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { checkTypedAnswer, type TypedVerdict } from '@/lib/answer-check';
-import { CARD_LIMITS, normalizeChoice } from '@/lib/card-rules';
+import { CARD_LIMITS, isTrueFalseOptions, normalizeChoice } from '@/lib/card-rules';
 import {
   FLASHCARD_MODE_LABELS,
   FLASHCARD_MODES,
+  isStudyType,
   matchRounds,
   type FlashcardMode,
   type StudyMode,
@@ -18,6 +19,8 @@ export interface StudyItem {
   question: string;
   answer: string;
   options?: string[] | null;
+  // Shown after answering, e.g. the corrected fact for a false statement (#68).
+  explanation?: string | null;
 }
 
 export type FlashcardMark = 'got' | 'missed';
@@ -157,7 +160,9 @@ export default function StudyViewer({
     }
   });
 
-  const isFlashcards = studyType === 'flashcard';
+  // A set saved with an old study type (one legacy set says "identification")
+  // has always been shown as flashcards.
+  const isFlashcards = studyType === 'flashcard' || !isStudyType(studyType);
   const interaction: Interaction = !isFlashcards
     ? 'choice'
     : mode === 'type'
@@ -379,32 +384,7 @@ export default function StudyViewer({
       {saveSlot}
 
       {interaction === 'choice' && (
-        <div className="w-full min-h-[220px] border rounded-xl p-8 flex flex-col justify-center space-y-4">
-          <p className="text-lg font-medium text-center">{card.question}</p>
-          <div className="space-y-2">
-            {(card.options ?? []).map((opt) => {
-              const picked = answer?.chosen;
-              const showState = picked !== undefined;
-              const isCorrectOption = opt === card.answer;
-              return (
-                <button
-                  key={opt}
-                  onClick={() => answerCard({ chosen: opt })}
-                  disabled={showState}
-                  className={`w-full text-left px-4 py-2 rounded-lg border transition-colors ${
-                    showState && isCorrectOption
-                      ? 'border-green-500 bg-green-500/10'
-                      : showState && picked === opt
-                        ? 'border-red-500 bg-red-500/10'
-                        : 'border-border'
-                  }`}
-                >
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <ChoiceCard card={card} picked={answer?.chosen} onPick={(opt) => answerCard({ chosen: opt })} />
       )}
 
       {interaction === 'match' && (
@@ -473,6 +453,53 @@ export default function StudyViewer({
 
       {navigation}
     </main>
+  );
+}
+
+// Multiple choice, or true or false (#68): pick one, and the right answer (and
+// any explanation) shows straight away.
+function ChoiceCard({
+  card,
+  picked,
+  onPick,
+}: {
+  card: StudyItem;
+  picked: string | undefined;
+  onPick: (option: string) => void;
+}) {
+  const trueFalse = isTrueFalseOptions(card.options);
+  const answered = picked !== undefined;
+  return (
+    <div className="w-full min-h-[220px] border rounded-xl p-8 flex flex-col justify-center space-y-4">
+      {trueFalse && <p className="text-center text-xs uppercase tracking-wide text-gray-400">True or false?</p>}
+      <p className="text-lg font-medium text-center">{card.question}</p>
+      <div className={trueFalse ? 'grid grid-cols-2 gap-3' : 'space-y-2'}>
+        {(card.options ?? []).map((opt) => (
+          <button
+            key={opt}
+            onClick={() => onPick(opt)}
+            disabled={answered}
+            className={`w-full px-4 rounded-lg border transition-colors ${
+              trueFalse ? 'py-3 text-center font-medium' : 'py-2 text-left'
+            } ${
+              answered && opt === card.answer
+                ? 'border-green-500 bg-green-500/10'
+                : answered && picked === opt
+                  ? 'border-red-500 bg-red-500/10'
+                  : 'border-border'
+            }`}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+      {answered && trueFalse && (
+        <p role="status" className={`text-center text-sm ${picked === card.answer ? 'text-green-600' : 'text-red-500'}`}>
+          {picked === card.answer ? '✓ Correct' : `✗ Not quite. It's ${card.answer.toLowerCase()}.`}
+        </p>
+      )}
+      {answered && card.explanation && <p className="text-center text-sm text-gray-500">{card.explanation}</p>}
+    </div>
   );
 }
 

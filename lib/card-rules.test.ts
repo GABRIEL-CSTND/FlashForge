@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CARD_LIMITS, normalizeChoice, validateCards } from '@/lib/card-rules';
+import { CARD_LIMITS, isTrueFalseOptions, normalizeChoice, toTrueFalse, validateCards, type StudyType } from '@/lib/card-rules';
 
 const ID = '6f1c2a7e-3b4d-4e5f-8a9b-0c1d2e3f4a5b';
 const mc = (over: Record<string, unknown> = {}) => ({
@@ -9,7 +9,7 @@ const mc = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const errorOf = (raw: unknown, type: 'flashcard' | 'multiple_choice') => {
+const errorOf = (raw: unknown, type: StudyType) => {
   const r = validateCards(raw, type);
   return r.ok ? null : { error: r.error, cardIndex: r.cardIndex };
 };
@@ -43,8 +43,8 @@ describe('validateCards: flashcards', () => {
     expect(r).toEqual({
       ok: true,
       cards: [
-        { id: ID, question: 'Q', answer: 'A', options: null },
-        { id: null, question: 'New', answer: 'Card', options: null },
+        { id: ID, question: 'Q', answer: 'A', options: null, explanation: null },
+        { id: null, question: 'New', answer: 'Card', options: null, explanation: null },
       ],
     });
   });
@@ -69,6 +69,7 @@ describe('validateCards: multiple choice', () => {
       question: 'Which layer routes packets?',
       answer: 'Network',
       options: ['Physical', 'Network', 'Transport', 'Session'],
+      explanation: null,
     });
   });
 
@@ -82,5 +83,51 @@ describe('validateCards: multiple choice', () => {
     [mc({ answer: 'Application' }), 'Card 1: pick the correct choice.'],
   ])('rejects %j', (bad, message) => {
     expect(errorOf([bad], 'multiple_choice')).toEqual({ error: message, cardIndex: 0 });
+  });
+});
+
+describe('validateCards: true or false (#68)', () => {
+  const tf = (over: Record<string, unknown> = {}) => ({
+    question: 'Chloroplasts make most of the cell’s ATP.',
+    answer: 'False',
+    options: ['True', 'False'],
+    explanation: 'Mitochondria make most of the ATP.',
+    ...over,
+  });
+
+  it('stores True or False with both options, and the explanation if any', () => {
+    const r = validateCards([tf({ answer: ' false ' }), tf({ answer: true, options: undefined, explanation: '  ' })], 'true_false');
+    expect(r.ok && r.cards).toEqual([
+      { id: null, question: 'Chloroplasts make most of the cell’s ATP.', answer: 'False', options: ['True', 'False'], explanation: 'Mitochondria make most of the ATP.' },
+      { id: null, question: 'Chloroplasts make most of the cell’s ATP.', answer: 'True', options: ['True', 'False'], explanation: null },
+    ]);
+  });
+
+  it.each([
+    [tf({ question: ' ' }), 'Card 1: write a statement.'],
+    [tf({ question: 'x'.repeat(501) }), 'Card 1: the statement is too long (up to 500 characters).'],
+    [tf({ answer: '' }), 'Card 1: pick True or False.'],
+    [tf({ answer: 'Maybe' }), 'Card 1: pick True or False.'],
+    [tf({ options: ['Yes', 'No'] }), "Card 1: a true-or-false card's only choices are True and False."],
+    [tf({ options: ['True', 'False', 'Maybe'] }), "Card 1: a true-or-false card's only choices are True and False."],
+    [tf({ explanation: 'x'.repeat(301) }), 'Card 1: the explanation is too long (up to 300 characters).'],
+  ])('rejects %j', (bad, message) => {
+    expect(errorOf([bad], 'true_false')).toEqual({ error: message, cardIndex: 0 });
+  });
+
+  it('allows an explanation only on true-or-false cards', () => {
+    expect(errorOf([{ question: 'Q', answer: 'A', explanation: 'Because' }], 'flashcard')?.error).toBe(
+      'Card 1: only true-or-false cards have an explanation.'
+    );
+    expect(errorOf([mc({ explanation: 'Because' })], 'multiple_choice')?.error).toBe('Card 1: only true-or-false cards have an explanation.');
+    expect(validateCards([{ question: 'Q', answer: 'A', explanation: '' }], 'flashcard').ok).toBe(true);
+  });
+
+  it('recognizes True and False', () => {
+    expect(isTrueFalseOptions(['True', 'False'])).toBe(true);
+    expect(isTrueFalseOptions([' true', 'FALSE '])).toBe(true);
+    expect(isTrueFalseOptions(['False', 'True'])).toBe(false);
+    expect(isTrueFalseOptions(null)).toBe(false);
+    expect([toTrueFalse('TRUE'), toTrueFalse(false), toTrueFalse('yes'), toTrueFalse(1)]).toEqual(['True', 'False', null, null]);
   });
 });

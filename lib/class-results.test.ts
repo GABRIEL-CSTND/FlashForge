@@ -27,6 +27,12 @@ describe('questionStats: most common wrong answer', () => {
     expect(stat.topWrongChoice).toEqual({ choice: 'Ribosome', count: 2 });
   });
 
+  it('has no wrong answer to show for a true-or-false card (#68)', () => {
+    const tf = [{ id: 'c1', question: 'Cells have walls.', answer: 'False', options: ['True', 'False'] }];
+    const [stat] = questionStats(tf, [[{ cardId: 'c1', chosen: 'True', correct: false }], [{ cardId: 'c1', chosen: 'True', correct: false }]]);
+    expect(stat).toMatchObject({ wrong: 2, percentWrong: 100, topWrongChoice: null });
+  });
+
   it('has no wrong answer to show for self-marked flashcards', () => {
     const [stat] = questionStats(cards, [[{ cardId: 'c1', correct: false }]]);
     expect(stat).toMatchObject({ wrong: 1, topWrongChoice: null });

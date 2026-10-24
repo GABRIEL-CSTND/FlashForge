@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import AdminOnly from '@/components/AdminOnly';
 import { apiFetch, errorMessage } from '@/lib/api-client';
+import { STUDY_TYPE_LABELS, toStudyType } from '@/lib/study-types';
 
 interface AdminSet {
   id: string;
@@ -149,7 +150,7 @@ function SetsView() {
                 </Link>
                 <p className="truncate text-xs text-gray-400">
                   {ownerLabel(s)} · {new Date(s.createdAt).toLocaleDateString()} · {s.cardCount} card
-                  {s.cardCount === 1 ? '' : 's'} · {s.studyType === 'multiple_choice' ? 'Multiple choice' : 'Flashcards'}
+                  {s.cardCount === 1 ? '' : 's'} · {STUDY_TYPE_LABELS[toStudyType(s.studyType)]}
                 </p>
                 {s.assignmentCount > 0 && (
                   <p className="mt-1 text-xs">

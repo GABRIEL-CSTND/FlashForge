@@ -1,16 +1,31 @@
 // Kinds of study guide and how many questions to generate, shared by the
 // upload page, the API routes and the AI pipeline.
 
-export const STUDY_TYPES = ['flashcard', 'multiple_choice'] as const;
+export const STUDY_TYPES = ['flashcard', 'multiple_choice', 'true_false'] as const;
 export type StudyType = (typeof STUDY_TYPES)[number];
 
 export function isStudyType(value: unknown): value is StudyType {
   return typeof value === 'string' && (STUDY_TYPES as readonly string[]).includes(value);
 }
 
+// Sets saved before study types were checked can say something else (one
+// legacy set says "identification"); they have always been shown as
+// flashcards.
+export function toStudyType(value: unknown): StudyType {
+  return isStudyType(value) ? value : 'flashcard';
+}
+
 export const STUDY_TYPE_LABELS: Record<StudyType, string> = {
   flashcard: 'Flashcards',
   multiple_choice: 'Multiple choice',
+  true_false: 'True or false',
+};
+
+// One line under the choice on the upload page.
+export const STUDY_TYPE_HINTS: Record<StudyType, string> = {
+  flashcard: 'A clue on the front and a short term on the back. Flip, type or match them.',
+  multiple_choice: 'Pick the right answer out of 4.',
+  true_false: 'Decide whether each statement is true or false, and see the correction.',
 };
 
 // Ways to study a flashcard set (#66, #67). Flip is the original way, marked

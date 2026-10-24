@@ -10,6 +10,9 @@ into `main`. There is only one Supabase database, so changes marked **(live)** a
 already applied there.
 
 ### Security
+- Saving a generated guide now checks the study type and every card with the card
+  editor's rules, so a set can't be saved in a shape the study screen can't show, and an
+  unknown study type is refused by the database too (#68).
 - Admins can now read every study set (to check reported or broken content), but still
   can't edit or delete other people's sets except through the logged admin delete
   (#61). All 8 database check files pass (117 cases).
@@ -35,6 +38,12 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **True or false** (#68, live database): a new kind of study guide. The AI writes
+  statements from the notes, about half true and half false; each false one changes one
+  key detail and comes with the corrected fact, shown after answering. Scored like
+  multiple choice, editable (statement, True/False, optional explanation), and works with
+  assignments and results. The upload page now says what each kind of guide is. New
+  `flashcards.explanation` column.
 - **Matching** (#67, live database): a third way to study flashcard sets. The set is split
   into even rounds of up to 5; students pick the term for each clue from the round's
   shuffled terms (each used once), then check the round. Scored on the server like other

@@ -32,6 +32,7 @@ soon as it's applied.
 | `20261023000400_generation_limits.sql` | #63 | 2026-10-23 |
 | `20261024000100_attempt_modes.sql` | #66 | 2026-10-24 |
 | `20261024000200_matching_mode.sql` | #67 | 2026-10-24 |
+| `20261024000300_true_false.sql` | #68 | 2026-10-24 |
 
 Add a row here whenever you apply a new migration.
 

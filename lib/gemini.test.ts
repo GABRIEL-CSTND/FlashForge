@@ -104,3 +104,44 @@ describe('question count (#65)', () => {
     expect(onRequest).toHaveBeenCalledWith('gemini-3.5-flash');
   });
 });
+
+describe('true or false (#68)', () => {
+  const statement = (i: number, answer: unknown, explanation?: unknown) => ({ question: `Statement number ${i} about cells.`, answer, explanation });
+
+  it('asks for statements and keeps them as True/False cards with their corrections', async () => {
+    mockModel(() =>
+      reply([
+        statement(1, 'True', ''),
+        statement(2, 'false', 'The corrected fact.'),
+        statement(3, 'Maybe'),
+        statement(4, true),
+        statement(5, 'False', '<b>broken</b>'),
+        statement(6, 'False', 'Another correction.'),
+      ])
+    );
+    const { items } = await generateStudyItems('Notes about cells.', 'true_false', { count: 5 });
+    expect(sent[0].prompt).toContain('Create true-or-false statements.');
+    expect(sent[0].prompt).toContain('Produce exactly 6 items.');
+    expect(sent[0].body.generationConfig).toMatchObject({
+      responseSchema: { type: 'ARRAY', items: { required: ['question', 'answer', 'explanation'] } },
+    });
+    // "Maybe" is dropped; a broken explanation is dropped but the statement kept.
+    expect([...items].sort((a, b) => a.question.localeCompare(b.question))).toEqual([
+      { question: 'Statement number 1 about cells.', answer: 'True', options: ['True', 'False'] },
+      { question: 'Statement number 2 about cells.', answer: 'False', options: ['True', 'False'], explanation: 'The corrected fact.' },
+      { question: 'Statement number 4 about cells.', answer: 'True', options: ['True', 'False'] },
+      { question: 'Statement number 5 about cells.', answer: 'False', options: ['True', 'False'] },
+      { question: 'Statement number 6 about cells.', answer: 'False', options: ['True', 'False'], explanation: 'Another correction.' },
+    ]);
+  });
+
+  it('tells Gemma the format in the prompt', async () => {
+    mockModel((req) =>
+      req.model === 'gemma-4-26b-a4b-it'
+        ? reply([statement(1, 'True'), statement(2, 'False', 'Fixed.'), statement(3, 'True')])
+        : new Response('quota', { status: 429 })
+    );
+    await generateStudyItems('Notes.', 'true_false', { count: 5 });
+    expect(sent.at(-1)!.prompt).toContain('"answer" ("True" or "False")');
+  });
+});

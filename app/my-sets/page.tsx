@@ -4,11 +4,12 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
+import { STUDY_TYPE_LABELS, toStudyType } from '@/lib/study-types';
 
 interface FlashcardSet {
   id: string;
   title: string;
-  study_type: 'flashcard' | 'multiple_choice';
+  study_type: string;
   created_at: string;
 }
 
@@ -92,7 +93,7 @@ export default function MySetsPage() {
               <Link href={`/sets/${s.id}`} className="flex-1 min-w-0">
                 <p className="font-medium truncate">{s.title}</p>
                 <p className="text-xs text-gray-400 mt-1">
-                  {s.study_type === 'multiple_choice' ? 'Multiple Choice' : 'Flashcards'} ·{' '}
+                  {STUDY_TYPE_LABELS[toStudyType(s.study_type)]} ·{' '}
                   {new Date(s.created_at).toLocaleDateString()}
                 </p>
               </Link>

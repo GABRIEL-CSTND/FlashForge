@@ -132,9 +132,10 @@ screen instead of shortening with "…".
 
 ## 1. Generating a study guide
 
-1. **Upload** (`app/page.tsx`): the user picks *Flashcards* or *Multiple choice*, how
-   many questions (5, 10, 15, 20 or 30; 10 by default, #65), and drops a `.pdf` or
-   `.txt` file. Nothing is saved yet.
+1. **Upload** (`app/page.tsx`): the user picks *Flashcards*, *Multiple choice* or *True or
+   false* (#68), with a line under the choice saying what it is, how many questions (5,
+   10, 15, 20 or 30; 10 by default, #65), and drops a `.pdf` or `.txt` file. Nothing is
+   saved yet.
 2. **`POST /api/generate`** (`app/api/generate/route.ts`, `maxDuration = 90`):
    - Checks the caller's **daily limit** first (#63). Over it, the answer is 429 and the AI
      isn't called. See "Daily generation limits" below.
@@ -153,8 +154,10 @@ screen instead of shortening with "…".
    `generation_logs`. The row is reserved by the limit check and filled in with Next's
    `after()`, after the response has been sent, so logging never slows the user down. The upload page sends the user's token when signed
    in, so the log knows who generated it. See "Admin: AI usage" below.
-5. **Save** (optional, requires sign-in): `POST /api/save-set` verifies the user's token
-   and inserts the set and cards with the **service-role** key. If the user signs in
+5. **Save** (optional, requires sign-in): `POST /api/save-set` verifies the user's token,
+   checks the study type and every card with the card editor's rules (`validateCards()`,
+   400 otherwise, #68) and inserts the set and cards with the **service-role** key. If the
+   cards can't be saved, the new set is removed again. If the user signs in
    mid-save, the unsaved result is kept in `sessionStorage` across the Google redirect
    and saved automatically afterwards.
 
@@ -189,8 +192,15 @@ screen instead of shortening with "…".
   answer is the 1–4 word term. "Explain/describe/why/how" questions aren't allowed.
 - *Multiple choice*: 4 options, wrong options of the same kind as the answer, and no
   "all/none of the above".
+- *True or false* (#68): one fact per statement, about half true and half false. A false
+  statement changes one key detail of a real fact (a term, name, number or date), never
+  just adds "not", and comes with the corrected statement as its `explanation`. The
+  guide is shuffled, since the model writes its true statements first. In a test on
+  sample notes (2026-10-24), 10 statements came back 5 true and 5 false, each false one
+  with a correction, in 3.3 seconds.
 - **Spares:** items that fail validation are dropped, so the prompt asks for 10% more
-  flashcards or 20% more multiple-choice questions than the user chose (11 or 12 for 10),
+  flashcards or true-or-false statements, or 20% more multiple-choice questions, than the
+  user chose (11 or 12 for 10),
   and the guide keeps the first valid ones up to the chosen count.
 - Only the first 30,000 characters of the file are used (#38 tracks sampling the whole
   document).
@@ -219,7 +229,10 @@ screen instead of shortening with "…".
   the editor before sending and again on the server. Every card needs a question (up to
   500 characters) and an answer (up to 200). A multiple-choice card needs exactly 4
   different choices (compared with `normalizeChoice`) with one marked correct, and the
-  answer is stored as that choice's text. Errors name the card ("Card 3: write a
+  answer is stored as that choice's text. A true-or-false card (#68) is a statement with
+  *True* or *False* picked and an optional explanation (up to 300 characters); it's
+  stored with the options `["True", "False"]`, and only these cards may have an
+  explanation. Errors name the card ("Card 3: write a
   question.") and come back with a `cardIndex` so the editor can outline that card.
 - **Only the owner, checked twice:** the route looks the set up with `user_id = caller`
   (`lib/sets.ts`, so others get 404, including admins and legacy ownerless sets). Then
@@ -356,6 +369,24 @@ screen instead of shortening with "…".
   Private study is never visible to teachers, and unassigning a set keeps the attempts
   but makes them private. Browsers can't write attempts at all. Teachers see these
   results on the class's results page (#58, below).
+
+### True or false (#68)
+
+- A new study type, `true_false`. Each card is stored like a two-option multiple-choice
+  card: the statement as `question`, `options` `["True", "False"]`, `answer` *True* or
+  *False*, plus an optional `explanation` (a new `flashcards` column) shown after
+  answering. The upload page offers it; generation is one AI request like the others.
+- **Studying:** *True or false?* above the statement and two big buttons. Answering shows
+  *✓ Correct* or *✗ Not quite. It's false.*, colors the buttons and shows the
+  explanation. The score is worked out like multiple choice, on the server too.
+- **Editing:** a *Statement* box, a *True / False* choice and an *Explanation (optional)*
+  box. `replace_set_cards()` saves and returns the explanation (an empty one clears it).
+- **Teachers:** results work as for any set. The most-missed page leaves out "most common
+  wrong answer" for these cards, as it could only be the other option.
+- **Database:** `study_type` allows `true_false` on sets, attempts and the generation log.
+  Sets now have a `study_type` check of their own; it's `NOT VALID` because one legacy
+  set from August says `identification`. The app shows any unknown study type as
+  flashcards (`toStudyType()`), as it always has.
 
 ### Typing the answer (#66)
 
@@ -530,7 +561,7 @@ The plan for teacher and admin features is tracked in #50.
 | Table | Columns | Notes |
 |---|---|---|
 | `flashcard_sets` | `id`, `user_id` → `auth.users`, `title`, `source_filename`, `study_type`, `created_at` | `user_id` is null for legacy sets made before sign-in was required |
-| `flashcards` | `id`, `set_id` → `flashcard_sets` (cascade), `question`, `answer`, `options` (jsonb, MC only), `position` | Indexed on `set_id`. Ids stay the same when a card is edited (#55) |
+| `flashcards` | `id`, `set_id` → `flashcard_sets` (cascade), `question`, `answer`, `options` (jsonb: 4 choices for multiple choice, `["True","False"]` for true or false, null for flashcards), `explanation` (1–300 chars, true or false only, #68), `position` | Indexed on `set_id`. Ids stay the same when a card is edited (#55) |
 | `profiles` | `id` → `auth.users` (cascade), `display_name`, `role`, `role_chosen_at`, `created_at` | `role_chosen_at` is for the sign-up role choice (#52) |
 | `classes` | `id`, `teacher_id` → `auth.users` (cascade), `name` (1–80 chars), `join_code` (unique), `created_at` | Indexed on `teacher_id` |
 | `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
@@ -618,6 +649,11 @@ transaction. Run them after every database change.
 - `supabase/tests/sets-editing-check.sql`: `replace_set_cards()` (12 cases), covering a
   real edit, kept ids, each kind of refused save, that a refused save changes nothing,
   and that browsers can't call it.
+- `supabase/tests/study-types-check.sql` (12 cases, #68): `true_false` sets, attempts
+  and generation logs are accepted and unknown study types refused; a true-or-false
+  attempt can't have a flashcard mode; explanations must be 1–300 characters; and
+  `replace_set_cards()` keeps, changes and clears explanations and is still
+  service-role only.
 - Every check file clears the simulated sign-in (`request.jwt.claims`) before acting as
   `anon`; otherwise `auth.uid()` would still be the previous user.
 - AI changes were checked with mocked `fetch` (retries, fallbacks, validation) and a few

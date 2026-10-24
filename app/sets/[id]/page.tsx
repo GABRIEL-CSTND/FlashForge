@@ -49,6 +49,8 @@ interface Flashcard {
   question: string;
   answer: string;
   options: string[] | null;
+  // True or false (#68): shown after answering.
+  explanation: string | null;
   position: number;
 }
 

@@ -62,6 +62,15 @@ describe('upload page options', () => {
     expect(buttonsIn('How many questions?')).toEqual(['5', '10', '15', '20', '30']);
   });
 
+  it('offers true or false, and says what each kind of guide is (#68)', () => {
+    render(<UploadPage />);
+    expect(buttonsIn('What kind of study guide?')).toEqual(['Flashcards', 'Multiple choice', 'True or false']);
+    expect(screen.getByText(/Flip, type or match them/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'True or false' }));
+    expect(pressed('What kind of study guide?')).toEqual(['True or false']);
+    expect(screen.getByText(/Decide whether each statement is true or false/)).toBeTruthy();
+  });
+
   it('sends the chosen study type and question count with the file (#65)', async () => {
     render(<UploadPage />);
     fireEvent.click(screen.getByRole('button', { name: 'Multiple choice' }));

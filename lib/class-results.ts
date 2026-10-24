@@ -4,6 +4,7 @@ import { getClass, type RosterEntry } from '@/lib/classes';
 import { listClassAssignments, type ClassAssignment } from '@/lib/assignments';
 import { classAverage, isLate, summarizeAttempts, type ResultSummary, type TimedScore } from '@/lib/results-shared';
 import { typedAnswerKey } from '@/lib/answer-check';
+import { isTrueFalseOptions } from '@/lib/card-rules';
 import type { StudyMode } from '@/lib/study-types';
 
 // SERVER-ONLY (service-role client, which bypasses RLS). A teacher's view of
@@ -176,12 +177,14 @@ interface StoredAnswer {
 
 // Hardest first (#59). Each student counts once, by their latest attempt, and
 // answers are matched to the set's current cards by id, so deleted cards drop
-// out and edited ones keep their history.
+// out and edited ones keep their history. A true-or-false card has no "most
+// common wrong answer": it can only be the other one (#68).
 export function questionStats(
-  cards: { id: string; question: string; answer: string }[],
+  cards: { id: string; question: string; answer: string; options?: unknown }[],
   latestAnswers: StoredAnswer[][]
 ): QuestionStat[] {
   const stats = cards.map((card, position) => {
+    const trueFalse = isTrueFalseOptions(card.options);
     let answered = 0;
     let wrong = 0;
     // By grouping key: the answer as first written, and how often it was given.
@@ -196,6 +199,7 @@ export function questionStats(
       answered += 1;
       if (a.correct) continue;
       wrong += 1;
+      if (trueFalse) continue;
       if (typeof a.chosen === 'string' && a.chosen) countWrong(`chosen:${a.chosen}`, a.chosen);
       else if (typeof a.typed === 'string' && typedAnswerKey(a.typed)) countWrong(`typed:${typedAnswerKey(a.typed)}`, a.typed);
     }
@@ -241,7 +245,7 @@ export async function getAssignmentQuestions(
 
   const { data: cards, error: cardsError } = await client
     .from('flashcards')
-    .select('id, question, answer, position')
+    .select('id, question, answer, options, position')
     .eq('set_id', assignment.setId)
     .order('position', { ascending: true });
   if (cardsError) throw cardsError;

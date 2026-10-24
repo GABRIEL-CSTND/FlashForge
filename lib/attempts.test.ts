@@ -182,3 +182,17 @@ describe('matched answers (#67)', () => {
     expect(result.stored.map((a) => a.correct)).toEqual([false, true]);
   });
 });
+
+describe('true or false (#68)', () => {
+  const cards = [
+    { id: id(1), answer: 'True' },
+    { id: id(2), answer: 'False' },
+  ];
+
+  it('scores the True/False pick against the real answer', () => {
+    const parsed = parseAnswers([{ cardId: id(1), chosen: 'True' }, { cardId: id(2), chosen: 'True', result: 'got' }], 'true_false');
+    expect(parsed).toEqual({ ok: true, answers: [{ cardId: id(1), chosen: 'True' }, { cardId: id(2), chosen: 'True' }] });
+    const result = scoreAnswers(parsed.ok ? parsed.answers : [], cards, 'true_false');
+    expect(result).toMatchObject({ score: 1, total: 2 });
+  });
+});

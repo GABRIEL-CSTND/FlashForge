@@ -12,6 +12,7 @@ import { generateErrorText } from '@/lib/generation-limits';
 import {
   DEFAULT_QUESTION_COUNT,
   QUESTION_COUNTS,
+  STUDY_TYPE_HINTS,
   STUDY_TYPE_LABELS,
   STUDY_TYPES,
   type StudyType,
@@ -305,6 +306,7 @@ export default function UploadPage() {
               </button>
             ))}
           </div>
+          <p className="text-xs text-gray-500 text-center">{STUDY_TYPE_HINTS[studyType]}</p>
         </div>
 
         <div className="space-y-2">
