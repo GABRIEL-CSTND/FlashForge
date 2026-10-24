@@ -9,16 +9,16 @@ import StudyViewer, { StudyItem } from '@/components/StudyViewer';
 import { useProfile } from '@/components/ProfileProvider';
 import { canUseTeacherTools } from '@/lib/role-types';
 import { generateErrorText } from '@/lib/generation-limits';
+import {
+  DEFAULT_QUESTION_COUNT,
+  QUESTION_COUNTS,
+  STUDY_TYPE_LABELS,
+  STUDY_TYPES,
+  type StudyType,
+} from '@/lib/study-types';
 
 const ACCEPTED_TYPES = ['application/pdf', 'text/plain'];
 const ACCEPTED_EXT = ['.pdf', '.txt'];
-
-type StudyType = 'flashcard' | 'multiple_choice';
-
-const STUDY_TYPE_OPTIONS: { value: StudyType; label: string }[] = [
-  { value: 'flashcard', label: 'Flashcards' },
-  { value: 'multiple_choice', label: 'Multiple Choice' },
-];
 
 interface GeneratedResult {
   title: string;
@@ -28,8 +28,10 @@ interface GeneratedResult {
 }
 
 const PENDING_RESULT_KEY = 'flashforge_pending_result';
-// Gemini normally answers in under ~12s; longer usually means the Gemma backup.
-const SLOW_NOTICE_MS = 15_000;
+// Gemini normally writes 10 questions in under ~12s; longer usually means the
+// Gemma backup. Bigger guides (#65) take longer, so wait a second more for
+// each question over 10.
+const slowNoticeMs = (count: number) => 15_000 + Math.max(0, count - DEFAULT_QUESTION_COUNT) * 1_000;
 
 export default function UploadPage() {
   const router = useRouter();
@@ -37,6 +39,7 @@ export default function UploadPage() {
   const { profile } = useProfile();
   const [file, setFile] = useState<File | null>(null);
   const [studyType, setStudyType] = useState<StudyType>('flashcard');
+  const [count, setCount] = useState<number>(DEFAULT_QUESTION_COUNT);
   const [dragActive, setDragActive] = useState(false);
   const [status, setStatus] = useState<'idle' | 'generating' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -92,10 +95,11 @@ export default function UploadPage() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('studyType', studyType);
+    formData.append('count', String(count));
 
     // Past this point the main AI is probably out of quota and the slower
     // backup model is answering, so tell the user it can take up to a minute.
-    const slowTimer = setTimeout(() => setSlowGeneration(true), SLOW_NOTICE_MS);
+    const slowTimer = setTimeout(() => setSlowGeneration(true), slowNoticeMs(count));
     let res: Response;
     try {
       // When signed in, send the session token so the usage log (#62) knows who
@@ -283,20 +287,42 @@ export default function UploadPage() {
         </div>
 
         <div className="space-y-2">
-          <p className="text-sm font-medium text-center">What kind of study guide?</p>
-          <div className="grid grid-cols-2 gap-2">
-            {STUDY_TYPE_OPTIONS.map((opt) => (
+          <p id="study-type-label" className="text-sm font-medium text-center">
+            What kind of study guide?
+          </p>
+          <div role="group" aria-labelledby="study-type-label" className="grid grid-cols-2 gap-2">
+            {STUDY_TYPES.map((type) => (
               <button
-                key={opt.value}
+                key={type}
                 type="button"
-                onClick={() => setStudyType(opt.value)}
+                onClick={() => setStudyType(type)}
+                aria-pressed={studyType === type}
                 className={`py-2 px-2 rounded-lg border text-sm font-medium transition-colors ${
-                  studyType === opt.value
-                    ? 'border-accent bg-accent/10 text-link'
-                    : 'border-border text-gray-500'
+                  studyType === type ? 'border-accent bg-accent/10 text-link' : 'border-border text-gray-500'
                 }`}
               >
-                {opt.label}
+                {STUDY_TYPE_LABELS[type]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <p id="question-count-label" className="text-sm font-medium text-center">
+            How many questions?
+          </p>
+          <div role="group" aria-labelledby="question-count-label" className="grid grid-cols-5 gap-2">
+            {QUESTION_COUNTS.map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setCount(n)}
+                aria-pressed={count === n}
+                className={`py-2 rounded-lg border text-sm font-medium tabular-nums transition-colors ${
+                  count === n ? 'border-accent bg-accent/10 text-link' : 'border-border text-gray-500'
+                }`}
+              >
+                {n}
               </button>
             ))}
           </div>
@@ -338,7 +364,10 @@ export default function UploadPage() {
           disabled={!file || status === 'generating'}
           className="btn btn-primary btn-lg w-full"
         >
-          {status === 'generating' && 'Generating (this can take ~20s)...'}
+          {status === 'generating' &&
+            (count > DEFAULT_QUESTION_COUNT
+              ? `Generating ${count} questions (this can take ~30s)...`
+              : 'Generating (this can take ~20s)...')}
           {(status === 'idle' || status === 'error') && 'Generate Study Guide'}
         </button>
 

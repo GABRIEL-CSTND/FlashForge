@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthedUser } from '@/lib/roles';
 import type { Role } from '@/lib/role-types';
-import type { StudyType } from '@/lib/gemini';
+import type { StudyType } from '@/lib/study-types';
 
 // SERVER-ONLY. One row per generation in generation_logs (#62), and the daily
 // limits (#63). /api/generate reserves a row with startGeneration() before

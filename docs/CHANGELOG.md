@@ -5,7 +5,7 @@ Notable changes to FlashForge, newest first. Issue and PR numbers refer to
 
 ## Unreleased (on `dev`, not on the live site yet)
 
-Everything here was done between 2026-10-20 and 2026-10-22. It reaches the live site when `dev` is merged
+Everything here was done between 2026-10-20 and 2026-10-24. It reaches the live site when `dev` is merged
 into `main`. There is only one Supabase database, so changes marked **(live)** are
 already applied there.
 
@@ -35,6 +35,11 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **Choose how many questions** (#65): 5, 10, 15, 20 or 30 on the upload page (10 by
+  default), for every kind of study guide. It's still one AI request per guide, so the
+  daily limits don't change. Bigger guides give the AI a little more time, and the
+  "slower backup" notice waits a little longer for them. Part of the new study types plan
+  (#64).
 - **User roles (live)** (#51): `profiles` table (`student` / `teacher` / `admin`), a
   sign-up trigger that creates a student profile, and the first admin
   (castanedag438@gmail.com). Users can't change their own role. `lib/roles.ts` has

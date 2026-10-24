@@ -2,9 +2,10 @@
 
 Upload your notes and get an AI-generated study guide in seconds.
 
-FlashForge turns a PDF or TXT file into 10 study items, either **identification-style
-flashcards** (a clue on the front, a 1–4 word term on the back) or **multiple-choice
-questions** with instant feedback and a score at the end. Sign in with Google to save
+FlashForge turns a PDF or TXT file into a study guide of 5 to 30 questions (10 by
+default), either **identification-style flashcards** (a clue on the front, a 1–4 word
+term on the back) or **multiple-choice questions** with instant feedback and a score at
+the end. Sign in with Google to save
 study guides, then rename, revisit, or delete them from **My Sets**. Signed in, every
 finished study session is saved with its score (flashcards are marked *Got it* or
 *Missed it*). Teachers can create classes, assign sets, and see each student's scores and
@@ -127,6 +128,7 @@ lib/
   generation-logs.ts    Usage log and daily limit check for /api/generate (server-only)
   generation-limits.ts  Daily limits per role: rules and message (shared)
   card-rules.ts         Card rules shared by the editor and the server (validateCards)
+  study-types.ts        Study types, their labels and the question count rules (shared)
   sets.ts               Study sets scoped to their owner; saving edited cards (server-only)
   ids.ts                isUuid() and newId(), shared by server and client
   classes.ts            Class logic, always scoped to the acting teacher (server-only)

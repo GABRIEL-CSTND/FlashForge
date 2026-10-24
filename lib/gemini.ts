@@ -1,4 +1,7 @@
 import { normalizeChoice } from '@/lib/card-rules';
+import { DEFAULT_QUESTION_COUNT, type StudyType } from '@/lib/study-types';
+
+export type { StudyType };
 
 // Models are tried in order; each has its own free-tier quota. A 429 (quota used
 // up) moves to the next model immediately, so once both Gemini models hit their
@@ -23,13 +26,16 @@ interface ModelConfig {
   id: string;
   family: ModelFamily;
   attempts: number;
+  // For a 10-question guide. Bigger guides take longer to write, so each
+  // question over 10 adds perExtraItemMs (#65).
   timeoutMs: number;
+  perExtraItemMs: number;
 }
 
 const MODEL_CHAIN: ModelConfig[] = [
-  { id: 'gemini-3.5-flash', family: 'gemini', attempts: 2, timeoutMs: 25_000 },
-  { id: 'gemini-3.5-flash-lite', family: 'gemini', attempts: 2, timeoutMs: 25_000 },
-  { id: 'gemma-4-26b-a4b-it', family: 'gemma', attempts: 1, timeoutMs: 40_000 },
+  { id: 'gemini-3.5-flash', family: 'gemini', attempts: 2, timeoutMs: 25_000, perExtraItemMs: 500 },
+  { id: 'gemini-3.5-flash-lite', family: 'gemini', attempts: 2, timeoutMs: 25_000, perExtraItemMs: 500 },
+  { id: 'gemma-4-26b-a4b-it', family: 'gemma', attempts: 1, timeoutMs: 40_000, perExtraItemMs: 1_500 },
 ];
 // The models in the order they're tried: the main one first, then the backups (#62).
 export const MODEL_IDS = MODEL_CHAIN.map((m) => m.id);
@@ -45,20 +51,24 @@ const THINKING_LEVEL = 'low';
 const TOTAL_BUDGET_MS = 75_000;
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
-const ITEM_COUNT = 10;
-// Multiple-choice items that fail validation are dropped, so ask for a few
-// extra to still end up with ITEM_COUNT.
-const REQUESTED_COUNT: Record<'flashcard' | 'multiple_choice', number> = {
-  flashcard: ITEM_COUNT,
-  multiple_choice: 12,
+// Items that fail validation are dropped, so ask for a few spares to still end
+// up with the count the user chose (#65): 10 flashcards -> 11, 10 multiple
+// choice -> 12. Multiple choice fails validation more often.
+const SPARE_RATIO: Record<StudyType, number> = {
+  flashcard: 0.1,
+  multiple_choice: 0.2,
 };
-// A response with fewer usable items than this counts as a failed attempt.
-const MIN_VALID_ITEMS = 6;
+export function requestedCount(studyType: StudyType, count: number): number {
+  return count + Math.ceil(count * SPARE_RATIO[studyType]);
+}
+// A response with fewer usable items than this (6 of 10) counts as a failed
+// attempt, so the next model is tried.
+export function minValidItems(count: number): number {
+  return Math.ceil(count * 0.6);
+}
 
 const BUSY_MESSAGE = 'The AI is busy right now. Please try again in a minute.';
 const GENERIC_MESSAGE = 'Something went wrong while generating your study guide. Please try again.';
-
-export type StudyType = 'flashcard' | 'multiple_choice';
 
 export interface GeneratedItem {
   question: string;
@@ -237,15 +247,22 @@ async function callModel(
 export async function generateStudyItems(
   sourceText: string,
   studyType: StudyType,
-  // Called before each request to a model, retries and fallbacks included, so
-  // callers can count what uses up the quota (#62).
-  onRequest?: (model: string) => void
+  {
+    count = DEFAULT_QUESTION_COUNT,
+    onRequest,
+  }: {
+    // How many items the guide should have (#65); callers check the range.
+    count?: number;
+    // Called before each request to a model, retries and fallbacks included,
+    // so callers can count what uses up the quota (#62).
+    onRequest?: (model: string) => void;
+  } = {}
 ): Promise<{ items: GeneratedItem[]; model: string }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new GeminiError('GEMINI_API_KEY is not set', { retryable: false });
 
   const prompt = `You are creating a study guide from the text below.
-Produce exactly ${REQUESTED_COUNT[studyType]} items. ${TYPE_INSTRUCTIONS[studyType]}
+Produce exactly ${requestedCount(studyType, count)} items. ${TYPE_INSTRUCTIONS[studyType]}
 Base everything strictly on the provided text. Avoid trivial or overly broad questions.
 
 TEXT:
@@ -297,7 +314,10 @@ ${sourceText.slice(0, 30000)}
   const deadline = Date.now() + TOTAL_BUDGET_MS;
   let lastError: GeminiError | undefined;
 
-  for (const { id: model, family, attempts, timeoutMs } of MODEL_CHAIN) {
+  const minValid = minValidItems(count);
+
+  for (const { id: model, family, attempts, timeoutMs, perExtraItemMs } of MODEL_CHAIN) {
+    const modelTimeoutMs = timeoutMs + Math.max(0, count - DEFAULT_QUESTION_COUNT) * perExtraItemMs;
     for (let attempt = 1; attempt <= attempts; attempt++) {
       const remaining = deadline - Date.now();
       if (remaining < 2_000) break;
@@ -309,12 +329,12 @@ ${sourceText.slice(0, 30000)}
           model,
           apiKey,
           bodies[family],
-          Math.min(timeoutMs, remaining)
+          Math.min(modelTimeoutMs, remaining)
         );
         const items = rawItems
           .map(studyType === 'multiple_choice' ? validateMultipleChoice : validateFlashcard)
           .filter((i): i is GeneratedItem => i !== null);
-        if (items.length < MIN_VALID_ITEMS) {
+        if (items.length < minValid) {
           throw new GeminiError(`only ${items.length}/${rawItems.length} items passed validation`, {
             retryable: true,
           });
@@ -324,7 +344,7 @@ ${sourceText.slice(0, 30000)}
           `[gemini] ${model} generated ${items.length}/${rawItems.length} valid ${studyType} items in ${Date.now() - startedAt}ms` +
             ` (attempt ${attempt}, ${outputTokens ?? '?'} output tokens)`
         );
-        return { items: items.slice(0, ITEM_COUNT), model };
+        return { items: items.slice(0, count), model };
       } catch (err) {
         const error =
           err instanceof GeminiError ? err : new GeminiError(String(err), { retryable: false });

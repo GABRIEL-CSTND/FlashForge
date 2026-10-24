@@ -132,19 +132,23 @@ screen instead of shortening with "…".
 
 ## 1. Generating a study guide
 
-1. **Upload** (`app/page.tsx`): the user picks *Flashcards* or *Multiple Choice* and
-   drops a `.pdf` or `.txt` file. Nothing is saved yet.
+1. **Upload** (`app/page.tsx`): the user picks *Flashcards* or *Multiple choice*, how
+   many questions (5, 10, 15, 20 or 30; 10 by default, #65), and drops a `.pdf` or
+   `.txt` file. Nothing is saved yet.
 2. **`POST /api/generate`** (`app/api/generate/route.ts`, `maxDuration = 90`):
    - Checks the caller's **daily limit** first (#63). Over it, the answer is 429 and the AI
      isn't called. See "Daily generation limits" below.
    - Extracts text: PDFs with `unpdf`, TXT as UTF-8. Unreadable files get HTTP 422
      with a friendly message.
-   - Calls `generateStudyItems(text, studyType)` and returns
-     `{ title, sourceFilename, studyType, items, model }`.
+   - Calls `generateStudyItems(text, studyType, { count })` and returns
+     `{ title, sourceFilename, studyType, items, model }`. `count` comes from the form:
+     any whole number from 5 to 30, otherwise 10 (`parseQuestionCount()` in
+     `lib/study-types.ts`). An unknown study type falls back to flashcards.
    - Never sends raw API errors to the browser; details go to the server log.
 3. **Show it**: the upload page swaps to `StudyViewer` on the **same URL** (`/`), so
    *Exit* clears the result instead of navigating (it asks first if the guide isn't saved).
-   After 15 seconds of waiting, the page explains that a slower backup AI may be in use.
+   After 15 seconds of waiting (plus one second per question over 10), the page explains
+   that a slower backup AI may be in use.
 4. **Usage log** (#62): every request to `/api/generate`, successful or not, gets a row in
    `generation_logs`. The row is reserved by the limit check and filled in with Next's
    `after()`, after the response has been sent, so logging never slows the user down. The upload page sends the user's token when signed
@@ -158,11 +162,11 @@ screen instead of shortening with "…".
 
 **Model chain.** Models are tried in order, and each has its own free-tier quota:
 
-| # | Model | Attempts | Timeout per attempt | Notes |
+| # | Model | Attempts | Timeout per attempt (10 questions) | Notes |
 |---|---|---|---|---|
-| 1 | `gemini-3.5-flash` | 2 | 25s | Main model. `thinkingLevel: 'low'` for speed |
-| 2 | `gemini-3.5-flash-lite` | 2 | 25s | Same request; separate quota |
-| 3 | `gemma-4-26b-a4b-it` | 1 | 40s | Last resort: slow (~26–33s) and sometimes fails |
+| 1 | `gemini-3.5-flash` | 2 | 25s, +0.5s per question over 10 | Main model. `thinkingLevel: 'low'` for speed |
+| 2 | `gemini-3.5-flash-lite` | 2 | 25s, +0.5s per question over 10 | Same request; separate quota |
+| 3 | `gemma-4-26b-a4b-it` | 1 | 40s, +1.5s per question over 10 | Last resort: slow (~26–33s for 10) and sometimes fails |
 
 - The whole generation is capped at **75 seconds**.
 - **429 (quota used up)** skips straight to the next model.
@@ -184,8 +188,10 @@ screen instead of shortening with "…".
 - *Flashcards* are identification-style: the question is a clue or definition and the
   answer is the 1–4 word term. "Explain/describe/why/how" questions aren't allowed.
 - *Multiple choice*: 4 options, wrong options of the same kind as the answer, and no
-  "all/none of the above". The prompt asks for 12 items so that 10 are left after
-  validation.
+  "all/none of the above".
+- **Spares:** items that fail validation are dropped, so the prompt asks for 10% more
+  flashcards or 20% more multiple-choice questions than the user chose (11 or 12 for 10),
+  and the guide keeps the first valid ones up to the chosen count.
 - Only the first 30,000 characters of the file are used (#38 tracks sampling the whole
   document).
 
@@ -197,7 +203,8 @@ screen instead of shortening with "…".
   the answer must match exactly one option (ignoring case and spacing, and then stored
   as that option's text), and options are shuffled in code. The matching rule is
   `normalizeChoice()` in `lib/card-rules.ts`, shared with the card editor.
-- Fewer than **6** valid items counts as a failed attempt, so the next model is tried.
+- Fewer than **60%** of the chosen count (6 of 10) valid items counts as a failed
+  attempt, so the next model is tried.
 
 ### Editing a saved study set (#55)
 
@@ -572,7 +579,9 @@ transaction. Run them after every database change.
 - Every check file clears the simulated sign-in (`request.jwt.claims`) before acting as
   `anon`; otherwise `auth.uid()` would still be the previous user.
 - AI changes were checked with mocked `fetch` (retries, fallbacks, validation) and a few
-  real API calls. Keep real calls to a minimum because of the 20-requests-a-day quota.
+  real API calls. `lib/gemini.test.ts` does this in the test suite with canned
+  responses, so it never uses the quota. Keep real calls to a minimum because of the
+  20-requests-a-day quota.
 
 ## Known limitations
 

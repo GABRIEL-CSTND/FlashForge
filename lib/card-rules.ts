@@ -1,9 +1,10 @@
 import { isUuid } from '@/lib/ids';
+import type { StudyType } from '@/lib/study-types';
 
 // Card rules shared by the editor (client) and PUT /api/sets/[id]/cards
 // (server), so both give the same messages (#55).
 
-export type StudyType = 'flashcard' | 'multiple_choice';
+export type { StudyType };
 
 export const CARD_LIMITS = {
   maxCards: 50,

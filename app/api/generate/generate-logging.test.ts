@@ -12,7 +12,9 @@ vi.mock('@/lib/gemini', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/gemini')>();
   return {
     ...actual,
-    generateStudyItems: vi.fn((_text: string, _type: string, onRequest: (m: string) => void) => gemini.run!(onRequest)),
+    generateStudyItems: vi.fn((_text: string, _type: string, opts: { onRequest: (m: string) => void }) =>
+      gemini.run!(opts.onRequest)
+    ),
   };
 });
 const fake = vi.hoisted(() => ({ current: null as null | ReturnType<typeof import('@/test-utils/fake-supabase').createFakeSupabase> }));
@@ -66,10 +68,11 @@ beforeEach(() => {
   vi.mocked(generateStudyItems).mockClear();
 });
 
-function generate(text: string | null, headers: Record<string, string> = {}) {
+function generate(text: string | null, headers: Record<string, string> = {}, fields: Record<string, string> = {}) {
   const form = new FormData();
   if (text !== null) form.append('file', new File([text], 'notes.txt', { type: 'text/plain' }));
   form.append('studyType', 'multiple_choice');
+  for (const [k, v] of Object.entries(fields)) form.set(k, v);
   return POST(new NextRequest('http://localhost/api/generate', { method: 'POST', body: form, headers }));
 }
 const asSam = { authorization: 'Bearer sam' };
@@ -168,5 +171,24 @@ describe('/api/generate usage log (#62) and daily limits (#63)', () => {
     await expect(runAfter()).resolves.toBeDefined();
     expect(errorLog).toHaveBeenCalledWith('[generation-logs] could not log a generation:', expect.anything());
     errorLog.mockRestore();
+  });
+});
+
+describe('/api/generate options', () => {
+  const sentOptions = () => vi.mocked(generateStudyItems).mock.calls.map(([, type, opts]) => [type, opts?.count]);
+
+  it('passes the chosen question count to the AI (#65)', async () => {
+    expect((await generate(LONG_TEXT, asSam, { count: '20' })).status).toBe(200);
+    expect(sentOptions()).toEqual([['multiple_choice', 20]]);
+  });
+
+  it.each(['', '3', '31', 'lots'])('uses 10 questions when the count is %j', async (count) => {
+    expect((await generate(LONG_TEXT, asSam, { count })).status).toBe(200);
+    expect(sentOptions()).toEqual([['multiple_choice', 10]]);
+  });
+
+  it('uses flashcards when the study type is unknown', async () => {
+    expect((await generate(LONG_TEXT, asSam, { studyType: 'essay' })).status).toBe(200);
+    expect(sentOptions()).toEqual([['flashcard', 10]]);
   });
 });

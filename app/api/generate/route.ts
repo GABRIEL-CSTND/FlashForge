@@ -1,5 +1,6 @@
 import { after, NextRequest, NextResponse } from 'next/server';
-import { generateStudyItems, GeminiError, StudyType } from '@/lib/gemini';
+import { generateStudyItems, GeminiError } from '@/lib/gemini';
+import { isStudyType, parseQuestionCount } from '@/lib/study-types';
 import {
   identifyCaller,
   recordGeneration,
@@ -26,8 +27,6 @@ async function extractText(file: File): Promise<string> {
   return buffer.toString('utf-8');
 }
 
-const VALID_TYPES: StudyType[] = ['flashcard', 'multiple_choice'];
-
 // Pure generation endpoint: nothing is saved until the user explicitly saves
 // via /api/save-set. The only writes are the usage log (#62) and the daily
 // limit check (#63).
@@ -52,11 +51,11 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
-    const studyTypeRaw = formData.get('studyType') as string | null;
-    const studyType: StudyType = VALID_TYPES.includes(studyTypeRaw as StudyType)
-      ? (studyTypeRaw as StudyType)
-      : 'flashcard';
+    const studyTypeRaw = formData.get('studyType');
+    const studyType = isStudyType(studyTypeRaw) ? studyTypeRaw : 'flashcard';
     log.studyType = studyType;
+    // How many questions (#65): 5 to 30, otherwise the default 10.
+    const count = parseQuestionCount(formData.get('count'));
 
     // Daily limit per role (#63), checked before any AI request.
     state.caller = await identifyCaller(req);
@@ -102,8 +101,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { items, model } = await generateStudyItems(text, studyType, (m) => {
-      log.requests[m] = (log.requests[m] ?? 0) + 1;
+    const { items, model } = await generateStudyItems(text, studyType, {
+      count,
+      onRequest: (m) => {
+        log.requests[m] = (log.requests[m] ?? 0) + 1;
+      },
     });
 
     return done(
