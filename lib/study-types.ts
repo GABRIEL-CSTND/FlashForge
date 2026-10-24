@@ -1,7 +1,7 @@
 // Kinds of study guide and how many questions to generate, shared by the
 // upload page, the API routes and the AI pipeline.
 
-export const STUDY_TYPES = ['flashcard', 'multiple_choice', 'true_false'] as const;
+export const STUDY_TYPES = ['flashcard', 'multiple_choice', 'true_false', 'mixed'] as const;
 export type StudyType = (typeof STUDY_TYPES)[number];
 
 export function isStudyType(value: unknown): value is StudyType {
@@ -19,6 +19,7 @@ export const STUDY_TYPE_LABELS: Record<StudyType, string> = {
   flashcard: 'Flashcards',
   multiple_choice: 'Multiple choice',
   true_false: 'True or false',
+  mixed: 'Mixed quiz',
 };
 
 // One line under the choice on the upload page.
@@ -26,7 +27,25 @@ export const STUDY_TYPE_HINTS: Record<StudyType, string> = {
   flashcard: 'A clue on the front and a short term on the back. Flip, type or match them.',
   multiple_choice: 'Pick the right answer out of 4.',
   true_false: 'Decide whether each statement is true or false, and see the correction.',
+  mixed: 'Like a school exam: Part I multiple choice, Part II true or false, Part III identification.',
 };
+
+// The parts of a mixed quiz (#69), in order. Each card's kind comes from its
+// options (cardKind() in lib/card-rules.ts).
+export const MIXED_PARTS = [
+  { kind: 'multiple_choice', label: 'Multiple choice', numeral: 'I' },
+  { kind: 'true_false', label: 'True or false', numeral: 'II' },
+  { kind: 'identification', label: 'Identification', numeral: 'III' },
+] as const;
+export type MixedPartKind = (typeof MIXED_PARTS)[number]['kind'];
+
+// How many questions of each part a mixed quiz of `count` gets: about 40%
+// multiple choice, 30% true or false and 30% identification (10 -> 4, 3, 3).
+export function mixedSplit(count: number): Record<MixedPartKind, number> {
+  const multipleChoice = Math.round(count * 0.4);
+  const trueFalse = Math.round(count * 0.3);
+  return { multiple_choice: multipleChoice, true_false: trueFalse, identification: count - multipleChoice - trueFalse };
+}
 
 // Ways to study a flashcard set (#66, #67). Flip is the original way, marked
 // by the student ("Got it / Missed it"); typed and matched answers are checked

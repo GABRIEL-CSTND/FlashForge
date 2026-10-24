@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { CARD_LIMITS, normalizeChoice, type StudyType } from '@/lib/card-rules';
+import { CARD_LIMITS, cardKind, normalizeChoice, type StudyType } from '@/lib/card-rules';
 import { checkTypedAnswer } from '@/lib/answer-check';
 import { isStudyMode, toStudyType, type StudyMode } from '@/lib/study-types';
 import { isUuid } from '@/lib/ids';
@@ -66,6 +66,19 @@ export function parseAnswers(raw: unknown, studyType: StudyType, mode: StudyMode
         return { ok: false, error: 'An answer has an invalid term.' };
       }
       answers.push({ cardId, chosen: (chosen as string | null | undefined) ?? null });
+    } else if (studyType === 'mixed') {
+      // Each card is answered by its own kind (#69): a pick, or typed text.
+      if (chosen != null && (typeof chosen !== 'string' || chosen.length > 500)) {
+        return { ok: false, error: 'An answer has an invalid choice.' };
+      }
+      if (typed != null && (typeof typed !== 'string' || typed.length > CARD_LIMITS.answer)) {
+        return { ok: false, error: 'A typed answer is too long.' };
+      }
+      answers.push({
+        cardId,
+        chosen: (chosen as string | null | undefined) ?? null,
+        typed: typeof typed === 'string' && typed.trim() ? typed.trim() : null,
+      });
     } else if (studyType === 'multiple_choice' || studyType === 'true_false') {
       if (chosen != null && (typeof chosen !== 'string' || chosen.length > 500)) {
         return { ok: false, error: 'An answer has an invalid choice.' };
@@ -87,7 +100,7 @@ export function parseAnswers(raw: unknown, studyType: StudyType, mode: StudyMode
 // one typo still counts as correct.
 export function scoreAnswers(
   answers: AnswerInput[],
-  cards: { id: string; answer: string }[],
+  cards: { id: string; answer: string; options?: unknown }[],
   studyType: StudyType,
   mode: StudyMode | null = null
 ): { score: number; total: number; stored: StoredAnswer[] } {
@@ -96,6 +109,15 @@ export function scoreAnswers(
   for (const a of answers) {
     const card = byId.get(a.cardId);
     if (!card) continue;
+    if (studyType === 'mixed') {
+      // Identification is typed and checked like #66; the other parts are picks.
+      const typedPart = cardKind(card.options) === 'identification';
+      const correct = typedPart
+        ? checkTypedAnswer(a.typed, card.answer) !== 'wrong'
+        : a.chosen != null && normalizeChoice(a.chosen) === normalizeChoice(card.answer);
+      stored.push({ cardId: a.cardId, ...(typedPart ? { typed: a.typed ?? null } : { chosen: a.chosen ?? null }), correct });
+      continue;
+    }
     // Matching picks another card's term, so it's compared like a multiple-choice
     // pick. True or false (#68) is a pick between two options.
     const correct =
@@ -231,7 +253,7 @@ export async function recordAttempt(
 
   const { data: cards, error: cardsError } = await client
     .from('flashcards')
-    .select('id, answer')
+    .select('id, answer, options')
     .eq('set_id', set.id);
   if (cardsError) throw cardsError;
   const { score, total, stored } = scoreAnswers(parsed.answers, cards ?? [], set.studyType, mode);

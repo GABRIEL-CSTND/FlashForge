@@ -197,3 +197,38 @@ describe('CardEditor: true or false (#68)', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 });
+
+describe('CardEditor: mixed quiz (#69)', () => {
+  const MIXED: EditableCard[] = [
+    { id: '00000000-0000-4000-8000-00000000001a', question: 'Layer 3?', answer: 'Network', options: ['Physical', 'Network', 'Transport', 'Session'] },
+    { id: '00000000-0000-4000-8000-00000000001b', question: 'Plants give off oxygen.', answer: 'True', options: ['True', 'False'], explanation: null },
+    { id: '00000000-0000-4000-8000-00000000001c', question: 'Organelle that makes ATP', answer: 'Mitochondria', options: null },
+  ];
+
+  it('shows each card as its own kind and adds cards of any kind', async () => {
+    render(<CardEditor studyType="mixed" cards={MIXED} onSave={onSave} onCancel={onCancel} />);
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Card 1 · Multiple choice',
+      'Card 2 · True or false',
+      'Card 3 · Identification',
+    ]);
+    expect(within(card(1)).getAllByRole('radio')).toHaveLength(4);
+    expect(within(card(2)).getByLabelText('Statement')).toBeTruthy();
+    expect((within(card(3)).getByLabelText('Answer') as HTMLInputElement).value).toBe('Mitochondria');
+    expect(screen.queryByRole('button', { name: '+ Add card' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '+ Identification' }));
+    expect(screen.getAllByRole('heading', { level: 2 })[3].textContent).toBe('Card 4 · Identification');
+    fireEvent.change(within(card(4)).getByLabelText('Question'), { target: { value: 'Pigment that absorbs light' } });
+    fireEvent.change(within(card(4)).getByLabelText('Answer'), { target: { value: 'Chlorophyll' } });
+    fireEvent.click(screen.getByRole('button', { name: '+ True or false' }));
+    fireEvent.change(within(card(5)).getByLabelText('Statement'), { target: { value: 'Cells have walls.' } });
+    fireEvent.click(within(card(5)).getByRole('radio', { name: 'Card 5 is false' }));
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(savedCards().slice(3)).toEqual([
+      { question: 'Pigment that absorbs light', answer: 'Chlorophyll' },
+      { question: 'Cells have walls.', answer: 'False', options: ['True', 'False'], explanation: '' },
+    ]);
+  });
+});

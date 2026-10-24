@@ -132,8 +132,8 @@ screen instead of shortening with "…".
 
 ## 1. Generating a study guide
 
-1. **Upload** (`app/page.tsx`): the user picks *Flashcards*, *Multiple choice* or *True or
-   false* (#68), with a line under the choice saying what it is, how many questions (5,
+1. **Upload** (`app/page.tsx`): the user picks *Flashcards*, *Multiple choice*, *True or
+   false* (#68) or *Mixed quiz* (#69), with a line under the choice saying what it is, how many questions (5,
    10, 15, 20 or 30; 10 by default, #65), and drops a `.pdf` or `.txt` file. Nothing is
    saved yet.
 2. **`POST /api/generate`** (`app/api/generate/route.ts`, `maxDuration = 90`):
@@ -198,6 +198,14 @@ screen instead of shortening with "…".
   guide is shuffled, since the model writes its true statements first. In a test on
   sample notes (2026-10-24), 10 statements came back 5 true and 5 false, each false one
   with a correction, in 3.3 seconds.
+- *Mixed quiz* (#69): one request for all three parts, with exact counts per part (about
+  40% multiple choice, 30% true or false, 30% identification: `mixedSplit()`), each part
+  with the same rules as its own study type. Every item has a `type`; when it's missing,
+  the kind is guessed from the item. Each part keeps its share, a short part is filled
+  from the other parts' spares, and an answer with no usable item for a whole part counts
+  as a failed attempt. In a test on sample history notes (2026-10-24), 10 questions came
+  back as 4 + 3 + 3, all well formed (the main model was busy, so the lite backup wrote
+  it, in 12.5 seconds with the retries).
 - **Spares:** items that fail validation are dropped, so the prompt asks for 10% more
   flashcards or true-or-false statements, or 20% more multiple-choice questions, than the
   user chose (11 or 12 for 10),
@@ -369,6 +377,23 @@ screen instead of shortening with "…".
   Private study is never visible to teachers, and unassigning a set keeps the attempts
   but makes them private. Browsers can't write attempts at all. Teachers see these
   results on the class's results page (#58, below).
+
+### Mixed quiz (#69)
+
+- A new study type, `mixed`, laid out like a school exam: **Part I** multiple choice,
+  **Part II** true or false, **Part III** identification. A card's kind comes from its
+  options (`cardKind()` in `lib/card-rules.ts`): 4 choices, True and False, or none. So
+  the cards table needs nothing new, and each card is checked with its own kind's rules
+  in `validateCards()`, on save and in the editor.
+- **Studying:** the cards are shown part by part (in saved order within a part), with
+  *Part II · True or false* above each one. Parts I and II are picks; Part III is typed
+  and checked like #66. The finish screen shows the total and each part's score.
+- **Scoring on the server:** `POST /api/attempts` gets a pick (`chosen`) or typed text
+  (`typed`) per card, and `scoreAnswers()` scores each card by its kind, keeping only
+  what that kind uses. Teachers' results and the most-missed page work as for any set.
+- **Editing:** each card keeps its kind (*Card 2 · True or false*), and new cards are
+  added with **+ Multiple choice**, **+ True or false** or **+ Identification**.
+- **Database:** `study_type` allows `mixed` on sets, attempts and the generation log.
 
 ### True or false (#68)
 
@@ -561,7 +586,7 @@ The plan for teacher and admin features is tracked in #50.
 | Table | Columns | Notes |
 |---|---|---|
 | `flashcard_sets` | `id`, `user_id` → `auth.users`, `title`, `source_filename`, `study_type`, `created_at` | `user_id` is null for legacy sets made before sign-in was required |
-| `flashcards` | `id`, `set_id` → `flashcard_sets` (cascade), `question`, `answer`, `options` (jsonb: 4 choices for multiple choice, `["True","False"]` for true or false, null for flashcards), `explanation` (1–300 chars, true or false only, #68), `position` | Indexed on `set_id`. Ids stay the same when a card is edited (#55) |
+| `flashcards` | `id`, `set_id` → `flashcard_sets` (cascade), `question`, `answer`, `options` (jsonb: 4 choices for multiple choice, `["True","False"]` for true or false, null for flashcards and identification; in a mixed quiz this is what tells the parts apart), `explanation` (1–300 chars, true or false only, #68), `position` | Indexed on `set_id`. Ids stay the same when a card is edited (#55) |
 | `profiles` | `id` → `auth.users` (cascade), `display_name`, `role`, `role_chosen_at`, `created_at` | `role_chosen_at` is for the sign-up role choice (#52) |
 | `classes` | `id`, `teacher_id` → `auth.users` (cascade), `name` (1–80 chars), `join_code` (unique), `created_at` | Indexed on `teacher_id` |
 | `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
@@ -649,8 +674,8 @@ transaction. Run them after every database change.
 - `supabase/tests/sets-editing-check.sql`: `replace_set_cards()` (12 cases), covering a
   real edit, kept ids, each kind of refused save, that a refused save changes nothing,
   and that browsers can't call it.
-- `supabase/tests/study-types-check.sql` (12 cases, #68): `true_false` sets, attempts
-  and generation logs are accepted and unknown study types refused; a true-or-false
+- `supabase/tests/study-types-check.sql` (13 cases, #68, #69): `true_false` and `mixed`
+  sets, attempts and generation logs are accepted and unknown study types refused; a true-or-false
   attempt can't have a flashcard mode; explanations must be 1–300 characters; and
   `replace_set_cards()` keeps, changes and clears explanations and is still
   service-role only.

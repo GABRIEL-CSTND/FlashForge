@@ -1,5 +1,11 @@
 import { CARD_LIMITS, normalizeChoice, toTrueFalse, TRUE_FALSE_OPTIONS } from '@/lib/card-rules';
-import { DEFAULT_QUESTION_COUNT, type StudyType } from '@/lib/study-types';
+import {
+  DEFAULT_QUESTION_COUNT,
+  MIXED_PARTS,
+  mixedSplit,
+  type MixedPartKind,
+  type StudyType,
+} from '@/lib/study-types';
 
 export type { StudyType };
 
@@ -54,12 +60,25 @@ const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 // Items that fail validation are dropped, so ask for a few spares to still end
 // up with the count the user chose (#65): 10 flashcards -> 11, 10 multiple
 // choice -> 12. Multiple choice fails validation more often.
-const SPARE_RATIO: Record<StudyType, number> = {
+type SingleType = Exclude<StudyType, 'mixed'>;
+const SPARE_RATIO: Record<SingleType, number> = {
   flashcard: 0.1,
   multiple_choice: 0.2,
   true_false: 0.1,
 };
+// A mixed quiz (#69) asks for each part's share plus that kind's spares.
+const PART_TYPE: Record<MixedPartKind, SingleType> = {
+  multiple_choice: 'multiple_choice',
+  true_false: 'true_false',
+  identification: 'flashcard',
+};
+export function mixedRequest(count: number): Record<MixedPartKind, number> {
+  const split = mixedSplit(count);
+  const ask = (kind: MixedPartKind) => split[kind] + Math.ceil(split[kind] * SPARE_RATIO[PART_TYPE[kind]]);
+  return { multiple_choice: ask('multiple_choice'), true_false: ask('true_false'), identification: ask('identification') };
+}
 export function requestedCount(studyType: StudyType, count: number): number {
+  if (studyType === 'mixed') return Object.values(mixedRequest(count)).reduce((a, b) => a + b, 0);
   return count + Math.ceil(count * SPARE_RATIO[studyType]);
 }
 // A response with fewer usable items than this (6 of 10) counts as a failed
@@ -95,7 +114,7 @@ export class GeminiError extends Error {
   }
 }
 
-const TYPE_INSTRUCTIONS: Record<StudyType, string> = {
+const TYPE_INSTRUCTIONS: Record<SingleType, string> = {
   flashcard: `Create identification-style flashcards.
 - "question": a clue, description, or definition that points to exactly one specific term, name, date, number, or concept from the text.
 - "answer": that term itself, 1 to 4 words. Never a sentence or an explanation.
@@ -131,7 +150,29 @@ const GEMMA_FORMAT: Record<StudyType, string> = {
     'Return ONLY a JSON array of objects with fields "question" (string), "options" (array of exactly 4 strings), and "answer" (string, copied exactly from "options"). No other text.',
   true_false:
     'Return ONLY a JSON array of objects with string fields "question" (the statement), "answer" ("True" or "False"), and "explanation" (the corrected statement if false, otherwise ""). No other text.',
+  mixed:
+    'Return ONLY a JSON array of objects with fields "type" ("multiple_choice", "true_false" or "identification"), "question" (string), "answer" (string), "options" (array of exactly 4 strings, multiple_choice only) and "explanation" (string, true_false only). No other text.',
 };
+
+// The parts of a mixed quiz (#69), with how many of each to write.
+function mixedInstructions(count: number): string {
+  const ask = mixedRequest(count);
+  return `Create a quiz in three parts. Give every item a "type".
+Part I: exactly ${ask.multiple_choice} items with "type": "multiple_choice".
+- "question": a clue, description, or definition that points to exactly one specific term, name, date, number, or concept from the text.
+- "options": exactly 4 different choices of the same kind (all dates, all people, etc.), from the text when possible. Exactly one is correct. Never "All of the above" or "None of the above".
+- "answer": the correct choice, 1 to 4 words, copied exactly from "options".
+Part II: exactly ${ask.true_false} items with "type": "true_false".
+- "question": one clear statement about a single fact from the text, never a question. About half are true and half false. A false statement changes one key detail (a term, name, number, or date) of a real fact; never just add "not".
+- "answer": "True" or "False".
+- "explanation": for a false statement, the corrected true statement in one sentence; otherwise "".
+Part III: exactly ${ask.identification} items with "type": "identification".
+- "question": a clue or definition that points to exactly one term; "answer": that term, 1 to 4 words, never a sentence. No "options".
+List Part I first, then Part II, then Part III. Every item is about a different fact.`;
+}
+
+const instructionsFor = (studyType: StudyType, count: number) =>
+  studyType === 'mixed' ? mixedInstructions(count) : TYPE_INSTRUCTIONS[studyType];
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -205,11 +246,60 @@ function validateTrueFalse(item: GeneratedItem): GeneratedItem | null {
   };
 }
 
-const VALIDATORS: Record<StudyType, (item: GeneratedItem) => GeneratedItem | null> = {
+const VALIDATORS: Record<SingleType, (item: GeneratedItem) => GeneratedItem | null> = {
   flashcard: validateFlashcard,
   multiple_choice: validateMultipleChoice,
   true_false: validateTrueFalse,
 };
+
+// A mixed-quiz item (#69) is checked as its own kind. When "type" is missing
+// or unknown, the kind is guessed from the item itself.
+function mixedKind(item: GeneratedItem & { type?: unknown }): MixedPartKind {
+  if (item.type === 'multiple_choice' || item.type === 'true_false' || item.type === 'identification') return item.type;
+  if (Array.isArray(item.options) && item.options.length > 2) return 'multiple_choice';
+  return toTrueFalse(item.answer) ? 'true_false' : 'identification';
+}
+
+// Keeps each part's share of the chosen count, fills a short part from the
+// other parts' spares, and orders the parts I, II, III. Every part needs at
+// least one usable item, or the attempt has failed.
+function assembleMixed(rawItems: GeneratedItem[], count: number): GeneratedItem[] {
+  const byKind: Record<MixedPartKind, GeneratedItem[]> = { multiple_choice: [], true_false: [], identification: [] };
+  for (const raw of rawItems) {
+    const kind = mixedKind(raw);
+    const valid = VALIDATORS[PART_TYPE[kind]](raw);
+    if (valid) byKind[kind].push(valid);
+  }
+  const missing = MIXED_PARTS.filter((p) => byKind[p.kind].length === 0);
+  if (missing.length > 0) {
+    throw new GeminiError(`no usable ${missing.map((p) => p.kind).join(', ')} items`, { retryable: true });
+  }
+  const split = mixedSplit(count);
+  const kept = Object.fromEntries(MIXED_PARTS.map((p) => [p.kind, byKind[p.kind].slice(0, split[p.kind])])) as Record<
+    MixedPartKind,
+    GeneratedItem[]
+  >;
+  let total = MIXED_PARTS.reduce((n, p) => n + kept[p.kind].length, 0);
+  for (const p of MIXED_PARTS) {
+    for (const spare of byKind[p.kind].slice(split[p.kind])) {
+      if (total >= count) break;
+      kept[p.kind].push(spare);
+      total += 1;
+    }
+  }
+  return MIXED_PARTS.flatMap((p) => (p.kind === 'true_false' ? shuffle(kept[p.kind]) : kept[p.kind]));
+}
+
+// The guide to return: valid items only, up to the chosen count.
+function finalItems(studyType: StudyType, rawItems: GeneratedItem[], count: number): GeneratedItem[] {
+  if (studyType === 'mixed') return assembleMixed(rawItems, count);
+  const kept = rawItems
+    .map(VALIDATORS[studyType])
+    .filter((i): i is GeneratedItem => i !== null)
+    .slice(0, count);
+  // The model tends to write its true statements first.
+  return studyType === 'true_false' ? shuffle(kept) : kept;
+}
 
 const ITEM_SCHEMAS: Record<StudyType, object> = {
   flashcard: {
@@ -243,6 +333,17 @@ const ITEM_SCHEMAS: Record<StudyType, object> = {
       explanation: { type: 'STRING', description: 'If false, the corrected true statement; otherwise empty' },
     },
     required: ['question', 'answer', 'explanation'],
+  },
+  mixed: {
+    type: 'OBJECT',
+    properties: {
+      type: { type: 'STRING', description: 'multiple_choice, true_false or identification' },
+      question: { type: 'STRING' },
+      options: { type: 'ARRAY', items: { type: 'STRING' }, description: 'multiple_choice only: exactly 4 choices' },
+      answer: { type: 'STRING' },
+      explanation: { type: 'STRING', description: 'true_false only: the corrected statement if false' },
+    },
+    required: ['type', 'question', 'answer'],
   },
 };
 
@@ -332,7 +433,7 @@ export async function generateStudyItems(
   if (!apiKey) throw new GeminiError('GEMINI_API_KEY is not set', { retryable: false });
 
   const prompt = `You are creating a study guide from the text below.
-Produce exactly ${requestedCount(studyType, count)} items. ${TYPE_INSTRUCTIONS[studyType]}
+Produce exactly ${requestedCount(studyType, count)} items. ${instructionsFor(studyType, count)}
 Base everything strictly on the provided text. Avoid trivial or overly broad questions.
 
 TEXT:
@@ -375,7 +476,7 @@ ${sourceText.slice(0, 30000)}
           bodies[family],
           Math.min(modelTimeoutMs, remaining)
         );
-        const items = rawItems.map(VALIDATORS[studyType]).filter((i): i is GeneratedItem => i !== null);
+        const items = finalItems(studyType, rawItems, count);
         if (items.length < minValid) {
           throw new GeminiError(`only ${items.length}/${rawItems.length} items passed validation`, {
             retryable: true,
@@ -386,9 +487,7 @@ ${sourceText.slice(0, 30000)}
           `[gemini] ${model} generated ${items.length}/${rawItems.length} valid ${studyType} items in ${Date.now() - startedAt}ms` +
             ` (attempt ${attempt}, ${outputTokens ?? '?'} output tokens)`
         );
-        const kept = items.slice(0, count);
-        // The model tends to write its true statements first.
-        return { items: studyType === 'true_false' ? shuffle(kept) : kept, model };
+        return { items, model };
       } catch (err) {
         const error =
           err instanceof GeminiError ? err : new GeminiError(String(err), { retryable: false });

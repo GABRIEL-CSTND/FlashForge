@@ -1,7 +1,7 @@
 -- Run: npx supabase db query --linked --project-ref <ref> -f supabase/tests/study-types-check.sql
 -- Read-only in effect: the test rows are rolled back.
 --
--- New study types (#68): the study_type checks on sets, attempts and the
+-- New study types (#68, #69): the study_type checks on sets, attempts and the
 -- generation log, the cards' explanation, and replace_set_cards() saving it.
 -- User A is an existing account.
 begin;
@@ -33,6 +33,14 @@ begin
   begin insert into public.generation_logs (user_id, role, study_type, duration_ms, success) values (a, 'student', 'essay', 1000, true); code := 'inserted';
   exception when others then code := sqlstate; end;
   insert into results values (6, 'a generation log with an unknown study type', '23514', code);
+  begin
+    insert into public.flashcard_sets (user_id, title, study_type) values (a, 'study type test mixed', 'mixed');
+    insert into public.attempts (id, user_id, set_id, study_type, score, total)
+      select gen_random_uuid(), a, id, 'mixed', 5, 10 from public.flashcard_sets where title = 'study type test mixed';
+    insert into public.generation_logs (user_id, role, study_type, duration_ms, success) values (a, 'teacher', 'mixed', 1000, true);
+    code := 'inserted';
+  exception when others then code := sqlstate; end;
+  insert into results values (13, 'a mixed quiz set, attempt and generation log (#69)', 'inserted', code);
 
   -- explanation
   insert into public.flashcards (set_id, question, answer, options, explanation, position)

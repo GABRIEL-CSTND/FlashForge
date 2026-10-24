@@ -38,6 +38,11 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **Mixed quiz** (#69, live database): a study guide laid out like a school exam, made with
+  one AI request: Part I multiple choice (about 40%), Part II true or false (30%) and
+  Part III identification (30%, typed and checked). Studied part by part, with each
+  part's score on the finish screen; the editor adds cards of any of the three kinds.
+  Together with #65–#68 this completes the study types plan (#64).
 - **True or false** (#68, live database): a new kind of study guide. The AI writes
   statements from the notes, about half true and half false; each false one changes one
   key detail and comes with the corrected fact, shown after answering. Scored like
@@ -146,7 +151,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 378 tests):
+- **Automated tests** (`npm test`, 510 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),

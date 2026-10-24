@@ -3,12 +3,18 @@
 import { useId, useMemo, useState } from 'react';
 import {
   CARD_LIMITS,
+  kindFor,
   normalizeChoice,
   toTrueFalse,
   TRUE_FALSE_OPTIONS,
   validateCards,
+  type CardKind,
   type StudyType,
 } from '@/lib/card-rules';
+import { MIXED_PARTS } from '@/lib/study-types';
+
+// "Multiple choice", "True or false", "Identification" (#69).
+const KIND_LABELS = Object.fromEntries(MIXED_PARTS.map((p) => [p.kind, p.label])) as Record<CardKind, string>;
 
 export interface EditableCard {
   id: string;
@@ -39,6 +45,8 @@ interface CardEditorProps {
 interface DraftCard {
   key: string;
   id: string | null;
+  // Fixed for each card. Only a mixed quiz (#69) has more than one kind.
+  kind: CardKind;
   question: string;
   answer: string;
   choices: string[];
@@ -52,39 +60,42 @@ let keyCounter = 0;
 const newKey = () => `card-${++keyCounter}`;
 
 function toDraft(card: EditableCard, studyType: StudyType): DraftCard {
+  const kind = kindFor(studyType, card.options);
   const choices =
-    studyType === 'multiple_choice'
+    kind === 'multiple_choice'
       ? [...(card.options ?? []), '', '', '', ''].slice(0, CARD_LIMITS.choices)
       : [];
   const correct = choices.findIndex((c) => c && normalizeChoice(c) === normalizeChoice(card.answer));
   return {
     key: newKey(),
     id: card.id,
+    kind,
     question: card.question,
     // True or false (#68): "True", "False", or "" until one is picked.
-    answer: studyType === 'true_false' ? (toTrueFalse(card.answer) ?? '') : card.answer,
+    answer: kind === 'true_false' ? (toTrueFalse(card.answer) ?? '') : card.answer,
     choices,
     correctIndex: correct === -1 ? null : correct,
     explanation: card.explanation ?? '',
   };
 }
 
-function emptyDraft(studyType: StudyType): DraftCard {
+function emptyDraft(kind: CardKind): DraftCard {
   return {
     key: newKey(),
     id: null,
+    kind,
     question: '',
     answer: '',
-    choices: studyType === 'multiple_choice' ? Array(CARD_LIMITS.choices).fill('') : [],
+    choices: kind === 'multiple_choice' ? Array(CARD_LIMITS.choices).fill('') : [],
     correctIndex: null,
     explanation: '',
   };
 }
 
-function toPayload(draft: DraftCard, studyType: StudyType): CardPayload {
+function toPayload(draft: DraftCard): CardPayload {
   const base = draft.id ? { id: draft.id } : {};
-  if (studyType === 'flashcard') return { ...base, question: draft.question, answer: draft.answer };
-  if (studyType === 'true_false') {
+  if (draft.kind === 'identification') return { ...base, question: draft.question, answer: draft.answer };
+  if (draft.kind === 'true_false') {
     return {
       ...base,
       question: draft.question,
@@ -110,10 +121,9 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
   const [saving, setSaving] = useState(false);
   const idBase = useId();
 
-  const isMultipleChoice = studyType === 'multiple_choice';
-  const isTrueFalse = studyType === 'true_false';
-  const payload = drafts.map((d) => toPayload(d, studyType));
-  const dirty = JSON.stringify(payload) !== JSON.stringify(initial.map((d) => toPayload(d, studyType)));
+  const isMixed = studyType === 'mixed';
+  const payload = drafts.map(toPayload);
+  const dirty = JSON.stringify(payload) !== JSON.stringify(initial.map(toPayload));
 
   const update = (key: string, patch: Partial<DraftCard>) =>
     setDrafts((prev) => prev.map((d) => (d.key === key ? { ...d, ...patch } : d)));
@@ -127,7 +137,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
 
   const remove = (key: string) => setDrafts((prev) => prev.filter((d) => d.key !== key));
 
-  const add = () => setDrafts((prev) => [...prev, emptyDraft(studyType)]);
+  const add = (kind: CardKind) => setDrafts((prev) => [...prev, emptyDraft(kind)]);
 
   const handleSave = async () => {
     const checked = validateCards(payload, studyType);
@@ -163,6 +173,8 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
         {drafts.map((d, i) => {
           const label = `Card ${i + 1}`;
           const cardError = error && error.cardIndex === i ? error.message : null;
+          const isMultipleChoice = d.kind === 'multiple_choice';
+          const isTrueFalse = d.kind === 'true_false';
           return (
             <li
               key={d.key}
@@ -170,7 +182,10 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
               className={`space-y-3 rounded-xl border p-4 ${cardError ? 'border-red-500' : ''}`}
             >
               <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-medium">{label}</h2>
+                <h2 className="text-sm font-medium">
+                  {label}
+                  {isMixed && <span className="font-normal text-gray-400"> · {KIND_LABELS[d.kind]}</span>}
+                </h2>
                 <div className="flex items-center gap-1 text-sm">
                   <button
                     type="button"
@@ -312,14 +327,31 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
         })}
       </ol>
 
-      <button
-        type="button"
-        onClick={add}
-        disabled={drafts.length >= CARD_LIMITS.maxCards || saving}
-        className="w-full rounded-xl border border-dashed py-3 text-sm font-medium hover:border-accent disabled:opacity-40"
-      >
-        + Add card
-      </button>
+      {isMixed ? (
+        // A mixed quiz (#69) adds a card of any of its three kinds.
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {MIXED_PARTS.map((p) => (
+            <button
+              key={p.kind}
+              type="button"
+              onClick={() => add(p.kind)}
+              disabled={drafts.length >= CARD_LIMITS.maxCards || saving}
+              className="rounded-xl border border-dashed py-3 text-sm font-medium hover:border-accent disabled:opacity-40"
+            >
+              + {p.label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => add(kindFor(studyType, null))}
+          disabled={drafts.length >= CARD_LIMITS.maxCards || saving}
+          className="w-full rounded-xl border border-dashed py-3 text-sm font-medium hover:border-accent disabled:opacity-40"
+        >
+          + Add card
+        </button>
+      )}
 
       {error && error.cardIndex === null && (
         <p role="alert" className="text-center text-sm text-red-500">

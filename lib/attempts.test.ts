@@ -196,3 +196,33 @@ describe('true or false (#68)', () => {
     expect(result).toMatchObject({ score: 1, total: 2 });
   });
 });
+
+describe('mixed quiz (#69)', () => {
+  const cards = [
+    { id: id(1), answer: 'Network', options: ['Physical', 'Network', 'Transport', 'Session'] },
+    { id: id(2), answer: 'False', options: ['True', 'False'] },
+    { id: id(3), answer: 'Mitochondria', options: null },
+  ];
+
+  it('scores picks and typed answers by each card\'s kind, keeping only what that kind uses', () => {
+    const parsed = parseAnswers(
+      [
+        { cardId: id(1), chosen: 'Network', typed: 'Network' },
+        { cardId: id(2), chosen: 'True' },
+        { cardId: id(3), typed: ' mitochondira ', chosen: 'Mitochondria' },
+      ],
+      'mixed'
+    );
+    const result = scoreAnswers(parsed.ok ? parsed.answers : [], cards, 'mixed');
+    expect(result.score).toBe(2);
+    expect(result.stored).toEqual([
+      { cardId: id(1), chosen: 'Network', correct: true },
+      { cardId: id(2), chosen: 'True', correct: false },
+      { cardId: id(3), typed: 'mitochondira', correct: true },
+    ]);
+  });
+
+  it('rejects a typed answer that is too long', () => {
+    expect(parseAnswers([{ cardId: id(3), typed: 'x'.repeat(201) }], 'mixed').ok).toBe(false);
+  });
+});

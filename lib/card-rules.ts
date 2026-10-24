@@ -28,6 +28,26 @@ export function isTrueFalseOptions(options: unknown): boolean {
   );
 }
 
+// What a card is, from its options: 4 choices, True and False, or none (a
+// term to identify). A mixed quiz (#69) has all three; other study types one.
+export type CardKind = 'multiple_choice' | 'true_false' | 'identification';
+
+export function cardKind(options: unknown): CardKind {
+  if (isTrueFalseOptions(options)) return 'true_false';
+  return Array.isArray(options) ? 'multiple_choice' : 'identification';
+}
+
+const KIND_OF_TYPE: Record<Exclude<StudyType, 'mixed'>, CardKind> = {
+  flashcard: 'identification',
+  multiple_choice: 'multiple_choice',
+  true_false: 'true_false',
+};
+
+// The kind of a card in a set of this study type.
+export function kindFor(studyType: StudyType, options: unknown): CardKind {
+  return studyType === 'mixed' ? cardKind(options) : KIND_OF_TYPE[studyType];
+}
+
 // "true", " FALSE " and booleans become "True" / "False"; anything else is null.
 export function toTrueFalse(value: unknown): TrueFalse | null {
   if (typeof value === 'boolean') return value ? 'True' : 'False';
@@ -67,6 +87,7 @@ function text(value: unknown): string | null {
 // multiple choice, `answer` must match exactly one of the 4 different choices
 // and is stored as that choice's text. A true-or-false card (#68) is a
 // statement whose answer is "True" or "False", with an optional explanation.
+// In a mixed quiz (#69) each card follows the rules of its own kind.
 export function validateCards(raw: unknown, studyType: StudyType): CardsResult {
   if (!Array.isArray(raw)) return fail('Send the cards as a list.');
   if (raw.length === 0) return fail('A set needs at least one card. Delete the set instead if you no longer need it.');
@@ -88,7 +109,8 @@ export function validateCards(raw: unknown, studyType: StudyType): CardsResult {
       seenIds.add(id);
     }
 
-    const isTrueFalse = studyType === 'true_false';
+    const kind = kindFor(studyType, card.options);
+    const isTrueFalse = kind === 'true_false';
     const question = text(card.question);
     if (!question) return fail(`${label}: write ${isTrueFalse ? 'a statement' : 'a question'}.`, i);
     if (question.length > CARD_LIMITS.question) {
@@ -114,7 +136,7 @@ export function validateCards(raw: unknown, studyType: StudyType): CardsResult {
       continue;
     }
 
-    if (studyType === 'flashcard') {
+    if (kind === 'identification') {
       if (card.options != null) return fail(`${label}: flashcards don't have choices.`, i);
       const answer = text(card.answer);
       if (!answer) return fail(`${label}: write an answer.`, i);

@@ -33,6 +33,7 @@ soon as it's applied.
 | `20261024000100_attempt_modes.sql` | #66 | 2026-10-24 |
 | `20261024000200_matching_mode.sql` | #67 | 2026-10-24 |
 | `20261024000300_true_false.sql` | #68 | 2026-10-24 |
+| `20261024000400_mixed_quiz.sql` | #69 | 2026-10-24 |
 
 Add a row here whenever you apply a new migration.
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isStudyType, matchRounds, parseQuestionCount, QUESTION_COUNTS } from '@/lib/study-types';
+import { isStudyType, matchRounds, mixedSplit, parseQuestionCount, QUESTION_COUNTS } from '@/lib/study-types';
 
 describe('parseQuestionCount (#65)', () => {
   it('accepts every count the upload page offers', () => {
@@ -48,6 +48,19 @@ describe('matchRounds (#67)', () => {
       expect(Math.min(...sizes)).toBeGreaterThanOrEqual(3);
       expect(Math.max(...sizes)).toBeLessThanOrEqual(5);
       expect(sizes.reduce((x, y) => x + y)).toBe(n);
+    }
+  });
+});
+
+describe('mixedSplit (#69)', () => {
+  it('gives about 40% multiple choice, 30% true or false and 30% identification', () => {
+    expect(mixedSplit(10)).toEqual({ multiple_choice: 4, true_false: 3, identification: 3 });
+    expect(mixedSplit(20)).toEqual({ multiple_choice: 8, true_false: 6, identification: 6 });
+    expect(mixedSplit(5)).toEqual({ multiple_choice: 2, true_false: 2, identification: 1 });
+    for (const n of QUESTION_COUNTS) {
+      const split = mixedSplit(n);
+      expect(split.multiple_choice + split.true_false + split.identification).toBe(n);
+      expect(Math.min(...Object.values(split))).toBeGreaterThanOrEqual(1);
     }
   });
 });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { generateStudyItems, minValidItems, requestedCount } from '@/lib/gemini';
+import { generateStudyItems, minValidItems, mixedRequest, requestedCount } from '@/lib/gemini';
 
 // Gemini is never called for real here: fetch is replaced by canned responses.
 
@@ -143,5 +143,47 @@ describe('true or false (#68)', () => {
     );
     await generateStudyItems('Notes.', 'true_false', { count: 5 });
     expect(sent.at(-1)!.prompt).toContain('"answer" ("True" or "False")');
+  });
+});
+
+describe('mixed quiz (#69)', () => {
+  const mcItem = (i: number) => ({ type: 'multiple_choice', question: `Clue for choice ${i}`, options: [`Right ${i}`, 'Wrong A', 'Wrong B', 'Wrong C'], answer: `Right ${i}` });
+  const tfItem = (i: number) => ({ type: 'true_false', question: `Statement ${i} about cells.`, answer: i % 2 ? 'True' : 'False', explanation: i % 2 ? '' : 'Fixed.' });
+  const idItem = (i: number) => ({ type: 'identification', question: `Clue for term ${i}`, answer: `Term ${i}` });
+  const kinds = (items: { options?: string[] }[]) =>
+    items.map((i) => (!i.options ? 'id' : i.options.length === 2 ? 'tf' : 'mc')).join(',');
+
+  it('asks for each part with spares and keeps each part\'s share, in order', async () => {
+    mockModel(() => reply([...[1, 2, 3, 4, 5].map(mcItem), ...[1, 2, 3, 4].map(tfItem), ...[1, 2, 3, 4].map(idItem)]));
+    const { items } = await generateStudyItems('Notes.', 'mixed', { count: 10 });
+    expect(mixedRequest(10)).toEqual({ multiple_choice: 5, true_false: 4, identification: 4 });
+    expect(sent[0].prompt).toContain('Produce exactly 13 items.');
+    expect(sent[0].prompt).toContain('Part I: exactly 5 items with "type": "multiple_choice".');
+    expect(sent[0].prompt).toContain('Part III: exactly 4 items with "type": "identification".');
+    expect(kinds(items)).toBe('mc,mc,mc,mc,tf,tf,tf,id,id,id');
+    expect(items.slice(0, 4).map((i) => i.answer)).toEqual(['Right 1', 'Right 2', 'Right 3', 'Right 4']);
+    expect(items[9]).toEqual({ question: 'Clue for term 3', answer: 'Term 3' });
+  });
+
+  it('fills a short part from the other parts\' spares, and guesses a missing type', async () => {
+    const { type: _t, ...untyped } = idItem(1);
+    mockModel(() => reply([...[1, 2, 3, 4, 5].map(mcItem), ...[1, 2, 3, 4].map(tfItem), untyped, { ...idItem(2), answer: 'x '.repeat(20) }]));
+    const { items } = await generateStudyItems('Notes.', 'mixed', { count: 10 });
+    // Identification has 1 usable item, so a spare multiple-choice and true-or-false one fill in.
+    expect(kinds(items)).toBe('mc,mc,mc,mc,mc,tf,tf,tf,tf,id');
+  });
+
+  it('tries the next model when a whole part is missing', async () => {
+    mockModel((req) =>
+      reply(
+        req.model === 'gemini-3.5-flash'
+          ? [...[1, 2, 3, 4, 5, 6].map(mcItem), ...[1, 2, 3, 4, 5].map(tfItem)]
+          : [...[1, 2, 3, 4].map(mcItem), ...[1, 2, 3].map(tfItem), ...[1, 2, 3].map(idItem)]
+      )
+    );
+    const { items, model } = await generateStudyItems('Notes.', 'mixed', { count: 10 });
+    expect(sent.map((r) => r.model)).toEqual(['gemini-3.5-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite']);
+    expect(model).toBe('gemini-3.5-flash-lite');
+    expect(kinds(items)).toBe('mc,mc,mc,mc,tf,tf,tf,id,id,id');
   });
 });

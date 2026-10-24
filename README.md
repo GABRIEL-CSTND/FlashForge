@@ -4,9 +4,10 @@ Upload your notes and get an AI-generated study guide in seconds.
 
 FlashForge turns a PDF or TXT file into a study guide of 5 to 30 questions (10 by
 default): **identification-style flashcards** (a clue on the front, a 1–4 word term on
-the back), **multiple-choice questions**, or **true-or-false statements** with the
-correction shown after each false one. Quizzes give instant feedback and a score at the
-end. Flashcards can be studied by flipping them (and marking *Got it* or *Missed it*),
+the back), **multiple-choice questions**, **true-or-false statements** with the
+correction shown after each false one, or a **mixed quiz** set out like a school exam
+(Part I multiple choice, Part II true or false, Part III identification). Quizzes give
+instant feedback and a score at the end. Flashcards can be studied by flipping them (and marking *Got it* or *Missed it*),
 by **typing the answer**, which the app checks and forgives one small typo, or by
 **matching** clues to terms in rounds of up to 5. Sign in
 with Google to save study guides, then rename, revisit, or delete them from **My Sets**.
@@ -113,8 +114,8 @@ app/
   api/teacher/sets/[id]/assignments/  Assign a set to the teacher's classes
   api/student/classes/  Student class API (list with assignments and my progress, join with a code, leave)
 components/
-  StudyViewer.tsx       Study UI: flip (Got it / Missed it), type or match flashcards, multiple choice, true or false; reports each finish
-  CardEditor.tsx        Edit mode for a set: change, add, delete and reorder cards
+  StudyViewer.tsx       Study UI: flip (Got it / Missed it), type or match flashcards, multiple choice, true or false, mixed quiz parts; reports each finish
+  CardEditor.tsx        Edit mode for a set: change, add, delete and reorder cards (of any kind in a mixed quiz)
   AssignPanel.tsx       "Assign to class" dialog on a set the teacher owns
   StudentResultsPanel.tsx  One student's attempts, opened from the results table
   ProfileProvider.tsx   Shares the signed-in user's profile (role) with every page

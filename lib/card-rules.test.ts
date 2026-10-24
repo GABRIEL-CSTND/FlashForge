@@ -131,3 +131,26 @@ describe('validateCards: true or false (#68)', () => {
     expect([toTrueFalse('TRUE'), toTrueFalse(false), toTrueFalse('yes'), toTrueFalse(1)]).toEqual(['True', 'False', null, null]);
   });
 });
+
+describe('validateCards: mixed quiz (#69)', () => {
+  const identification = { question: 'Fluid inside the chloroplast', answer: 'Stroma' };
+  const trueFalse = { question: 'Plants give off oxygen.', answer: 'True', options: ['True', 'False'], explanation: '' };
+
+  it('checks each card by its own kind', () => {
+    const r = validateCards([mc(), trueFalse, identification], 'mixed');
+    expect(r.ok && r.cards.map((c) => [c.answer, c.options])).toEqual([
+      ['Network', ['Physical', 'Network', 'Transport', 'Session']],
+      ['True', ['True', 'False']],
+      ['Stroma', null],
+    ]);
+  });
+
+  it.each([
+    [[mc({ options: ['A', 'B', 'C'] })], 'Card 1: a multiple-choice card needs exactly 4 choices.'],
+    [[mc(), { ...trueFalse, answer: 'Maybe' }], 'Card 2: pick True or False.'],
+    [[mc(), trueFalse, { ...identification, answer: '' }], 'Card 3: write an answer.'],
+    [[{ ...identification, explanation: 'Why' }], 'Card 1: only true-or-false cards have an explanation.'],
+  ])('rejects %j', (cards, message) => {
+    expect(errorOf(cards, 'mixed')?.error).toBe(message);
+  });
+});

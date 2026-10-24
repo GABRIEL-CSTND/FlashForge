@@ -375,3 +375,44 @@ describe('true or false (#68)', () => {
     expect(screen.getByRole('group', { name: 'How do you want to study?' })).toBeTruthy();
   });
 });
+
+describe('mixed quiz (#69)', () => {
+  // Saved out of order on purpose: the quiz still goes Part I, II, III.
+  const MIXED = [
+    { id: 'm3', question: 'Organelle that makes ATP', answer: 'Mitochondria', options: null },
+    { id: 'm2', question: 'Plants give off oxygen.', answer: 'True', options: ['True', 'False'], explanation: null },
+    { id: 'm1', question: 'Layer 3?', answer: 'Network', options: ['Physical', 'Network', 'Transport', 'Session'] },
+  ];
+
+  it('goes part by part, with a typed Part III, and scores each part', () => {
+    const onComplete = vi.fn<(r: StudyResult) => void>();
+    render(<StudyViewer title="Exam" studyType="mixed" cards={MIXED} onComplete={onComplete} />);
+    expect(screen.queryByRole('group', { name: 'How do you want to study?' })).toBeNull();
+    expect(screen.getByText('Part I · Multiple choice')).toBeTruthy();
+    click('Physical');
+    click('Next →');
+    expect(screen.getByText('Part II · True or false')).toBeTruthy();
+    click('True');
+    click('Next →');
+    expect(screen.getByText('Part III · Identification')).toBeTruthy();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: 'mitochondria' } });
+    click('Check');
+    click('Finish');
+
+    expect(onComplete).toHaveBeenCalledWith({
+      answers: [
+        { cardId: 'm1', chosen: 'Physical' },
+        { cardId: 'm2', chosen: 'True' },
+        { cardId: 'm3', typed: 'mitochondria' },
+      ],
+      correct: 2,
+      total: 3,
+    });
+    expect(screen.getByText('2 / 3')).toBeTruthy();
+    expect(
+      within(screen.getByRole('list', { name: 'Score by part' }))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent)
+    ).toEqual(['Part I · Multiple choice0 / 1', 'Part II · True or false1 / 1', 'Part III · Identification1 / 1']);
+  });
+});

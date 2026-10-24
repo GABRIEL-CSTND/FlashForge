@@ -3,12 +3,13 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { checkTypedAnswer, type TypedVerdict } from '@/lib/answer-check';
-import { CARD_LIMITS, isTrueFalseOptions, normalizeChoice } from '@/lib/card-rules';
+import { CARD_LIMITS, cardKind, isTrueFalseOptions, normalizeChoice, type CardKind } from '@/lib/card-rules';
 import {
   FLASHCARD_MODE_LABELS,
   FLASHCARD_MODES,
   isStudyType,
   matchRounds,
+  MIXED_PARTS,
   type FlashcardMode,
   type StudyMode,
   type StudyType,
@@ -131,10 +132,17 @@ function reportAnswer(interaction: Interaction, card: StudyItem, a: CardAnswer |
   return { cardId: card.id, result: a?.result ?? null };
 }
 
+// A mixed quiz (#69) is studied part by part (I, II, III), keeping the saved
+// order within each part.
+function byPart(cards: StudyItem[]): StudyItem[] {
+  const part = (c: StudyItem) => MIXED_PARTS.findIndex((p) => p.kind === cardKind(c.options));
+  return cards.map((c, i) => ({ c, i })).sort((a, b) => part(a.c) - part(b.c) || a.i - b.i).map(({ c }) => c);
+}
+
 export default function StudyViewer({
   title,
   studyType,
-  cards,
+  cards: givenCards,
   onFinish,
   onExit,
   onComplete,
@@ -151,6 +159,7 @@ export default function StudyViewer({
   const [run, setRun] = useState(0);
   const nextButton = useRef<HTMLButtonElement>(null);
   const focusNext = useRef(false);
+  const cards = useMemo(() => (studyType === 'mixed' ? byPart(givenCards) : givenCards), [givenCards, studyType]);
 
   // After a typed answer is checked, Enter goes on to the next card.
   useEffect(() => {
@@ -163,13 +172,13 @@ export default function StudyViewer({
   // A set saved with an old study type (one legacy set says "identification")
   // has always been shown as flashcards.
   const isFlashcards = studyType === 'flashcard' || !isStudyType(studyType);
-  const interaction: Interaction = !isFlashcards
-    ? 'choice'
-    : mode === 'type'
-      ? 'typed'
-      : mode === 'match'
-        ? 'match'
-        : 'flip';
+  // How a card is answered. Flashcards follow the chosen mode; in a mixed quiz
+  // (#69) identification cards are typed and the other parts are picks.
+  const interactionFor = (c: StudyItem | undefined): Interaction => {
+    if (isFlashcards) return mode === 'type' ? 'typed' : mode === 'match' ? 'match' : 'flip';
+    return studyType === 'mixed' && c && cardKind(c.options) === 'identification' ? 'typed' : 'choice';
+  };
+  const interaction = interactionFor(cards[index]);
   const studyMode: StudyMode | null = isFlashcards && mode !== 'flip' ? mode : null;
   // Matching goes round by round (#67), everything else card by card: index
   // is the current round or card.
@@ -195,8 +204,8 @@ export default function StudyViewer({
   const finish = (final: Record<number, CardAnswer> = answers) => {
     onComplete?.({
       ...(studyMode ? { mode: studyMode } : {}),
-      answers: cards.map((c, i) => reportAnswer(interaction, c, final[i])),
-      correct: cards.filter((c, i) => isCorrect(interaction, c, final[i])).length,
+      answers: cards.map((c, i) => reportAnswer(interactionFor(c), c, final[i])),
+      correct: cards.filter((c, i) => isCorrect(interactionFor(c), c, final[i])).length,
       total: cards.length,
     });
     setView('summary');
@@ -253,7 +262,7 @@ export default function StudyViewer({
     );
   }
 
-  if (view === 'summary' && interaction === 'flip') {
+  if (view === 'summary' && isFlashcards && mode === 'flip') {
     const marks = Object.values(answers).map((a) => a.result);
     const got = marks.filter((m) => m === 'got').length;
     const missed = marks.filter((m) => m === 'missed').length;
@@ -302,7 +311,16 @@ export default function StudyViewer({
 
   if (view === 'summary') {
     const answered = cards.filter((_, i) => answers[i] !== undefined).length;
-    const correct = cards.filter((c, i) => isCorrect(interaction, c, answers[i])).length;
+    const isRight = (c: StudyItem, i: number) => isCorrect(interactionFor(c), c, answers[i]);
+    const correct = cards.filter(isRight).length;
+    // Mixed quiz (#69): the score of each part as well.
+    const partScores =
+      studyType === 'mixed'
+        ? MIXED_PARTS.map((p) => {
+            const inPart = cards.map((c, i) => ({ c, i })).filter(({ c }) => cardKind(c.options) === p.kind);
+            return { ...p, total: inPart.length, right: inPart.filter(({ c, i }) => isRight(c, i)).length };
+          }).filter((p) => p.total > 0)
+        : [];
     const withTypo = Object.values(answers).filter((a) => a.verdict === 'close').length;
     const pct = Math.round((correct / cards.length) * 100);
 
@@ -316,6 +334,20 @@ export default function StudyViewer({
               {correct} / {cards.length}
             </p>
             <p className="text-gray-500">{pct}% correct</p>
+            {partScores.length > 0 && (
+              <ul aria-label="Score by part" className="mt-3 space-y-1 text-left text-sm">
+                {partScores.map((p) => (
+                  <li key={p.kind} className="flex justify-between gap-3">
+                    <span className="text-gray-500">
+                      Part {p.numeral} · {p.label}
+                    </span>
+                    <span className="font-medium tabular-nums">
+                      {p.right} / {p.total}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
             {withTypo > 0 && (
               <p className="text-xs text-gray-400 mt-2">
                 {withTypo} with a small typo
@@ -379,6 +411,7 @@ export default function StudyViewer({
         <p className="text-sm text-gray-500 mt-1">
           {interaction === 'match' ? `Round ${index + 1} of ${rounds.length}` : `Card ${index + 1} of ${cards.length}`}
         </p>
+        {studyType === 'mixed' && card && <PartLabel kind={cardKind(card.options)} />}
       </div>
 
       {saveSlot}
@@ -453,6 +486,17 @@ export default function StudyViewer({
 
       {navigation}
     </main>
+  );
+}
+
+// "Part II · True or false" above a mixed-quiz card (#69).
+function PartLabel({ kind }: { kind: CardKind }) {
+  const part = MIXED_PARTS.find((p) => p.kind === kind);
+  if (!part) return null;
+  return (
+    <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-link">
+      Part {part.numeral} · {part.label}
+    </p>
   );
 }
 
