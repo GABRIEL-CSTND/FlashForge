@@ -188,6 +188,14 @@ already applied there.
   sub-issues #51–#63.
 
 ### Changed
+- **Short answers only:** AI-generated cards whose answer is too long are now filtered
+  out, so every card stays short and easy to identify. The prompt already asked for
+  answers of 1 to 4 words, but the code still let flashcard answers run to 8 words and
+  multiple-choice choices to 80 characters with no word limit. Now every answer (flashcard
+  and identification answers, and every multiple-choice choice, right or wrong) must be
+  at most 6 words and 60 characters, or the whole card is dropped. The multiple-choice
+  prompts now ask for 1-to-4-word choices too, so fewer cards are lost. Questions and
+  true-or-false statements are unchanged.
 - **Cleaner look, UI polish phase 1:** the Geist font (the starter template's Arial was
   still forced), soft gray borders instead of black outlines (white in dark mode), a
   FlashForge icon instead of the starter template's, and a browser title per page
