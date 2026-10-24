@@ -167,9 +167,9 @@ describe('type the answer (#66)', () => {
       .getAllByRole('button')
       .map((b) => `${b.textContent}${b.getAttribute('aria-pressed') === 'true' ? ' (on)' : ''}`);
 
-  it('lets flashcard sets be flipped or typed, starting with Flip', () => {
+  it('lets flashcard sets be flipped, typed or matched, starting with Flip', () => {
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
-    expect(modes()).toEqual(['Flip (on)', 'Type']);
+    expect(modes()).toEqual(['Flip (on)', 'Type', 'Match']);
     cleanup();
     render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
     expect(screen.queryByRole('group', { name: 'How do you want to study?' })).toBeNull();
@@ -179,7 +179,7 @@ describe('type the answer (#66)', () => {
     const onComplete = vi.fn<(r: StudyResult) => void>();
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} onComplete={onComplete} />);
     click('Type');
-    expect(modes()).toEqual(['Flip', 'Type (on)']);
+    expect(modes()).toEqual(['Flip', 'Type (on)', 'Match']);
     expect(screen.getByText('Fluid inside the chloroplast')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Next →' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: 'Check' }) as HTMLButtonElement).disabled).toBe(true);
@@ -239,5 +239,99 @@ describe('type the answer (#66)', () => {
     click('Flip');
     flip();
     expect(screen.getByRole('button', { name: '✓ Got it' }).getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
+describe('matching (#67)', () => {
+  const SIX_CARDS = [
+    ...FLASH_CARDS,
+    { id: 'f4', question: 'Stage that makes glucose', answer: 'Calvin cycle' },
+    { id: 'f5', question: 'Gas given off', answer: 'Oxygen' },
+    { id: 'f6', question: 'Organelle where it happens', answer: 'Chloroplast' },
+  ];
+  const termSelect = (clue: string) => screen.getByRole('combobox', { name: clue }) as HTMLSelectElement;
+  // Terms are shuffled, so pick by name.
+  const matchTerm = (clue: string, term: string) => {
+    const option = within(termSelect(clue))
+      .getAllByRole('option')
+      .find((o) => o.textContent?.endsWith(`. ${term}`)) as HTMLOptionElement;
+    fireEvent.change(termSelect(clue), { target: { value: option.value } });
+  };
+  const rows = () =>
+    within(screen.getByRole('list', { name: 'Clues' }))
+      .getAllByRole('listitem')
+      .map((li) => li.textContent);
+  const disabled = (name: string) => (screen.getByRole('button', { name }) as HTMLButtonElement).disabled;
+
+  it('plays round by round and reports the term picked for each clue', () => {
+    const onComplete = vi.fn<(r: StudyResult) => void>();
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={SIX_CARDS} onComplete={onComplete} />);
+    click('Match');
+    expect(screen.getByText('Round 1 of 2')).toBeTruthy();
+    expect(
+      within(screen.getByRole('list', { name: 'Terms' }))
+        .getAllByRole('listitem')
+        .map((li) => li.textContent?.slice(3))
+        .sort()
+    ).toEqual(['Chlorophyll', 'RuBisCO', 'Stroma']);
+    expect([disabled('Check answers'), disabled('Next round →')]).toEqual([true, true]);
+
+    matchTerm('Fluid inside the chloroplast', 'Stroma');
+    matchTerm('Enzyme that fixes CO2', 'Chlorophyll');
+    expect(disabled('Check answers')).toBe(true);
+    matchTerm('Pigment that absorbs light', 'RuBisCO');
+    click('Check answers');
+    expect(rows()).toEqual([
+      'Fluid inside the chloroplast✓ Stroma',
+      'Enzyme that fixes CO2✗ Chlorophyll · Answer: RuBisCO',
+      'Pigment that absorbs light✗ RuBisCO · Answer: Chlorophyll',
+    ]);
+    expect(screen.queryByRole('combobox')).toBeNull();
+
+    click('Next round →');
+    expect(screen.getByText('Round 2 of 2')).toBeTruthy();
+    matchTerm('Stage that makes glucose', 'Calvin cycle');
+    matchTerm('Gas given off', 'Oxygen');
+    matchTerm('Organelle where it happens', 'Chloroplast');
+    click('Check answers');
+    click('Finish');
+
+    expect(onComplete).toHaveBeenCalledWith({
+      mode: 'match',
+      answers: [
+        { cardId: 'f1', chosen: 'Stroma' },
+        { cardId: 'f2', chosen: 'Chlorophyll' },
+        { cardId: 'f3', chosen: 'RuBisCO' },
+        { cardId: 'f4', chosen: 'Calvin cycle' },
+        { cardId: 'f5', chosen: 'Oxygen' },
+        { cardId: 'f6', chosen: 'Chloroplast' },
+      ],
+      correct: 4,
+      total: 6,
+    });
+    expect(screen.getByText('4 / 6')).toBeTruthy();
+    expect(screen.getByText('67% correct')).toBeTruthy();
+  });
+
+  it('moves a term to the clue that picks it last', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    click('Match');
+    matchTerm('Fluid inside the chloroplast', 'Stroma');
+    matchTerm('Enzyme that fixes CO2', 'Stroma');
+    expect(termSelect('Fluid inside the chloroplast').value).toBe('');
+    expect(termSelect('Enzyme that fixes CO2').selectedOptions[0].textContent).toMatch(/Stroma$/);
+  });
+
+  it('never lists the terms in the same order as the clues', () => {
+    // With this, the shuffle swaps nothing, so the order is rotated instead.
+    vi.spyOn(Math, 'random').mockReturnValue(0.999);
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    click('Match');
+    expect(within(screen.getByRole('list', { name: 'Terms' })).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'A. RuBisCO',
+      'B. Chlorophyll',
+      'C. Stroma',
+    ]);
+    vi.restoreAllMocks();
   });
 });

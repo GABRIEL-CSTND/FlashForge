@@ -235,8 +235,26 @@ describe('typed answers (#66)', () => {
     expect(rowsFor('owner').map((a) => a.mode)).toEqual([null, null]);
   });
 
+  it('scores matched terms on the server (#67)', async () => {
+    const res = await post('owner', {
+      id: fakeUuid(),
+      setId: SETS.privateFlash,
+      mode: 'match',
+      answers: [
+        { cardId: CARDS.p1, chosen: 'RuBisCO', correct: true },
+        { cardId: CARDS.p2, chosen: 'rubisco' },
+      ],
+    });
+    expect(res.body.attempt).toMatchObject({ mode: 'match', score: 1, total: 2 });
+    expect(rowsFor('owner')[0].answers).toEqual([
+      { cardId: CARDS.p1, chosen: 'RuBisCO', correct: false },
+      { cardId: CARDS.p2, chosen: 'rubisco', correct: true },
+    ]);
+  });
+
   it.each([
     ['typing a multiple-choice set', SETS.mc, 'type'],
+    ['matching a multiple-choice set', SETS.mc, 'match'],
     ['an unknown way', SETS.privateFlash, 'guess'],
     ['"flip" spelled out (the normal way has no mode)', SETS.privateFlash, 'flip'],
   ])('refuses %s (400)', async (_label, setId, mode) => {

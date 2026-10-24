@@ -35,6 +35,11 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **Matching** (#67, live database): a third way to study flashcard sets. The set is split
+  into even rounds of up to 5; students pick the term for each clue from the round's
+  shuffled terms (each used once), then check the round. Scored on the server like other
+  attempts, shown as *Matched* to teachers, and wrong matches count on the most-missed
+  page.
 - **Type the answer** (#66, live database): flashcard sets have a **Flip / Type** switch.
   In Type, students type each term and the app checks it right away: capitals, accents,
   spaces and punctuation don't matter, and one small typo is forgiven on longer words

@@ -359,8 +359,9 @@ screen instead of shortening with "…".
 
 ### Typing the answer (#66)
 
-- Flashcard sets have a **Flip / Type** switch at the top of the study screen. Switching
-  starts the set over. Any flashcard set works, including ones saved before; no AI is used.
+- Flashcard sets have a **Flip / Type / Match** switch at the top of the study screen
+  (Match is #67, below). Switching starts the set over. Any flashcard set works,
+  including ones saved before; no AI is used.
 - **Type:** the student sees the clue, types the term and presses **Check** (or Enter):
   *✓ Correct*, *✓ Almost. It's spelled …* or *✗ Not quite. The answer is …*. **I don't
   know** shows the answer and counts as wrong. *Next* needs an answer first, and going
@@ -382,6 +383,20 @@ screen instead of shortening with "…".
   capitals, spaces or punctuation (`typedAnswerKey()`). Recent scores on the set page say
   "8 / 10 typed" or "8 / 10 got it".
 
+### Matching (#67)
+
+- **Match** splits the set into rounds of up to 5 cards, as evenly as possible
+  (`matchRounds()` in `lib/study-types.ts`): 12 cards are 4 + 4 + 4, never 5 + 5 + 2.
+- Each round shows its terms (lettered, shuffled, and never in the clues' order) and one
+  dropdown per clue. A term can only be used once: picking a term another clue has moves
+  it. **Check answers** needs every clue filled in, then marks each row right or wrong
+  and shows the right term for wrong ones. *Next round* needs the round checked.
+- Each card's answer is the term picked for its clue (`chosen`). It counts if it reads
+  the same as the card's own answer (`normalizeChoice`), so two cards with the same
+  answer can't be "wrong" for swapping. `POST /api/attempts` gets `mode: "match"` and the
+  server scores it the same way. Teachers see *Matched* on these attempts, and wrong
+  matches count on the most-missed page.
+
 ### Student results for teachers (#58)
 
 - On a class page, **📊 Student results** opens `/teacher/classes/[id]/results`: one row
@@ -396,8 +411,8 @@ screen instead of shortening with "…".
 - **Class average** per assignment: the mean of each finisher's best percentage, with
   "*n* of *m* done".
 - **Selecting a student** opens their attempts on each assignment, newest first, with
-  the time, score, a Late badge and, for flashcards, whether it was typed or self-marked
-  (`components/StudentResultsPanel.tsx`).
+  the time, score, a Late badge and, for flashcards, whether it was typed, matched or
+  self-marked (`components/StudentResultsPanel.tsx`).
 - **Download CSV** builds the file in the browser from the same data: best %, attempts
   and status for each assignment, plus the class average row. A cell starting with
   `=`, `+`, `-` or `@` gets a leading `'` so spreadsheet apps don't run it as a
@@ -524,7 +539,7 @@ The plan for teacher and admin features is tracked in #50.
 | `generation_logs` | `id`, `user_id` → `auth.users` (set null), `role`, `ip_hash` (signed out only), `model`, `study_type`, `duration_ms`, `success` (null while running), `error_kind` (incl. `limit`), `requests` (jsonb), `created_at` | One row per `/api/generate` request (#62, #63). Indexed on `created_at`, (`user_id`, `created_at`) and (`ip_hash`, `created_at`) |
 | `app_settings` | `key` (primary key), `value` (jsonb), `updated_at`, `updated_by` → `auth.users` (set null) | App-wide settings changed by admins; today just `generation_limits` (#63) |
 | `audit_log` | `id`, `actor_id` → `auth.users` (set null), `action` (`role_change` \| `set_delete`), `target_id`, `details` (jsonb), `created_at` | Admin actions (#60). `target_id` has no foreign key, so entries survive the target being deleted. Indexed on `created_at` |
-| `attempts` | `id` (made by the browser), `user_id` → `auth.users` (cascade), `set_id` → `flashcard_sets` (cascade), `assignment_id` → `assignments` (set null), `study_type`, `mode` (null, or `type` for flashcards, #66), `score`, `total`, `answers` (jsonb), `completed_at` | One row per finished study session (#57). `total > 0` and `0 ≤ score ≤ total`. Indexed on (`user_id`, `set_id`, `completed_at`) and on `assignment_id` |
+| `attempts` | `id` (made by the browser), `user_id` → `auth.users` (cascade), `set_id` → `flashcard_sets` (cascade), `assignment_id` → `assignments` (set null), `study_type`, `mode` (null, or `type` / `match` for flashcards, #66, #67), `score`, `total`, `answers` (jsonb), `completed_at` | One row per finished study session (#57). `total > 0` and `0 ≤ score ≤ total`. Indexed on (`user_id`, `set_id`, `completed_at`) and on `assignment_id` |
 
 ## 4. Security model
 
@@ -595,11 +610,11 @@ transaction. Run them after every database change.
 - `supabase/tests/admin-users-check.sql` (16 cases): browsers can't read `audit_log` or call
   the admin functions; a role change is logged; a non-admin is refused; the last admin
   can't step down (also after two admins demote each other in turn).
-- `supabase/tests/attempts-rls-check.sql` (20 cases): students read only their own
+- `supabase/tests/attempts-rls-check.sql` (22 cases): students read only their own
   attempts and can't write any; a teacher sees attempts from their class's assignment but
   not private study, and stops seeing them when the student leaves or the set is
-  unassigned; plus the score and mode constraints (only flashcard sets can be typed) and
-  the cascade when a set is deleted.
+  unassigned; plus the score and mode constraints (only flashcard sets can be typed or
+  matched) and the cascade when a set is deleted.
 - `supabase/tests/sets-editing-check.sql`: `replace_set_cards()` (12 cases), covering a
   real edit, kept ids, each kind of refused save, that a refused save changes nothing,
   and that browsers can't call it.
@@ -624,9 +639,9 @@ transaction. Run them after every database change.
   uploaded to the server whole (#44), and only PDF and TXT are supported (#20).
 - **3 existing ESLint errors** (`react-hooks/set-state-in-effect`) in `app/page.tsx` and
   `app/my-sets/page.tsx`.
-- **Flipped flashcard scores are self-reported** (*Got it* / *Missed it*). Typed answers
-  (#66) and multiple choice are checked against the real answers, but a teacher can't yet
-  require students to type.
+- **Flipped flashcard scores are self-reported** (*Got it* / *Missed it*). Typed (#66) and
+  matched (#67) answers and multiple choice are checked against the real answers, but a
+  teacher can't yet require a way of studying.
 - **Results list only students who are in the class now.** If a student leaves, their
   results disappear from the teacher's view, and come back if they rejoin.
 - **Late is judged against the current due date**, so moving a due date relabels work

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { checkTypedAnswer, type TypedVerdict } from '@/lib/answer-check';
-import { CARD_LIMITS } from '@/lib/card-rules';
+import { CARD_LIMITS, normalizeChoice } from '@/lib/card-rules';
 import {
   FLASHCARD_MODE_LABELS,
   FLASHCARD_MODES,
+  matchRounds,
   type FlashcardMode,
   type StudyMode,
   type StudyType,
@@ -24,7 +25,8 @@ export type FlashcardMark = 'got' | 'missed';
 // What the student did with one card, in study order (#57).
 export interface StudyAnswer {
   cardId?: string;
-  // Multiple choice: the option picked, or null if skipped.
+  // Multiple choice: the option picked, or null if skipped. Matching (#67):
+  // the term picked for this card's clue.
   chosen?: string | null;
   // Flipped flashcards: the student's own mark, or null if not marked.
   result?: FlashcardMark | null;
@@ -56,8 +58,9 @@ interface StudyViewerProps {
   saveSlot?: React.ReactNode;
 }
 
-// How the student answers a card: flip and mark it, pick an option, or type.
-type Interaction = 'flip' | 'choice' | 'typed';
+// How the student answers a card: flip and mark it, pick an option, type, or
+// match it with a term in a round of cards (#67).
+type Interaction = 'flip' | 'choice' | 'typed' | 'match';
 
 // What the student did with one card, while studying.
 interface CardAnswer {
@@ -85,7 +88,8 @@ function ExitButton({ onExit }: { onExit?: () => void }) {
   );
 }
 
-// Flip / Type for flashcard sets (#66). Changing it starts the set over.
+// Flip / Type / Match for flashcard sets (#66, #67). Changing it starts the
+// set over.
 function ModeSwitcher({ mode, onChange }: { mode: FlashcardMode; onChange: (mode: FlashcardMode) => void }) {
   return (
     <div role="group" aria-label="How do you want to study?" className="inline-flex shrink-0 rounded-lg border p-0.5 text-sm">
@@ -106,15 +110,20 @@ function ModeSwitcher({ mode, onChange }: { mode: FlashcardMode; onChange: (mode
   );
 }
 
+// A matched term counts if it reads the same as this card's answer (two cards
+// may share one), the same rule the server uses.
+const sameTerm = (a: string | undefined, b: string) => a !== undefined && normalizeChoice(a) === normalizeChoice(b);
+
 function isCorrect(interaction: Interaction, card: StudyItem, a: CardAnswer | undefined): boolean {
   if (!a) return false;
   if (interaction === 'choice') return a.chosen === card.answer;
+  if (interaction === 'match') return sameTerm(a.chosen, card.answer);
   if (interaction === 'typed') return a.verdict === 'correct' || a.verdict === 'close';
   return a.result === 'got';
 }
 
 function reportAnswer(interaction: Interaction, card: StudyItem, a: CardAnswer | undefined): StudyAnswer {
-  if (interaction === 'choice') return { cardId: card.id, chosen: a?.chosen ?? null };
+  if (interaction === 'choice' || interaction === 'match') return { cardId: card.id, chosen: a?.chosen ?? null };
   if (interaction === 'typed') return { cardId: card.id, typed: a?.typed ?? null };
   return { cardId: card.id, result: a?.result ?? null };
 }
@@ -134,6 +143,9 @@ export default function StudyViewer({
   const [flipped, setFlipped] = useState(false);
   const [answers, setAnswers] = useState<Record<number, CardAnswer>>({});
   const [view, setView] = useState<'card' | 'summary'>('card');
+  // Bumped on every restart, so typed cards start empty and matching rounds
+  // are shuffled again.
+  const [run, setRun] = useState(0);
   const nextButton = useRef<HTMLButtonElement>(null);
   const focusNext = useRef(false);
 
@@ -146,11 +158,27 @@ export default function StudyViewer({
   });
 
   const isFlashcards = studyType === 'flashcard';
-  const interaction: Interaction = !isFlashcards ? 'choice' : mode === 'type' ? 'typed' : 'flip';
+  const interaction: Interaction = !isFlashcards
+    ? 'choice'
+    : mode === 'type'
+      ? 'typed'
+      : mode === 'match'
+        ? 'match'
+        : 'flip';
   const studyMode: StudyMode | null = isFlashcards && mode !== 'flip' ? mode : null;
-  const isLast = index === cards.length - 1;
+  // Matching goes round by round (#67), everything else card by card: index
+  // is the current round or card.
+  const rounds = useMemo(() => matchRounds(cards.length), [cards.length]);
+  const pageCount = interaction === 'match' ? rounds.length : cards.length;
+  const isLast = index === pageCount - 1;
   const card = cards[index];
   const answer = answers[index];
+  const roundCards =
+    interaction === 'match' && rounds[index]
+      ? cards.slice(...rounds[index]).map((c, k) => ({ card: c, index: rounds[index][0] + k }))
+      : [];
+  const pageAnswered =
+    interaction === 'match' ? roundCards.every((c) => answers[c.index] !== undefined) : answer !== undefined;
 
   const goTo = (i: number) => {
     setFlipped(false);
@@ -170,7 +198,7 @@ export default function StudyViewer({
   };
 
   const goNext = () => {
-    if (index < cards.length - 1) goTo(index + 1);
+    if (index < pageCount - 1) goTo(index + 1);
     else finish();
   };
 
@@ -182,6 +210,7 @@ export default function StudyViewer({
     setAnswers({});
     goTo(0);
     setView('card');
+    setRun((r) => r + 1);
   };
 
   const changeMode = (next: FlashcardMode) => {
@@ -326,12 +355,12 @@ export default function StudyViewer({
       <button
         ref={nextButton}
         onClick={goNext}
-        // Multiple choice and typed answers need an answer first; flashcards
-        // can be skipped.
-        disabled={interaction !== 'flip' && answer === undefined}
+        // Everything but flipped flashcards needs an answer (or a checked
+        // round) first; flashcards can be skipped.
+        disabled={interaction !== 'flip' && !pageAnswered}
         className="btn btn-primary btn-lg flex-1"
       >
-        {isLast ? 'Finish' : 'Next →'}
+        {isLast ? 'Finish' : interaction === 'match' ? 'Next round →' : 'Next →'}
       </button>
     </div>
   );
@@ -343,7 +372,7 @@ export default function StudyViewer({
       <div className="text-center">
         <h1 className="text-xl font-semibold">{title}</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Card {index + 1} of {cards.length}
+          {interaction === 'match' ? `Round ${index + 1} of ${rounds.length}` : `Card ${index + 1} of ${cards.length}`}
         </p>
       </div>
 
@@ -378,9 +407,21 @@ export default function StudyViewer({
         </div>
       )}
 
+      {interaction === 'match' && (
+        <MatchingRound
+          key={`${run}-${index}`}
+          cards={roundCards}
+          answers={answers}
+          onCheck={(picked) => {
+            focusNext.current = true;
+            setAnswers((prev) => ({ ...prev, ...picked }));
+          }}
+        />
+      )}
+
       {interaction === 'typed' && (
         <TypedCard
-          key={index}
+          key={`${run}-${index}`}
           card={card}
           answer={answer}
           onAnswer={(a) => {
@@ -432,6 +473,126 @@ export default function StudyViewer({
 
       {navigation}
     </main>
+  );
+}
+
+// Fisher-Yates. A round of 2 or more never keeps the clues' order, so the
+// answer is never just "the same position".
+function shuffledTerms(terms: string[]): string[] {
+  const out = [...terms];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  if (out.length > 1 && out.every((t, i) => t === terms[i])) out.push(out.shift()!);
+  return out;
+}
+
+const LETTERS = 'ABCDEFGHIJ';
+
+// One matching round (#67): the round's clues, each picking a term from the
+// round's shuffled terms. A term can only be used once, so picking one that
+// another clue has moves it. The round is checked all at once.
+function MatchingRound({
+  cards,
+  answers,
+  onCheck,
+}: {
+  cards: { card: StudyItem; index: number }[];
+  answers: Record<number, CardAnswer>;
+  onCheck: (picked: Record<number, CardAnswer>) => void;
+}) {
+  const idBase = useId();
+  const [terms] = useState(() => shuffledTerms(cards.map((c) => c.card.answer)));
+  // The term (its position in `terms`) picked for each clue, by card index.
+  const [picks, setPicks] = useState<Record<number, number>>({});
+  const checked = cards.every((c) => answers[c.index] !== undefined);
+  const allPicked = cards.every((c) => picks[c.index] !== undefined);
+  const used = new Set(Object.values(picks));
+
+  const pick = (cardIndex: number, term: number | null) =>
+    setPicks((prev) => {
+      const next: Record<number, number> = {};
+      for (const [k, v] of Object.entries(prev)) if (v !== term) next[Number(k)] = v;
+      if (term === null) delete next[cardIndex];
+      else next[cardIndex] = term;
+      return next;
+    });
+
+  const check = () => onCheck(Object.fromEntries(cards.map((c) => [c.index, { chosen: terms[picks[c.index]] }])));
+
+  return (
+    <div className="w-full space-y-4 rounded-xl border p-5">
+      <p className="text-center text-sm text-gray-500">
+        {checked ? 'Here’s how you did.' : 'Match each clue with its term. Each term is used once.'}
+      </p>
+      <ul aria-label="Terms" className="flex flex-wrap justify-center gap-2">
+        {terms.map((t, pos) => (
+          <li
+            key={pos}
+            className={`rounded-full border px-3 py-1 text-sm transition-opacity ${
+              !checked && used.has(pos) ? 'opacity-40' : ''
+            }`}
+          >
+            <span className="font-semibold">{LETTERS[pos]}.</span> {t}
+          </li>
+        ))}
+      </ul>
+      <ol aria-label="Clues" className="space-y-3">
+        {cards.map(({ card, index }, row) => {
+          const a = answers[index];
+          const right = a !== undefined && sameTerm(a.chosen, card.answer);
+          const id = `${idBase}-${row}`;
+          return (
+            <li
+              key={index}
+              className={`space-y-2 rounded-lg border p-3 ${
+                a === undefined ? '' : right ? 'border-green-500 bg-green-500/10' : 'border-red-500 bg-red-500/10'
+              }`}
+            >
+              {a === undefined ? (
+                <>
+                  <label htmlFor={id} className="block text-sm font-medium">
+                    {card.question}
+                  </label>
+                  <select
+                    id={id}
+                    value={picks[index] ?? ''}
+                    onChange={(e) => pick(index, e.target.value === '' ? null : Number(e.target.value))}
+                    className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">Choose a term…</option>
+                    {terms.map((t, pos) => (
+                      <option key={pos} value={pos}>
+                        {LETTERS[pos]}. {t}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-medium">{card.question}</p>
+                  <p className="text-sm">
+                    {right ? '✓ ' : '✗ '}
+                    {a.chosen}
+                    {!right && (
+                      <>
+                        {' '}· Answer: <span className="font-semibold">{card.answer}</span>
+                      </>
+                    )}
+                  </p>
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {!checked && (
+        <button type="button" onClick={check} disabled={!allPicked} className="btn btn-primary w-full">
+          Check answers
+        </button>
+      )}
+    </div>
   );
 }
 

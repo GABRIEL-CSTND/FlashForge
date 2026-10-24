@@ -13,10 +13,10 @@ export const STUDY_TYPE_LABELS: Record<StudyType, string> = {
   multiple_choice: 'Multiple choice',
 };
 
-// Ways to study a flashcard set (#66). Flip is the original way, marked by
-// the student ("Got it / Missed it"); typed answers are checked against the
-// real answer. Other study types have one way each.
-export const FLASHCARD_MODES = ['flip', 'type'] as const;
+// Ways to study a flashcard set (#66, #67). Flip is the original way, marked
+// by the student ("Got it / Missed it"); typed and matched answers are checked
+// against the real answers. Other study types have one way each.
+export const FLASHCARD_MODES = ['flip', 'type', 'match'] as const;
 export type FlashcardMode = (typeof FLASHCARD_MODES)[number];
 // What an attempt stores: null for the study type's normal way (flipping, for
 // flashcards), so attempts saved before modes existed need no change.
@@ -25,7 +25,25 @@ export type StudyMode = Exclude<FlashcardMode, 'flip'>;
 export const FLASHCARD_MODE_LABELS: Record<FlashcardMode, string> = {
   flip: 'Flip',
   type: 'Type',
+  match: 'Match',
 };
+
+// Matching (#67) is played in rounds of up to this many cards.
+export const MATCH_ROUND_SIZE = 5;
+
+// Splits a set into matching rounds as evenly as possible, so a 12-card set is
+// 4 + 4 + 4 rather than 5 + 5 + 2. Returns [start, end) card positions.
+export function matchRounds(cardCount: number): [number, number][] {
+  const roundCount = Math.ceil(cardCount / MATCH_ROUND_SIZE);
+  const rounds: [number, number][] = [];
+  let start = 0;
+  for (let r = 0; r < roundCount; r++) {
+    const size = Math.floor(cardCount / roundCount) + (r < cardCount % roundCount ? 1 : 0);
+    rounds.push([start, start + size]);
+    start += size;
+  }
+  return rounds;
+}
 
 export function isStudyMode(value: unknown): value is StudyMode {
   return value !== 'flip' && (FLASHCARD_MODES as readonly unknown[]).includes(value);

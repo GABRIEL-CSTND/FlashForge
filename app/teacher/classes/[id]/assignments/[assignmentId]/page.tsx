@@ -112,7 +112,7 @@ function QuestionsView({ id, assignmentId }: { id: string; assignmentId: string 
         Hardest questions first, from each student&apos;s latest attempt. {studentsDone} of {students(studentCount)}{' '}
         {studentsDone === 1 ? 'has' : 'have'} finished it.
         {flashcards &&
-          ' Flipped flashcards count as wrong unless the student marked “Got it”; typed answers are checked.'}
+          ' Flipped flashcards count as wrong unless the student marked “Got it”; typed and matched answers are checked.'}
       </p>
 
       {studentsDone === 0 ? (

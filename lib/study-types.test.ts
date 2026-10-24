@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isStudyType, parseQuestionCount, QUESTION_COUNTS } from '@/lib/study-types';
+import { isStudyType, matchRounds, parseQuestionCount, QUESTION_COUNTS } from '@/lib/study-types';
 
 describe('parseQuestionCount (#65)', () => {
   it('accepts every count the upload page offers', () => {
@@ -28,5 +28,26 @@ describe('isStudyType', () => {
     expect(isStudyType('multiple_choice')).toBe(true);
     expect(isStudyType('essay')).toBe(false);
     expect(isStudyType(null)).toBe(false);
+  });
+});
+
+describe('matchRounds (#67)', () => {
+  it('splits a set into rounds of up to 5, as evenly as possible', () => {
+    expect(matchRounds(12)).toEqual([[0, 4], [4, 8], [8, 12]]);
+    expect(matchRounds(11)).toEqual([[0, 4], [4, 8], [8, 11]]);
+    expect(matchRounds(6)).toEqual([[0, 3], [3, 6]]);
+    expect(matchRounds(5)).toEqual([[0, 5]]);
+    expect(matchRounds(21).map(([a, b]) => b - a)).toEqual([5, 4, 4, 4, 4]);
+    expect(matchRounds(1)).toEqual([[0, 1]]);
+    expect(matchRounds(0)).toEqual([]);
+  });
+
+  it('never leaves a round of 1 or 2 when there are 3 or more cards', () => {
+    for (let n = 3; n <= 50; n++) {
+      const sizes = matchRounds(n).map(([a, b]) => b - a);
+      expect(Math.min(...sizes)).toBeGreaterThanOrEqual(3);
+      expect(Math.max(...sizes)).toBeLessThanOrEqual(5);
+      expect(sizes.reduce((x, y) => x + y)).toBe(n);
+    }
   });
 });

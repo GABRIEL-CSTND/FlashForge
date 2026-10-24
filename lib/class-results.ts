@@ -102,8 +102,8 @@ export async function getClassResults(
 
 export interface StudentAssignmentResults extends ClassAssignment {
   result: ResultSummary;
-  // Newest first. mode: how a flashcard set was studied (#66), null for the
-  // normal way (self-marked flashcards).
+  // Newest first. mode: how a flashcard set was studied (#66, #67), null for
+  // the normal way (self-marked flashcards).
   attempts: { id: string; mode: StudyMode | null; score: number; total: number; completedAt: string; late: boolean }[];
 }
 

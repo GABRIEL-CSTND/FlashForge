@@ -6,8 +6,8 @@ import { errorResponse, notFound, readJsonBody } from '@/lib/route-helpers';
 
 // Record a finished study session (#57):
 //   { id, setId, assignmentId?, mode?, answers: [{ cardId, chosen? | result? | typed? }] }
-// mode is how a flashcard set was studied: absent or null for flipping, or
-// "type" (#66).
+// mode is how a flashcard set was studied: absent or null for flipping,
+// "type" (#66) or "match" (#67).
 // `id` is chosen by the browser once per finish, so a retry can't create a
 // second attempt. The score is worked out on the server from the real cards.
 export async function POST(req: NextRequest) {

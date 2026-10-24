@@ -24,10 +24,11 @@ interface AssignmentAttempts {
   attempts: { id: string; mode: StudyMode | null; score: number; total: number; completedAt: string; late: boolean }[];
 }
 
-// How a flashcard attempt was made (#66): marked by the student, or checked.
+// How a flashcard attempt was made (#66, #67): marked by the student, or checked.
 const FLASHCARD_MODE_TAGS: Record<StudyMode | 'flip', string> = {
   flip: 'Self-marked',
   type: 'Typed',
+  match: 'Matched',
 };
 
 type LoadState =

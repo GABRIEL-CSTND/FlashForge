@@ -13,7 +13,8 @@ export type FlashcardMark = 'got' | 'missed';
 
 export interface AnswerInput {
   cardId: string;
-  // Multiple choice: the option picked (null if skipped).
+  // Multiple choice: the option picked (null if skipped). Matching (#67): the
+  // term picked for this card's clue.
   chosen?: string | null;
   // Flashcards: the student's own mark (null if not marked).
   result?: FlashcardMark | null;
@@ -60,6 +61,11 @@ export function parseAnswers(raw: unknown, studyType: StudyType, mode: StudyMode
         return { ok: false, error: 'A typed answer is too long.' };
       }
       answers.push({ cardId, typed: typeof typed === 'string' && typed.trim() ? typed.trim() : null });
+    } else if (mode === 'match') {
+      if (chosen != null && (typeof chosen !== 'string' || chosen.length > CARD_LIMITS.answer)) {
+        return { ok: false, error: 'An answer has an invalid term.' };
+      }
+      answers.push({ cardId, chosen: (chosen as string | null | undefined) ?? null });
     } else if (studyType === 'multiple_choice') {
       if (chosen != null && (typeof chosen !== 'string' || chosen.length > 500)) {
         return { ok: false, error: 'An answer has an invalid choice.' };
@@ -90,10 +96,11 @@ export function scoreAnswers(
   for (const a of answers) {
     const card = byId.get(a.cardId);
     if (!card) continue;
+    // Matching picks another card's term, so it's compared like a multiple-choice pick.
     const correct =
       mode === 'type'
         ? checkTypedAnswer(a.typed, card.answer) !== 'wrong'
-        : studyType === 'multiple_choice'
+        : mode === 'match' || studyType === 'multiple_choice'
           ? a.chosen != null && normalizeChoice(a.chosen) === normalizeChoice(card.answer)
           : a.result === 'got';
     stored.push({ ...a, correct });

@@ -150,3 +150,35 @@ describe('typed answers (#66)', () => {
     expect(scoreAnswers([{ cardId: id(3), typed: null }], cards, 'flashcard', 'type')).toMatchObject({ score: 0, total: 1 });
   });
 });
+
+describe('matched answers (#67)', () => {
+  const cards = [
+    { id: id(1), answer: 'Stroma' },
+    { id: id(2), answer: 'RuBisCO' },
+  ];
+
+  it('accepts the term picked for each clue', () => {
+    expect(parseAnswers([{ cardId: id(1), chosen: 'RuBisCO', typed: 'x' }, { cardId: id(2) }], 'flashcard', 'match')).toEqual({
+      ok: true,
+      answers: [
+        { cardId: id(1), chosen: 'RuBisCO' },
+        { cardId: id(2), chosen: null },
+      ],
+    });
+    expect(parseAnswers([{ cardId: id(1), chosen: 7 }], 'flashcard', 'match').ok).toBe(false);
+  });
+
+  it('scores a pick when it reads the same as the card\'s own answer', () => {
+    const result = scoreAnswers(
+      [
+        { cardId: id(1), chosen: 'RuBisCO' },
+        { cardId: id(2), chosen: 'rubisco' },
+      ],
+      cards,
+      'flashcard',
+      'match'
+    );
+    expect(result).toMatchObject({ score: 1, total: 2 });
+    expect(result.stored.map((a) => a.correct)).toEqual([false, true]);
+  });
+});

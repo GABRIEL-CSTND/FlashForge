@@ -11,7 +11,7 @@ import { apiFetch, errorMessage } from '@/lib/api-client';
 import AssignPanel from '@/components/AssignPanel';
 import { useProfile } from '@/components/ProfileProvider';
 import { canUseTeacherTools } from '@/lib/role-types';
-import type { StudyMode, StudyType } from '@/lib/study-types';
+import type { FlashcardMode, StudyMode, StudyType } from '@/lib/study-types';
 
 interface FlashcardSet {
   id: string;
@@ -30,6 +30,12 @@ interface AttemptSummary {
   total: number;
   completedAt: string;
 }
+
+const FLASHCARD_SCORE_WORDS: Record<FlashcardMode, string> = {
+  flip: 'got it',
+  type: 'typed',
+  match: 'matched',
+};
 
 type SaveState =
   | { status: 'idle' }
@@ -294,9 +300,10 @@ export default function SetPage() {
     </div>
   ) : null;
 
-  // Flashcard scores say how they were made: marked by the student, or typed (#66).
+  // Flashcard scores say how they were made: marked by the student, typed (#66)
+  // or matched (#67).
   const scoreLabel = (a: AttemptSummary) =>
-    `${a.score} / ${a.total}${a.studyType !== 'flashcard' ? '' : a.mode === 'type' ? ' typed' : ' got it'}`;
+    `${a.score} / ${a.total}${a.studyType !== 'flashcard' ? '' : ` ${FLASHCARD_SCORE_WORDS[a.mode ?? 'flip']}`}`;
 
   const completionSlot =
     saveState.status === 'idle' ? null : (

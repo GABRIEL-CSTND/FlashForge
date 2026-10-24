@@ -110,6 +110,12 @@ begin
   begin insert into public.attempts (id, user_id, set_id, study_type, mode, score, total) values (gen_random_uuid(), c, sc, 'flashcard', 'guess', 1, 1); code := 'inserted';
   exception when others then code := sqlstate; end;
   insert into results values (20, 'unknown study mode', '23514', code);
+  begin insert into public.attempts (id, user_id, set_id, study_type, mode, score, total) values (gen_random_uuid(), c, sc, 'flashcard', 'match', 4, 5); code := 'inserted';
+  exception when others then code := sqlstate; end;
+  insert into results values (21, 'matched attempt on a flashcard set (#67)', 'inserted', code);
+  begin insert into public.attempts (id, user_id, set_id, study_type, mode, score, total) values (gen_random_uuid(), b, s, 'multiple_choice', 'match', 1, 1); code := 'inserted';
+  exception when others then code := sqlstate; end;
+  insert into results values (22, 'matched attempt on a multiple-choice set', '23514', code);
 
   delete from public.flashcard_sets where id = sc;
   select count(*) into v from public.attempts where id = c_own;
