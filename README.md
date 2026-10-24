@@ -173,10 +173,13 @@ commands and the log of applied migrations.
 ## How we work
 
 1. Plan work as issues on the [project board](https://github.com/users/GABRIEL-CSTND/projects/2).
-2. Branch from **`dev`**: `feature/<issue#>-short-name` or `fix/short-name`.
+2. Branch from **`dev`**, the default branch: `feature/<issue#>-short-name` or `fix/short-name`.
 3. Merge finished work into `dev` (directly or through a pull request into `dev`).
-4. Open a pull request from `dev` to `main` to release. Merging into `main` deploys to
-   the live site, and `Closes #N` lines in the commits close those issues.
+   `Closes #N` lines in the commits close those issues once they reach `dev`, and
+   GitHub's Insights count the commits on `dev`.
+4. Open a pull request from `dev` to `main` to release (pick `main` as the base; new
+   pull requests start out aimed at `dev`). Merging into `main` deploys to the live site:
+   Vercel's production branch is `main`, and every other branch gets a preview.
 
 The repository ruleset requires pull requests and one approving review. Repository
 admins can bypass it with the **"Merge without waiting for requirements"** checkbox.
