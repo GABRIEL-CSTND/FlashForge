@@ -38,6 +38,12 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **Word and PowerPoint files** (#71): the upload page takes `.docx` and `.pptx` (slides in
+  order, then speaker notes) besides PDF and TXT. Old `.doc` and `.ppt` files get a clear
+  "save it as .docx/.pptx or PDF first", and files over 4 MB are stopped before upload
+  with their size instead of failing on the hosting limit. Uses the small
+  [fflate](https://github.com/101arrowz/fflate) library (0.8.3) to unzip them, with limits
+  against zip bombs.
 - **Paste text** (#70): the upload page has an *Upload a file / Paste text* switch, so notes
   from Google Docs, a website or a chat can be used without making a file. Up to 30,000
   characters (what the AI reads from a file), with a counter and a clear message when the

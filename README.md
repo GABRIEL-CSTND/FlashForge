@@ -2,7 +2,7 @@
 
 Upload your notes and get an AI-generated study guide in seconds.
 
-FlashForge turns a PDF or TXT file, or notes pasted as text, into a study guide of 5 to 30 questions (10 by
+FlashForge turns a PDF, Word, PowerPoint or TXT file, or notes pasted as text, into a study guide of 5 to 30 questions (10 by
 default): **identification-style flashcards** (a clue on the front, a 1–4 word term on
 the back), **multiple-choice questions**, **true-or-false statements** with the
 correction shown after each false one, or a **mixed quiz** set out like a school exam
@@ -23,7 +23,7 @@ Live site: https://flash-forge-one.vercel.app
 | Web app | [Next.js 16](https://nextjs.org) (App Router), React 19, Tailwind CSS 4, TypeScript |
 | AI | Google Gemini API: `gemini-3.5-flash`, then `gemini-3.5-flash-lite`, then `gemma-4-26b-a4b-it` as backups |
 | Database and sign-in | [Supabase](https://supabase.com) (Postgres with Row Level Security, Google OAuth) |
-| PDF text extraction | [unpdf](https://github.com/unjs/unpdf) |
+| Text extraction | [unpdf](https://github.com/unjs/unpdf) for PDFs; [fflate](https://github.com/101arrowz/fflate) to unzip Word and PowerPoint files |
 | Hosting | Vercel (`main` deploys to production; other branches get preview deployments) |
 | Tests | [Vitest](https://vitest.dev) and React Testing Library (`npm test`), plus SQL security checks in `supabase/tests/` |
 
@@ -132,7 +132,8 @@ lib/
   generation-limits.ts  Daily limits per role: rules and message (shared)
   card-rules.ts         Card rules shared by the editor and the server (validateCards)
   study-types.ts        Study types, their labels, ways to study flashcards, question count rules (shared)
-  sources.ts            Where notes come from (file or pasted text) and their limits (shared)
+  sources.ts            Where notes come from (file or pasted text), accepted file types and limits (shared)
+  office-text.ts        Text from Word (.docx) and PowerPoint (.pptx) files, with zip-bomb limits (server-only)
   answer-check.ts       Checking typed answers (capitals, accents, one typo), shared by the study screen and server
   sets.ts               Study sets scoped to their owner; saving edited cards (server-only)
   ids.ts                isUuid() and newId(), shared by server and client

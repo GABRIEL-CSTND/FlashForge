@@ -1,7 +1,8 @@
 import { after, NextRequest, NextResponse } from 'next/server';
 import { generateStudyItems, GeminiError } from '@/lib/gemini';
 import { isStudyType, parseQuestionCount } from '@/lib/study-types';
-import { MIN_SOURCE_CHARS, pastedTextProblem, titleFromText } from '@/lib/sources';
+import { fileKind, fileProblem, MIN_SOURCE_CHARS, pastedTextProblem, titleFromText } from '@/lib/sources';
+import { docxText, pptxText } from '@/lib/office-text';
 import {
   identifyCaller,
   recordGeneration,
@@ -16,16 +17,22 @@ export const runtime = 'nodejs';
 export const maxDuration = 90;
 
 async function extractText(file: File): Promise<string> {
-  const buffer = Buffer.from(await file.arrayBuffer());
-
-  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-    const { extractText: extractPdfText, getDocumentProxy } = await import('unpdf');
-    const pdf = await getDocumentProxy(new Uint8Array(buffer));
-    const { text } = await extractPdfText(pdf, { mergePages: true });
-    return text;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  switch (fileKind(file.name, file.type)) {
+    case 'pdf': {
+      const { extractText: extractPdfText, getDocumentProxy } = await import('unpdf');
+      const pdf = await getDocumentProxy(bytes);
+      const { text } = await extractPdfText(pdf, { mergePages: true });
+      return text;
+    }
+    // Word and PowerPoint (#71).
+    case 'docx':
+      return docxText(bytes);
+    case 'pptx':
+      return pptxText(bytes);
+    default:
+      return Buffer.from(bytes).toString('utf-8');
   }
-
-  return buffer.toString('utf-8');
 }
 
 // Pure generation endpoint: nothing is saved until the user explicitly saves
@@ -97,13 +104,18 @@ export async function POST(req: NextRequest) {
       if (!file) {
         return done(NextResponse.json({ error: 'Missing file' }, { status: 400 }), { success: false, errorKind: 'no_file' });
       }
+      // The upload page checks this too; this covers anything else that calls the API.
+      const problem = fileProblem(file.name, file.type, file.size);
+      if (problem) {
+        return done(NextResponse.json({ error: problem }, { status: 422 }), { success: false, errorKind: 'unreadable' });
+      }
       try {
         text = await extractText(file);
       } catch (err) {
         console.error('[generate] text extraction failed:', err);
         return done(
           NextResponse.json(
-            { error: "We couldn't read this file. Please try a different PDF or TXT file." },
+            { error: "We couldn't read this file. Please try a different file, or paste the text." },
             { status: 422 }
           ),
           { success: false, errorKind: 'unreadable' }

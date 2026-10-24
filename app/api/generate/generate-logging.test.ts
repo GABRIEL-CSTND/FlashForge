@@ -228,3 +228,36 @@ describe('/api/generate with pasted notes (#70)', () => {
     expect(logged().map((r) => r.error_kind)).toEqual(['unreadable']);
   });
 });
+
+describe('/api/generate with Word and PowerPoint files (#71)', () => {
+  const upload = (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('studyType', 'flashcard');
+    return POST(new NextRequest('http://localhost/api/generate', { method: 'POST', body: form, headers: asSam }));
+  };
+  const docx = async () => {
+    const { strToU8, zipSync } = await import('fflate');
+    const xml = '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>The stroma holds the Calvin cycle and RuBisCO.</w:t></w:r></w:p></w:body></w:document>';
+    return new File([zipSync({ 'word/document.xml': strToU8(xml) }) as BlobPart], 'Bio handout.docx');
+  };
+
+  it('reads the text of a Word file and titles the guide after it', async () => {
+    const res = await upload(await docx());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ title: 'Bio handout', sourceFilename: 'Bio handout.docx' });
+    expect(vi.mocked(generateStudyItems).mock.calls[0][0]).toBe('The stroma holds the Calvin cycle and RuBisCO.');
+  });
+
+  it.each([
+    ['an old .ppt file', new File(['x'], 'lecture.ppt'), "Older PowerPoint (.ppt) files can't be read. Save it as .pptx or PDF first."],
+    ['a broken .docx', new File(['not a zip at all'], 'broken.docx'), "We couldn't read this file. Please try a different file, or paste the text."],
+  ])('refuses %s without calling the AI', async (_label, file, error) => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await upload(file);
+    errorLog.mockRestore();
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error });
+    expect(generateStudyItems).not.toHaveBeenCalled();
+  });
+});

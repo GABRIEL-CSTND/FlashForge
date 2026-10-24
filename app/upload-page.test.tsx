@@ -73,6 +73,24 @@ describe('upload page options', () => {
     expect(screen.getByText(/Part I multiple choice, Part II true or false, Part III identification/)).toBeTruthy();
   });
 
+  it('takes Word and PowerPoint files, and explains the ones it cannot take (#71)', () => {
+    render(<UploadPage />);
+    const input = document.getElementById('file-input') as HTMLInputElement;
+    expect(input.accept).toBe('.pdf,.docx,.pptx,.txt');
+    expect(screen.getByText('or click to browse (PDF, Word, PowerPoint or TXT)')).toBeTruthy();
+    const choose = (file: File) => fireEvent.change(input, { target: { files: [file] } });
+
+    choose(new File(['x'], 'lecture.ppt'));
+    expect(screen.getByText("Older PowerPoint (.ppt) files can't be read. Save it as .pptx or PDF first.")).toBeTruthy();
+    choose(new File([new Uint8Array(5 * 1024 * 1024)], 'scan.pdf', { type: 'application/pdf' }));
+    expect(screen.getByText(/This file is 5.0 MB/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Generate Study Guide' }) as HTMLButtonElement).disabled).toBe(true);
+
+    choose(new File(['x'], 'Lecture 3.pptx'));
+    expect(screen.getByText('Lecture 3.pptx')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Generate Study Guide' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('sends pasted notes instead of a file (#70)', async () => {
     render(<UploadPage />);
     expect(pressed('Where are your notes?')).toEqual(['Upload a file']);

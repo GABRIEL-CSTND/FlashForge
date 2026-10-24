@@ -17,10 +17,16 @@ import {
   STUDY_TYPES,
   type StudyType,
 } from '@/lib/study-types';
-import { MAX_SOURCE_CHARS, pastedTextProblem, SOURCE_KINDS, SOURCE_LABELS, type SourceKind } from '@/lib/sources';
-
-const ACCEPTED_TYPES = ['application/pdf', 'text/plain'];
-const ACCEPTED_EXT = ['.pdf', '.txt'];
+import {
+  FILE_ACCEPT,
+  FILE_TYPES_TEXT,
+  fileProblem,
+  MAX_SOURCE_CHARS,
+  pastedTextProblem,
+  SOURCE_KINDS,
+  SOURCE_LABELS,
+  type SourceKind,
+} from '@/lib/sources';
 
 interface GeneratedResult {
   title: string;
@@ -69,9 +75,9 @@ export default function UploadPage() {
   }, []);
 
   const validateAndSetFile = (f: File) => {
-    const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
-    if (!ACCEPTED_TYPES.includes(f.type) && !ACCEPTED_EXT.includes(ext)) {
-      setErrorMsg('Only PDF and TXT files are supported right now.');
+    const problem = fileProblem(f.name, f.type, f.size);
+    if (problem) {
+      setErrorMsg(problem);
       setStatus('error');
       return;
     }
@@ -392,7 +398,7 @@ export default function UploadPage() {
           <input
             id="file-input"
             type="file"
-            accept=".pdf,.txt"
+            accept={FILE_ACCEPT}
             onChange={handleFileInput}
             className="hidden"
           />
@@ -402,7 +408,7 @@ export default function UploadPage() {
             ) : (
               <>
                 <p className="font-medium">Drag & drop a file here</p>
-                <p className="text-sm text-gray-500 mt-1">or click to browse (PDF or TXT)</p>
+                <p className="text-sm text-gray-500 mt-1">or click to browse ({FILE_TYPES_TEXT})</p>
               </>
             )}
           </label>
