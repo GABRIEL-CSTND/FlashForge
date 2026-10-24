@@ -18,6 +18,12 @@ vi.mock('@/lib/gemini', async (importOriginal) => {
   };
 });
 const pdf = vi.hoisted(() => ({ text: '' }));
+// The page a link "fetches" (#74); its real checks are in lib/web-page.test.ts.
+const web = vi.hoisted(() => ({ fetch: null as null | ((url: string) => Promise<unknown>) }));
+vi.mock('@/lib/web-page', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/web-page')>();
+  return { ...actual, fetchWebPage: vi.fn((url: string) => web.fetch!(url)) };
+});
 vi.mock('unpdf', () => ({
   getDocumentProxy: async () => ({}),
   extractText: async () => ({ text: pdf.text, totalPages: 1 }),
@@ -329,5 +335,56 @@ describe('/api/generate with scanned PDFs (#73)', () => {
     const [text, , opts] = vi.mocked(generateStudyItems).mock.calls[0];
     expect(text).toBe('x'.repeat(100));
     expect(opts?.attachment).toBeUndefined();
+  });
+});
+
+describe('/api/generate with a web link (#74)', () => {
+  const sendLink = (url: string) => {
+    const form = new FormData();
+    form.append('url', url);
+    form.append('studyType', 'flashcard');
+    return POST(new NextRequest('http://localhost/api/generate', { method: 'POST', body: form, headers: asSam }));
+  };
+
+  it('makes a guide from the page text, titled after the page', async () => {
+    web.fetch = async () => ({
+      title: 'Photosynthesis - Biology Online',
+      text: 'The stroma holds the Calvin cycle; chlorophyll absorbs light.',
+      url: 'https://example.org/photosynthesis',
+    });
+    const res = await sendLink('https://example.org/photosynthesis');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      title: 'Photosynthesis - Biology Online',
+      sourceFilename: 'https://example.org/photosynthesis',
+    });
+    expect(vi.mocked(generateStudyItems).mock.calls[0][0]).toBe('The stroma holds the Calvin cycle; chlorophyll absorbs light.');
+  });
+
+  it("passes on the fetcher's reason, without calling the AI", async () => {
+    const { WebPageError } = await import('@/lib/web-page');
+    web.fetch = async () => {
+      throw new WebPageError('private address 10.0.0.5', "This link points to a private address, so it can't be used.");
+    };
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await sendLink('http://intranet.example/');
+    errorLog.mockRestore();
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error: "This link points to a private address, so it can't be used." });
+    expect(generateStudyItems).not.toHaveBeenCalled();
+  });
+
+  it('checks the daily limit before fetching anything', async () => {
+    limit.refuse = true;
+    web.fetch = vi.fn();
+    expect((await sendLink('https://example.org/')).status).toBe(429);
+    expect(web.fetch).not.toHaveBeenCalled();
+  });
+
+  it('says so when a page has almost no text', async () => {
+    web.fetch = async () => ({ title: '', text: 'Sign in', url: 'https://example.org/private' });
+    const res = await sendLink('https://example.org/private');
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toMatch(/Pages that need signing in can't be read/);
   });
 });

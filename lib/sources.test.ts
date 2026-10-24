@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FILE_ACCEPT, fileKind, fileProblem, MAX_SOURCE_CHARS, pastedTextProblem, titleFromText } from '@/lib/sources';
+import { FILE_ACCEPT, fileKind, fileProblem, linkProblem, MAX_SOURCE_CHARS, pastedTextProblem, titleFromText } from '@/lib/sources';
 
 describe('pastedTextProblem (#70)', () => {
   it('accepts a few sentences up to the limit', () => {
@@ -62,5 +62,14 @@ describe('file types (#71)', () => {
       'This file is 5.5 MB. Files can be up to 4 MB; try a smaller file or paste the text instead.'
     );
     expect(fileProblem('ok.pdf', 'application/pdf', 4 * 1024 * 1024)).toBeNull();
+  });
+});
+
+describe('linkProblem (#74)', () => {
+  it('wants a full http or https link', () => {
+    expect(linkProblem(' https://example.org/notes ')).toBeNull();
+    expect(linkProblem('http://example.org')).toBeNull();
+    expect(linkProblem('example.org/notes')).toBe('Paste a full link, starting with https://');
+    expect(linkProblem('javascript:alert(1)')).toBe('Paste a full link, starting with https://');
   });
 });

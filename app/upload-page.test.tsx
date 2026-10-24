@@ -107,6 +107,22 @@ describe('upload page options', () => {
     shrink.to = null;
   });
 
+  it('sends a link to a web page (#74)', async () => {
+    render(<UploadPage />);
+    expect(buttonsIn('Where are your notes?')).toEqual(['Upload a file', 'Paste text', 'Web link']);
+    fireEvent.click(screen.getByRole('button', { name: 'Web link' }));
+    const box = screen.getByRole('textbox', { name: 'Link to a web page' });
+    fireEvent.change(box, { target: { value: 'example.org/notes' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    expect(screen.getByText('Paste a full link, starting with https://')).toBeTruthy();
+    expect(sentForms).toEqual([]);
+
+    fireEvent.change(box, { target: { value: ' https://example.org/notes ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
+    expect(sentForms).toEqual([{ url: 'https://example.org/notes', studyType: 'flashcard', count: '10' }]);
+  });
+
   it('sends pasted notes instead of a file (#70)', async () => {
     render(<UploadPage />);
     expect(pressed('Where are your notes?')).toEqual(['Upload a file']);

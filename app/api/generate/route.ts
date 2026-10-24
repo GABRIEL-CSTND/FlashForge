@@ -12,6 +12,7 @@ import {
   titleFromText,
 } from '@/lib/sources';
 import { docxText, pptxText } from '@/lib/office-text';
+import { fetchWebPage, WebPageError } from '@/lib/web-page';
 import {
   identifyCaller,
   recordGeneration,
@@ -72,6 +73,8 @@ export async function POST(req: NextRequest) {
     // CR LF; count it as one character, like the upload page does.
     const pastedRaw = formData.get('text');
     const pasted = typeof pastedRaw === 'string' ? pastedRaw.replace(/\r\n?/g, '\n') : null;
+    // A link to a web page (#74) also comes instead of a file.
+    const link = formData.get('url');
     const studyTypeRaw = formData.get('studyType');
     const studyType = isStudyType(studyTypeRaw) ? studyTypeRaw : 'flashcard';
     log.studyType = studyType;
@@ -111,6 +114,27 @@ export async function POST(req: NextRequest) {
       text = pasted;
       title = titleFromText(pasted);
       sourceFilename = null;
+    } else if (typeof link === 'string') {
+      // Fetched only after the daily limit check above, with the protections in lib/web-page.ts.
+      try {
+        const page = await fetchWebPage(link);
+        text = page.text;
+        title = page.title ? titleFromText(page.title) : new URL(page.url).hostname;
+        sourceFilename = page.url;
+      } catch (err) {
+        if (!(err instanceof WebPageError)) throw err;
+        console.error('[generate] web page failed:', err.message);
+        return done(NextResponse.json({ error: err.userMessage }, { status: 422 }), { success: false, errorKind: 'unreadable' });
+      }
+      if (text.trim().length < MIN_SOURCE_CHARS) {
+        return done(
+          NextResponse.json(
+            { error: "We couldn't find enough text on this page. Pages that need signing in can't be read; try pasting the text." },
+            { status: 422 }
+          ),
+          { success: false, errorKind: 'unreadable' }
+        );
+      }
     } else {
       if (!file) {
         return done(NextResponse.json({ error: 'Missing file' }, { status: 400 }), { success: false, errorKind: 'no_file' });

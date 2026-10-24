@@ -24,6 +24,7 @@ import {
   fileKind,
   fileProblem,
   isPhoto,
+  linkProblem,
   MAX_SOURCE_CHARS,
   pastedTextProblem,
   SOURCE_KINDS,
@@ -52,6 +53,7 @@ export default function UploadPage() {
   const [source, setSource] = useState<SourceKind>('file');
   const [file, setFile] = useState<File | null>(null);
   const [pasted, setPasted] = useState('');
+  const [link, setLink] = useState('');
   const [studyType, setStudyType] = useState<StudyType>('flashcard');
   const [count, setCount] = useState<number>(DEFAULT_QUESTION_COUNT);
   const [dragActive, setDragActive] = useState(false);
@@ -122,8 +124,8 @@ export default function UploadPage() {
 
   const handleSubmit = async () => {
     if (source === 'file' && !file) return;
-    // Pasted notes (#70) are checked here, before anything is sent.
-    const problem = source === 'text' ? pastedTextProblem(pasted) : null;
+    // Pasted notes (#70) and links (#74) are checked here, before anything is sent.
+    const problem = source === 'text' ? pastedTextProblem(pasted) : source === 'link' ? linkProblem(link) : null;
     if (problem) {
       setErrorMsg(problem);
       setStatus('error');
@@ -134,7 +136,8 @@ export default function UploadPage() {
 
     const formData = new FormData();
     if (source === 'file') formData.append('file', file!);
-    else formData.append('text', pasted);
+    else if (source === 'text') formData.append('text', pasted);
+    else formData.append('url', link.trim());
     formData.append('studyType', studyType);
     formData.append('count', String(count));
 
@@ -324,7 +327,7 @@ export default function UploadPage() {
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-semibold">FlashForge</h1>
           <p className="text-sm text-gray-500">
-            Upload a file or paste your notes, and get an AI-generated study guide.
+            Upload a file, paste your notes or a link, and get an AI-generated study guide.
           </p>
         </div>
 
@@ -371,7 +374,7 @@ export default function UploadPage() {
           </div>
         </div>
 
-        <div role="group" aria-label="Where are your notes?" className="grid grid-cols-2 gap-1 rounded-lg border p-1">
+        <div role="group" aria-label="Where are your notes?" className="grid grid-cols-3 gap-1 rounded-lg border p-1">
           {SOURCE_KINDS.map((kind) => (
             <button
               key={kind}
@@ -387,8 +390,25 @@ export default function UploadPage() {
           ))}
         </div>
 
-        {source === 'text' ? (
-          <div className="space-y-1">
+        {/* Keys: each kind of input is its own element, so React never turns the
+            file input into the link box. */}
+        {source === 'link' ? (
+          <div key="link" className="space-y-1">
+            <input
+              type="url"
+              aria-label="Link to a web page"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              placeholder="https://"
+              autoComplete="off"
+              className="w-full rounded-xl border bg-transparent p-3 text-sm"
+            />
+            <p className="text-xs text-gray-400">
+              Articles and other public pages work. Pages that need signing in can&apos;t be read.
+            </p>
+          </div>
+        ) : source === 'text' ? (
+          <div key="text" className="space-y-1">
             <textarea
               aria-label="Your notes"
               value={pasted}
@@ -405,6 +425,7 @@ export default function UploadPage() {
           </div>
         ) : (
         <div
+          key="file"
           onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
           onDragLeave={() => setDragActive(false)}
           onDrop={handleDrop}
@@ -438,7 +459,7 @@ export default function UploadPage() {
 
         <button
           onClick={handleSubmit}
-          disabled={(source === 'file' ? !file : !pasted.trim()) || status === 'generating'}
+          disabled={(source === 'file' ? !file : source === 'text' ? !pasted.trim() : !link.trim()) || status === 'generating'}
           className="btn btn-primary btn-lg w-full"
         >
           {status === 'generating' &&

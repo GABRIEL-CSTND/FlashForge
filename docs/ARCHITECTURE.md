@@ -160,6 +160,13 @@ screen instead of shortening with "…".
      finds little or nothing. A PDF with under 100 characters of text (not counting
      spaces, `SCANNED_PDF_TEXT_CHARS`) goes to the AI as an attachment the same way, and
      the AI reads the pages. PDFs with text keep using the cheaper text path.
+   - Or fetches a web page from the `url` field (#74), only after the daily limit check,
+     with `fetchWebPage()` in `lib/web-page.ts` (see "Web links" in the security model).
+     It keeps the page's `<article>` or `<main>` text when that has 500+ characters,
+     otherwise its whole `<body>`, without scripts, styles, menus, headers, footers,
+     sidebars and forms. The guide is titled after the page, and `sourceFilename` is the
+     page's address. Problems come back as 422 with a plain reason ("points to a private
+     address", "answered with an error (404)", "isn't a web page we can read", "too big").
    - Or takes pasted notes from the `text` field (#70), with line breaks counted as one
      character as on the page (forms send them as CR LF), and the same 20 to 30,000
      character rule (422 otherwise). The title is the text's first line if it's short,
@@ -634,6 +641,24 @@ The plan for teacher and admin features is tracked in #50.
 
 ## 4. Security model
 
+**Web links (#74)** make the server fetch an address a user typed, so
+`lib/web-page.ts` guards against server-side request forgery:
+- Only `http` and `https`, only ports 80 and 443, and no `user:password@`.
+- Every address the name resolves to must be public (not private, loopback,
+  link-local such as cloud metadata at `169.254.169.254`, carrier-grade NAT,
+  documentation, multicast or reserved; IPv4 written as IPv6 counts as IPv4). The check
+  runs in the connection's own DNS lookup, so the name can't switch to a private address
+  after being checked. IP addresses typed in the link (including tricks like `0x7f.1`)
+  are checked too.
+- Redirects (up to 3) go through the same checks.
+- At most 2 MB of page after unzipping (gzip, deflate or brotli), 10 seconds, and only
+  HTML or plain text.
+- The HTML is read with `indexOf` scans, not patterns like `/<[^>]*>/`: in a test,
+  that pattern took over 4 minutes on a page full of "<" with no ">".
+- It's tested against a local server (`lib/web-page.test.ts`) and was checked live on
+  2026-10-24: Wikipedia and example.com were read; the metadata address, `localhost`,
+  `[::1]` and `0x7f.1` were refused.
+
 **Two Supabase keys:**
 - The **anon key** is public and used in the browser. What it can do is limited entirely
   by Row Level Security.
@@ -733,7 +758,9 @@ transaction. Run them after every database change.
   their cards.
 - **Text extraction:** only the first 30,000 characters are used (#38), PDFs are
   uploaded to the server whole (#44), files are limited to 4 MB, and only PDF, Word,
-  PowerPoint and TXT files and JPG, PNG or WebP photos work so far (HEIC photos from a
+  PowerPoint and TXT files and JPG, PNG or WebP photos work so far, plus links to public
+  web pages; pages that need signing in, or that build their text with JavaScript, have
+  little text to read (HEIC photos from a
   computer aren't accepted; phones convert them when uploading); notes can also be
   pasted (#20, #70, #71, #72). Text
   boxes in Word files may come out on their own lines.

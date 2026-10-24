@@ -10,6 +10,11 @@ into `main`. There is only one Supabase database, so changes marked **(live)** a
 already applied there.
 
 ### Security
+- Web links (#74) are fetched with protections against server-side request forgery:
+  only http/https on ports 80 and 443, every resolved address must be public (checked
+  as the connection is made, and again after each redirect), and pages are capped at
+  2 MB and 10 seconds. The page text is read without patterns that a hostile page could
+  make slow.
 - Saving a generated guide now checks the study type and every card with the card
   editor's rules, so a set can't be saved in a shape the study screen can't show, and an
   unknown study type is refused by the database too (#68).
@@ -38,6 +43,9 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **Web links** (#74): paste a link to an article or other public page, and the server
+  fetches it and keeps its main text (no menus, ads or footers). Pages that need signing in
+  get a clear message. With this, all of more file types (#20) is done.
 - **Scanned PDFs** (#73): a PDF made of scanned pages has little or no text for the app to
   read, so it used to fail with "Could not extract enough readable text". Now such a PDF
   (under 100 characters of text) goes to the AI itself, which reads the pages, still in
@@ -171,7 +179,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 510 tests):
+- **Automated tests** (`npm test`, 586 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),
