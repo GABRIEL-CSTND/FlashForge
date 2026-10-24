@@ -121,7 +121,8 @@ export class GeminiError extends Error {
   }
 }
 
-// A photo (#72) the AI reads itself, instead of text taken out of a file.
+// A photo (#72) or scanned PDF (#73) the AI reads itself, instead of text
+// taken out of a file.
 export interface Attachment {
   mimeType: string;
   // Base64.
@@ -132,8 +133,9 @@ export interface Attachment {
 // gemini-3.5-flash (2026-10-24), against about 1.4-12s from text.
 const ATTACHMENT_EXTRA_MS = 15_000;
 
-const NOTHING_TO_READ =
-  "We couldn't find any notes to study in this file. Try a clearer, brighter photo, or paste the text.";
+const isPdf = (attachment: Attachment) => attachment.mimeType === 'application/pdf';
+const nothingToRead = (attachment: Attachment) =>
+  `We couldn't find any notes to study in this file. Try ${isPdf(attachment) ? 'a clearer scan' : 'a clearer, brighter photo'}, or paste the text.`;
 
 const TYPE_INSTRUCTIONS: Record<SingleType, string> = {
   flashcard: `Create identification-style flashcards.
@@ -389,7 +391,7 @@ async function callModel(
   body: string,
   timeoutMs: number,
   // For an attachment, an empty list means the AI found nothing to study.
-  emptyMeansUnreadable = false
+  attachment?: Attachment
 ): Promise<{ items: GeneratedItem[]; outputTokens?: number }> {
   let res: Response;
   try {
@@ -432,11 +434,11 @@ async function callModel(
     throw new GeminiError('response was not valid JSON', { retryable: true });
   }
   if (!Array.isArray(items) || items.length === 0) {
-    if (emptyMeansUnreadable && Array.isArray(items)) {
+    if (attachment && Array.isArray(items)) {
       throw new GeminiError('nothing to study in the attachment', {
         retryable: false,
         unreadable: true,
-        userMessage: NOTHING_TO_READ,
+        userMessage: nothingToRead(attachment),
       });
     }
     throw new GeminiError('response contained no study items', { retryable: true });
@@ -465,11 +467,14 @@ export async function generateStudyItems(
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new GeminiError('GEMINI_API_KEY is not set', { retryable: false });
 
+  const material = attachment && isPdf(attachment) ? 'document' : 'photo';
   const prompt = attachment
-    ? `You are creating a study guide from the attached photo (of notes, a whiteboard, or a page).
+    ? `You are creating a study guide from the attached ${
+        material === 'document' ? 'document (scanned pages)' : 'photo (of notes, a whiteboard, or a page)'
+      }.
 Produce exactly ${requestedCount(studyType, count)} items. ${instructionsFor(studyType, count)}
-Base everything strictly on what the photo shows. Avoid trivial or overly broad questions.
-If the photo has no readable study material, return an empty array [].`
+Base everything strictly on what the ${material} shows. Avoid trivial or overly broad questions.
+If the ${material} has no readable study material, return an empty array [].`
     : `You are creating a study guide from the text below.
 Produce exactly ${requestedCount(studyType, count)} items. ${instructionsFor(studyType, count)}
 Base everything strictly on the provided text. Avoid trivial or overly broad questions.
@@ -515,7 +520,7 @@ ${sourceText.slice(0, MAX_SOURCE_CHARS)}
           apiKey,
           bodies[family],
           Math.min(modelTimeoutMs, remaining),
-          attachment !== undefined
+          attachment
         );
         const items = finalItems(studyType, rawItems, count);
         if (items.length < minValid) {

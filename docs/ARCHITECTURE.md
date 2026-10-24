@@ -156,6 +156,10 @@ screen instead of shortening with "…".
      (`lib/shrink-image.ts`: longest side 1,600 pixels, JPEG at 85%; small photos are
      sent as they are), so a 3–8 MB phone photo fits under the 4 MB limit. Browsers turn
      the photo the right way up when decoding it.
+   - Scanned PDFs (#73) are pictures of pages with no text in them, so text extraction
+     finds little or nothing. A PDF with under 100 characters of text (not counting
+     spaces, `SCANNED_PDF_TEXT_CHARS`) goes to the AI as an attachment the same way, and
+     the AI reads the pages. PDFs with text keep using the cheaper text path.
    - Or takes pasted notes from the `text` field (#70), with line breaks counted as one
      character as on the page (forms send them as CR LF), and the same 20 to 30,000
      character rule (422 otherwise). The title is the text's first line if it's short,
@@ -225,13 +229,16 @@ screen instead of shortening with "…".
   as a failed attempt. In a test on sample history notes (2026-10-24), 10 questions came
   back as 4 + 3 + 3, all well formed (the main model was busy, so the lite backup wrote
   it, in 12.5 seconds with the retries).
-- *Photos* (#72): the prompt says the material is the attached photo and asks for an
-  empty list if it has no readable study material. An empty list from a photo is answered
+- *Photos* (#72) and *scanned PDFs* (#73): the prompt says the material is the attached
+  photo or document (scanned pages) and asks for an empty list if it has no readable
+  study material. An empty list from a photo is answered
   straight away with 422 *"We couldn't find any notes to study in this file. Try a
-  clearer, brighter photo, or paste the text."* (`GeminiError.unreadable`), with no
-  retries. Each attempt gets 15 seconds more: a 5-question guide from a photo took 19.5
+  clearer, brighter photo, or paste the text."* (*"a clearer scan"* for a PDF;
+  `GeminiError.unreadable`), with no retries. Each attempt gets 15 seconds more: a 5-question guide from a photo took 19.5
   seconds on `gemini-3.5-flash` in a test (2026-10-24). In the same test the Gemma backup
-  read the photo too, so photos use the whole model chain. The upload page waits 15
+  read the photo too, so photos use the whole model chain. A one-page scanned PDF of the
+  same notes (no text in it) gave 5 good flashcards in 3.9 seconds, and Gemma read it
+  too. The upload page waits 15
   seconds longer before showing the "slower backup" notice and says *"Reading your
   photo…"*.
 - **Spares:** items that fail validation are dropped, so the prompt asks for 10% more

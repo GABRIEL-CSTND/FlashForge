@@ -46,6 +46,10 @@ export function isPhoto(kind: FileKind | null): kind is 'jpeg' | 'png' | 'webp' 
   return kind === 'jpeg' || kind === 'png' || kind === 'webp';
 }
 
+// A PDF with less text than this (not counting spaces) is taken to be scanned
+// pages (#73), so the PDF itself goes to the AI, which reads the pictures.
+export const SCANNED_PDF_TEXT_CHARS = 100;
+
 // Vercel refuses requests over about 4.5 MB, so bigger files are stopped
 // before upload with a clear message (#44 tracks large PDFs).
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;

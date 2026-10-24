@@ -17,6 +17,11 @@ vi.mock('@/lib/gemini', async (importOriginal) => {
     ),
   };
 });
+const pdf = vi.hoisted(() => ({ text: '' }));
+vi.mock('unpdf', () => ({
+  getDocumentProxy: async () => ({}),
+  extractText: async () => ({ text: pdf.text, totalPages: 1 }),
+}));
 const fake = vi.hoisted(() => ({ current: null as null | ReturnType<typeof import('@/test-utils/fake-supabase').createFakeSupabase> }));
 vi.mock('@/lib/supabase-admin', () => ({
   supabaseAdmin: {
@@ -296,5 +301,33 @@ describe('/api/generate with photos (#72)', () => {
     expect((await res.json()).error).toMatch(/Try a clearer, brighter photo/);
     await runAfter();
     expect(logged().map((r) => [r.error_kind, r.requests])).toEqual([['unreadable', { 'gemini-3.5-flash': 1 }]]);
+  });
+});
+
+describe('/api/generate with scanned PDFs (#73)', () => {
+  const upload = () => {
+    const form = new FormData();
+    form.append('file', new File(['%PDF-1.4 scanned pages'], 'Chapter 2.pdf', { type: 'application/pdf' }));
+    form.append('studyType', 'flashcard');
+    return POST(new NextRequest('http://localhost/api/generate', { method: 'POST', body: form, headers: asSam }));
+  };
+
+  it('sends a PDF with (almost) no text in it to the AI as it is', async () => {
+    pdf.text = ' 1 \n 2 ';
+    expect((await upload()).status).toBe(200);
+    const [text, , opts] = vi.mocked(generateStudyItems).mock.calls[0];
+    expect(text).toBe('');
+    expect(opts?.attachment).toEqual({
+      mimeType: 'application/pdf',
+      data: Buffer.from('%PDF-1.4 scanned pages').toString('base64'),
+    });
+  });
+
+  it('keeps reading the text of a PDF that has 100 characters or more', async () => {
+    pdf.text = 'x'.repeat(100);
+    expect((await upload()).status).toBe(200);
+    const [text, , opts] = vi.mocked(generateStudyItems).mock.calls[0];
+    expect(text).toBe('x'.repeat(100));
+    expect(opts?.attachment).toBeUndefined();
   });
 });

@@ -212,3 +212,22 @@ describe('photos (#72)', () => {
     expect(sent).toHaveLength(1);
   });
 });
+
+describe('scanned PDFs (#73)', () => {
+  const scan = { mimeType: 'application/pdf', data: 'JVBERi0=' };
+
+  it('tells the AI the attachment is scanned pages', async () => {
+    mockModel(() => reply(flashcards(6)));
+    await generateStudyItems('', 'flashcard', { count: 5, attachment: scan });
+    expect(sent[0].prompt).toContain('from the attached document (scanned pages)');
+    expect(sent[0].prompt).toContain('If the document has no readable study material');
+  });
+
+  it('suggests a clearer scan when it finds nothing to study', async () => {
+    mockModel(() => reply([]));
+    await expect(generateStudyItems('', 'flashcard', { attachment: scan })).rejects.toMatchObject({
+      unreadable: true,
+      userMessage: "We couldn't find any notes to study in this file. Try a clearer scan, or paste the text.",
+    });
+  });
+});

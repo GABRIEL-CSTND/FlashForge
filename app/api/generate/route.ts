@@ -1,7 +1,16 @@
 import { after, NextRequest, NextResponse } from 'next/server';
 import { generateStudyItems, GeminiError, type Attachment } from '@/lib/gemini';
 import { isStudyType, parseQuestionCount } from '@/lib/study-types';
-import { FILE_TYPES, fileKind, fileProblem, isPhoto, MIN_SOURCE_CHARS, pastedTextProblem, titleFromText } from '@/lib/sources';
+import {
+  FILE_TYPES,
+  fileKind,
+  fileProblem,
+  isPhoto,
+  MIN_SOURCE_CHARS,
+  pastedTextProblem,
+  SCANNED_PDF_TEXT_CHARS,
+  titleFromText,
+} from '@/lib/sources';
 import { docxText, pptxText } from '@/lib/office-text';
 import {
   identifyCaller,
@@ -118,6 +127,12 @@ export async function POST(req: NextRequest) {
           text = '';
         } else {
           text = await extractText(file);
+          // A scanned PDF (#73) is pictures of pages with little or no text in
+          // it, so the AI reads the PDF itself.
+          if (kind === 'pdf' && text.replace(/\s+/g, '').length < SCANNED_PDF_TEXT_CHARS) {
+            attachment = { mimeType: FILE_TYPES.pdf.mime, data: Buffer.from(await file.arrayBuffer()).toString('base64') };
+            text = '';
+          }
         }
       } catch (err) {
         console.error('[generate] text extraction failed:', err);

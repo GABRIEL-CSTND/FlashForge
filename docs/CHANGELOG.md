@@ -38,6 +38,10 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **Scanned PDFs** (#73): a PDF made of scanned pages has little or no text for the app to
+  read, so it used to fail with "Could not extract enough readable text". Now such a PDF
+  (under 100 characters of text) goes to the AI itself, which reads the pages, still in
+  one request. PDFs with text are read as before.
 - **Photos of notes** (#72): upload a JPG, PNG or WebP photo of notes, a whiteboard or a
   textbook page. The AI reads the photo itself, still in one request. Big phone photos are
   shrunk in the browser first (to 1,600 pixels), and a photo with nothing readable gets a
