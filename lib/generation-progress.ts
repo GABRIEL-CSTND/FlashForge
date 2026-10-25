@@ -62,19 +62,21 @@ export function stepStatus(current: ProgressStepId, step: ProgressStepId): StepS
   return at < now ? 'done' : at === now ? 'current' : 'pending';
 }
 
+// What the first two steps say for each kind of source. Every kind must be listed, so a
+// new one can't end up with a file's words by mistake.
+const SOURCE_STEP_LABELS: Record<SourceKind, { sending: string; reading: string }> = {
+  file: { sending: 'Uploading your file', reading: 'Reading your file' },
+  text: { sending: 'Sending your notes', reading: 'Checking your notes' },
+  link: { sending: 'Sending your link', reading: 'Fetching the web page' },
+  // The server looks the topic up on Wikipedia during its reading step (#79).
+  topic: { sending: 'Sending your topic', reading: 'Looking it up on Wikipedia' },
+};
+
 // What each step says, for the kind of source being used.
 export function progressLabels(source: SourceKind, photo: boolean): Record<ProgressStepId, string> {
-  const sending =
-    source === 'text' ? 'Sending your notes' : source === 'link' ? 'Sending your link' : photo ? 'Uploading your photo' : 'Uploading your file';
-  const reading =
-    source === 'text'
-      ? 'Checking your notes'
-      : source === 'link'
-        ? 'Fetching the web page'
-        : photo
-          ? 'Preparing your photo'
-          : 'Reading your file';
-  return { sending, reading, writing: 'Writing your study guide with AI' };
+  const labels =
+    source === 'file' && photo ? { sending: 'Uploading your photo', reading: 'Preparing your photo' } : SOURCE_STEP_LABELS[source];
+  return { ...labels, writing: 'Writing your study guide with AI' };
 }
 
 // The note under the "writing" step once the AI has needed more than one try.

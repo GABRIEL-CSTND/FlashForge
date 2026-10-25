@@ -1,9 +1,11 @@
 import { CARD_LIMITS, normalizeChoice, toTrueFalse, TRUE_FALSE_OPTIONS } from '@/lib/card-rules';
 import { MAX_SOURCE_CHARS } from '@/lib/sources';
 import {
+  DEFAULT_DIFFICULTY,
   DEFAULT_QUESTION_COUNT,
   MIXED_PARTS,
   mixedSplit,
+  type Difficulty,
   type MixedPartKind,
   type StudyType,
 } from '@/lib/study-types';
@@ -193,6 +195,14 @@ Part III: exactly ${ask.identification} items with "type": "identification".
 - "question": a clue or definition that points to exactly one term; "answer": that term, 1 to 4 words, never a sentence. No "options".
 List Part I first, then Part II, then Part III. Every item is about a different fact.`;
 }
+
+// How hard the questions are (#79). Medium adds nothing: it's how guides were
+// always made.
+const DIFFICULTY_INSTRUCTIONS: Record<Difficulty, string> = {
+  easy: 'Difficulty: easy. Ask about the most important terms and main ideas, with clear, direct clues. Any wrong choices should be clearly different from the right answer.',
+  medium: '',
+  hard: 'Difficulty: hard. Ask about specific details, less obvious facts and how ideas connect, not only definitions. Any wrong choices should be close and believable, and false statements should change a subtle detail.',
+};
 
 const instructionsFor = (studyType: StudyType, count: number) =>
   studyType === 'mixed' ? mixedInstructions(count) : TYPE_INSTRUCTIONS[studyType];
@@ -463,6 +473,8 @@ export async function generateStudyItems(
     count = DEFAULT_QUESTION_COUNT,
     onRequest,
     attachment,
+    difficulty = DEFAULT_DIFFICULTY,
+    focus,
   }: {
     // How many items the guide should have (#65); callers check the range.
     count?: number;
@@ -471,21 +483,30 @@ export async function generateStudyItems(
     onRequest?: (model: string) => void;
     // A photo to read instead of `sourceText` (#72).
     attachment?: Attachment;
+    // How hard the questions are, and what to focus on, e.g. a typed topic (#79).
+    difficulty?: Difficulty;
+    focus?: string;
   } = {}
 ): Promise<{ items: GeneratedItem[]; model: string }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new GeminiError('GEMINI_API_KEY is not set', { retryable: false });
 
   const material = attachment && isPdf(attachment) ? 'document' : 'photo';
+  // Difficulty and focus lines (#79); none for a medium guide with no focus.
+  const focusText = focus?.replace(/["“”\s]+/g, ' ').trim().slice(0, 100);
+  const extra = [DIFFICULTY_INSTRUCTIONS[difficulty], focusText ? `Focus on what the text says about “${focusText}”.` : '']
+    .filter(Boolean)
+    .map((line) => `\n${line}`)
+    .join('');
   const prompt = attachment
     ? `You are creating a study guide from the attached ${
         material === 'document' ? 'document (scanned pages)' : 'photo (of notes, a whiteboard, or a page)'
       }.
-Produce exactly ${requestedCount(studyType, count)} items. ${instructionsFor(studyType, count)}
+Produce exactly ${requestedCount(studyType, count)} items. ${instructionsFor(studyType, count)}${extra}
 Base everything strictly on what the ${material} shows. Avoid trivial or overly broad questions.
 If the ${material} has no readable study material, return an empty array [].`
     : `You are creating a study guide from the text below.
-Produce exactly ${requestedCount(studyType, count)} items. ${instructionsFor(studyType, count)}
+Produce exactly ${requestedCount(studyType, count)} items. ${instructionsFor(studyType, count)}${extra}
 Base everything strictly on the provided text. Avoid trivial or overly broad questions.
 
 TEXT:

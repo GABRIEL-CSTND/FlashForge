@@ -12,11 +12,16 @@ import { generateErrorText } from '@/lib/generation-limits';
 import GenerationProgress from '@/components/GenerationProgress';
 import { nextProgress, PROGRESS_MIME, readGeneration, START_PROGRESS, type ProgressState } from '@/lib/generation-progress';
 import {
+  DEFAULT_DIFFICULTY,
   DEFAULT_QUESTION_COUNT,
+  DIFFICULTIES,
+  DIFFICULTY_HINTS,
+  DIFFICULTY_LABELS,
   QUESTION_COUNTS,
   STUDY_TYPE_HINTS,
   STUDY_TYPE_LABELS,
   STUDY_TYPES,
+  type Difficulty,
   type StudyType,
 } from '@/lib/study-types';
 import { shrinkImage } from '@/lib/shrink-image';
@@ -28,9 +33,11 @@ import {
   isPhoto,
   linkProblem,
   MAX_SOURCE_CHARS,
+  MAX_TOPIC_CHARS,
   pastedTextProblem,
   SOURCE_KINDS,
   SOURCE_LABELS,
+  topicProblem,
   type SourceKind,
 } from '@/lib/sources';
 
@@ -38,6 +45,8 @@ interface GeneratedResult {
   title: string;
   // Null for pasted notes (#70).
   sourceFilename: string | null;
+  // Credit for a web page or a topic's Wikipedia article (#79).
+  source?: { name: string; url: string } | null;
   studyType: StudyType;
   items: StudyItem[];
 }
@@ -56,6 +65,8 @@ export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [pasted, setPasted] = useState('');
   const [link, setLink] = useState('');
+  const [topic, setTopic] = useState('');
+  const [difficulty, setDifficulty] = useState<Difficulty>(DEFAULT_DIFFICULTY);
   const [studyType, setStudyType] = useState<StudyType>('flashcard');
   const [count, setCount] = useState<number>(DEFAULT_QUESTION_COUNT);
   const [dragActive, setDragActive] = useState(false);
@@ -128,7 +139,14 @@ export default function UploadPage() {
   const handleSubmit = async () => {
     if (source === 'file' && !file) return;
     // Pasted notes (#70) and links (#74) are checked here, before anything is sent.
-    const problem = source === 'text' ? pastedTextProblem(pasted) : source === 'link' ? linkProblem(link) : null;
+    const problem =
+      source === 'text'
+        ? pastedTextProblem(pasted)
+        : source === 'link'
+          ? linkProblem(link)
+          : source === 'topic'
+            ? topicProblem(topic)
+            : null;
     if (problem) {
       setErrorMsg(problem);
       setStatus('error');
@@ -141,9 +159,11 @@ export default function UploadPage() {
     const formData = new FormData();
     if (source === 'file') formData.append('file', file!);
     else if (source === 'text') formData.append('text', pasted);
-    else formData.append('url', link.trim());
+    else if (source === 'link') formData.append('url', link.trim());
+    else formData.append('topic', topic.trim());
     formData.append('studyType', studyType);
     formData.append('count', String(count));
+    formData.append('difficulty', difficulty);
 
     // Past this point the main AI is probably out of quota and the slower
     // backup model is answering, so tell the user it can take up to a minute.
@@ -250,6 +270,14 @@ export default function UploadPage() {
   if (result) {
     const saveSlot = (
       <div className="text-center space-y-2">
+        {result.source && (
+          <p className="text-xs text-gray-500">
+            From{' '}
+            <a href={result.source.url} target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
+              {result.source.name}
+            </a>
+          </p>
+        )}
         {saveStatus === 'saved' ? (
           <p className="text-sm text-green-600 font-medium">Saved ✓</p>
         ) : saveStatus === 'needs-auth' ? (
@@ -333,7 +361,7 @@ export default function UploadPage() {
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-semibold">FlashForge</h1>
           <p className="text-sm text-gray-500">
-            Upload a file, paste your notes or a link, and get an AI-generated study guide.
+            Upload a file, paste your notes or a link, or type a topic, and get an AI-generated study guide.
           </p>
         </div>
 
@@ -380,7 +408,33 @@ export default function UploadPage() {
           </div>
         </div>
 
-        <div role="group" aria-label="Where are your notes?" className="grid grid-cols-3 gap-1 rounded-lg border p-1">
+        <div className="space-y-2">
+          <p id="difficulty-label" className="text-sm font-medium text-center">
+            How hard?
+          </p>
+          <div role="group" aria-labelledby="difficulty-label" className="grid grid-cols-3 gap-2">
+            {DIFFICULTIES.map((level) => (
+              <button
+                key={level}
+                type="button"
+                onClick={() => setDifficulty(level)}
+                aria-pressed={difficulty === level}
+                className={`py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  difficulty === level ? 'border-accent bg-accent/10 text-link' : 'border-border text-gray-500'
+                }`}
+              >
+                {DIFFICULTY_LABELS[level]}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500 text-center">{DIFFICULTY_HINTS[difficulty]}</p>
+        </div>
+
+        <div
+          role="group"
+          aria-label="Where are your notes?"
+          className="grid grid-cols-2 gap-1 rounded-lg border p-1 sm:grid-cols-4"
+        >
           {SOURCE_KINDS.map((kind) => (
             <button
               key={kind}
@@ -398,7 +452,22 @@ export default function UploadPage() {
 
         {/* Keys: each kind of input is its own element, so React never turns the
             file input into the link box. */}
-        {source === 'link' ? (
+        {source === 'topic' ? (
+          <div key="topic" className="space-y-1">
+            <input
+              aria-label="Topic"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder="e.g. Photosynthesis or the OSI model"
+              maxLength={MAX_TOPIC_CHARS}
+              autoComplete="off"
+              className="w-full rounded-xl border bg-transparent p-3 text-sm"
+            />
+            <p className="text-xs text-gray-400">
+              We look the topic up on Wikipedia and make the questions from that article.
+            </p>
+          </div>
+        ) : source === 'link' ? (
           <div key="link" className="space-y-1">
             <input
               type="url"
@@ -465,7 +534,15 @@ export default function UploadPage() {
 
         <button
           onClick={handleSubmit}
-          disabled={(source === 'file' ? !file : source === 'text' ? !pasted.trim() : !link.trim()) || status === 'generating'}
+          disabled={
+            (source === 'file'
+              ? !file
+              : source === 'text'
+                ? !pasted.trim()
+                : source === 'link'
+                  ? !link.trim()
+                  : !topic.trim()) || status === 'generating'
+          }
           className="btn btn-primary btn-lg w-full"
         >
           {status === 'generating' &&

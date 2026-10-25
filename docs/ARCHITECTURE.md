@@ -160,6 +160,17 @@ screen instead of shortening with "…".
      finds little or nothing. A PDF with under 100 characters of text (not counting
      spaces, `SCANNED_PDF_TEXT_CHARS`) goes to the AI as an attachment the same way, and
      the AI reads the pages. PDFs with text keep using the cheaper text path.
+   - Or looks a typed topic up from the `topic` field (#79), only after the daily limit
+     check, with `findTopic()` in `lib/topic.ts`: a Wikipedia search for the top 3
+     matches, skipping disambiguation pages ("Mercury" finds *Mercury (planet)*), then
+     that article's plain text without its lists at the end (*See also*, *References*...).
+     The guide is titled after the article and credits it ("From Wikipedia: ...", also
+     for web links), and the AI is told to focus on the typed words. A topic of 2 to 100
+     characters is required; no match, only disambiguation pages, a very short article or
+     Wikipedia being unreachable come back as 422 with a plain reason, without using the
+     AI. Live lookups took about 1–1.5 seconds.
+   - Reads the difficulty from the `difficulty` field (#79): `easy`, `medium` or
+     `hard`, anything else is medium (`parseDifficulty()` in `lib/study-types.ts`).
    - Or fetches a web page from the `url` field (#74), only after the daily limit check,
      with `fetchWebPage()` in `lib/web-page.ts` (see "Web links" in the security model).
      It keeps the page's `<article>` or `<main>` text when that has 500+ characters,
@@ -187,7 +198,9 @@ screen instead of shortening with "…".
      falls back to plain JSON, so an older server still works.
 3. **Show it**: while it waits, the upload page shows the steps (`GenerationProgress`):
    uploading, reading, writing, with what's done, what's under way, and a seconds counter.
-   When the server reports a retry or the backup model, that is explained under the
+   The first two are worded for the source (`progressLabels()`): a link's reading step is
+   *Fetching the web page*, a topic's is *Looking it up on Wikipedia* (#79), since the
+   server looks the topic up during that step. When the server reports a retry or the backup model, that is explained under the
    writing step. The page's own timer (15 seconds, plus one per question over 10) only
    explains a possible slower backup when the server hasn't already said so.
    Then the page swaps to `StudyViewer` on the **same URL** (`/`), so
@@ -264,6 +277,14 @@ screen instead of shortening with "…".
   too. The upload page waits 15
   seconds longer before showing the "slower backup" notice and says *"Reading your
   photo…"*.
+- **Difficulty** (#79): *easy* asks about the main terms and ideas with clear clues and
+  clearly different wrong choices; *hard* asks about specific details and how ideas
+  connect, with close wrong choices and subtle false statements; *medium* adds nothing,
+  so it's the same prompt as before. In a test on the *OSI model* article, easy asked
+  how many layers there are; hard asked which part of ISO/IEC 7498 covers security, with
+  the other parts as wrong choices.
+- **Focus** (#79): a typed topic is added as "Focus on what the text says about ...",
+  with quotes and line breaks taken out first.
 - **Spares:** items that fail validation are dropped, so the prompt asks for 10% more
   flashcards or true-or-false statements, or 20% more multiple-choice questions, than the
   user chose (11 or 12 for 10),
@@ -800,6 +821,9 @@ transaction. Run them after every database change.
   boxes in Word files may come out on their own lines.
 - **3 existing ESLint errors** (`react-hooks/set-state-in-effect`) in `app/page.tsx` and
   `app/my-sets/page.tsx`.
+- **Topics come from English Wikipedia only**, from the best search match (#79). A topic
+  with no article, or a very narrow one, needs notes instead. The difficulty isn't saved
+  with the set.
 - **Read aloud uses the device's default voice** (#77), so Filipino text may be read with an
   English accent. Choosing a voice and speed is listed in #77 for later.
 - **Flipped flashcard scores are self-reported** (*Got it* / *Missed it*). Typed (#66) and

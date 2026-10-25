@@ -283,3 +283,21 @@ describe('short answers', () => {
     expect(sent[0].prompt).toContain('Every choice is 1 to 4 words');
   });
 });
+
+describe('difficulty and focus (#79)', () => {
+  it('asks for easy or hard questions, and nothing extra for medium', async () => {
+    mockModel(() => reply(flashcards(11)));
+    await generateStudyItems('Notes.', 'flashcard', { difficulty: 'hard' });
+    await generateStudyItems('Notes.', 'flashcard', { difficulty: 'easy' });
+    await generateStudyItems('Notes.', 'flashcard', { difficulty: 'medium' });
+    expect(sent[0].prompt).toContain('Difficulty: hard. Ask about specific details');
+    expect(sent[1].prompt).toContain('Difficulty: easy. Ask about the most important terms');
+    expect(sent[2].prompt).not.toContain('Difficulty:');
+  });
+
+  it('focuses on a typed topic, without letting it break out of its quotes', async () => {
+    mockModel(() => reply(flashcards(11)));
+    await generateStudyItems('Article text.', 'flashcard', { focus: 'the "Calvin\ncycle"' });
+    expect(sent[0].prompt).toContain('Focus on what the text says about “the Calvin cycle”.');
+  });
+});

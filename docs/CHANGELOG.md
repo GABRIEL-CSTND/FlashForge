@@ -43,6 +43,12 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **Topics and difficulty** (#79): with no notes, students can type a topic ("photosynthesis",
+  "the OSI model"); the app looks it up on Wikipedia, makes the guide from the best
+  article (skipping "may refer to" pages) and credits it with a link. While it works,
+  the progress steps say it's looking the topic up on Wikipedia. Every guide can
+  also be **Easy**, **Medium** or **Hard**, for any kind of guide and any source. Still
+  one AI request per guide.
 - **Read aloud** (#77): a **🔊 Read aloud** button on the study screen reads the card that's
   showing (question and choices, the answer once flipped or answered, the clues in
   matching), and **Auto** reads each card as it appears. Uses the browser's built-in voice,
@@ -192,7 +198,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 629 tests):
+- **Automated tests** (`npm test`, 644 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),

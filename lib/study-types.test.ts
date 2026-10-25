@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isStudyType, matchRounds, mixedSplit, parseQuestionCount, QUESTION_COUNTS } from '@/lib/study-types';
+import { isStudyType, matchRounds, mixedSplit, parseDifficulty, parseQuestionCount, QUESTION_COUNTS } from '@/lib/study-types';
 
 describe('parseQuestionCount (#65)', () => {
   it('accepts every count the upload page offers', () => {
@@ -62,5 +62,12 @@ describe('mixedSplit (#69)', () => {
       expect(split.multiple_choice + split.true_false + split.identification).toBe(n);
       expect(Math.min(...Object.values(split))).toBeGreaterThanOrEqual(1);
     }
+  });
+});
+
+describe('parseDifficulty (#79)', () => {
+  it('takes easy, medium or hard, and medium otherwise', () => {
+    expect(['easy', 'medium', 'hard'].map(parseDifficulty)).toEqual(['easy', 'medium', 'hard']);
+    expect([null, '', 'HARD', 'extreme', 3].map(parseDifficulty)).toEqual(['medium', 'medium', 'medium', 'medium', 'medium']);
   });
 });

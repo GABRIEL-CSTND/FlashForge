@@ -108,9 +108,42 @@ describe('upload page options', () => {
     shrink.to = null;
   });
 
+  it('makes a guide from a typed topic at the chosen difficulty, and credits the article (#79)', async () => {
+    render(<UploadPage />);
+    expect(pressed('How hard?')).toEqual(['Medium']);
+    fireEvent.click(screen.getByRole('button', { name: 'Hard' }));
+    expect(screen.getByText('Specific details and how ideas connect, with tricky choices.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Topic' }));
+    const box = screen.getByRole('textbox', { name: 'Topic' });
+    fireEvent.change(box, { target: { value: 'x' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    expect(screen.getByText('Type a topic, like “Photosynthesis”.')).toBeTruthy();
+    expect(sentForms).toEqual([]);
+
+    vi.mocked(fetch).mockImplementationOnce(async (_url, init) => {
+      sentForms.push(Object.fromEntries([...(init!.body as FormData).entries()].map(([k, v]) => [k, String(v)])));
+      return new Response(
+        JSON.stringify({
+          title: 'Photosynthesis',
+          sourceFilename: 'https://en.wikipedia.org/wiki/Photosynthesis',
+          source: { name: 'Wikipedia: Photosynthesis', url: 'https://en.wikipedia.org/wiki/Photosynthesis' },
+          studyType: 'flashcard',
+          items: [{ question: 'Pigment that absorbs light', answer: 'Chlorophyll' }],
+        }),
+        { status: 200 }
+      );
+    });
+    fireEvent.change(box, { target: { value: ' photosynthesis ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    expect(await screen.findByText('Pigment that absorbs light')).toBeTruthy();
+    expect(sentForms).toEqual([{ topic: 'photosynthesis', studyType: 'flashcard', count: '10', difficulty: 'hard' }]);
+    const credit = screen.getByRole('link', { name: 'Wikipedia: Photosynthesis' });
+    expect(credit.getAttribute('href')).toBe('https://en.wikipedia.org/wiki/Photosynthesis');
+  });
+
   it('sends a link to a web page (#74)', async () => {
     render(<UploadPage />);
-    expect(buttonsIn('Where are your notes?')).toEqual(['Upload a file', 'Paste text', 'Web link']);
+    expect(buttonsIn('Where are your notes?')).toEqual(['Upload a file', 'Paste text', 'Web link', 'Topic']);
     fireEvent.click(screen.getByRole('button', { name: 'Web link' }));
     const box = screen.getByRole('textbox', { name: 'Link to a web page' });
     fireEvent.change(box, { target: { value: 'example.org/notes' } });
@@ -121,7 +154,7 @@ describe('upload page options', () => {
     fireEvent.change(box, { target: { value: ' https://example.org/notes ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
     expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
-    expect(sentForms).toEqual([{ url: 'https://example.org/notes', studyType: 'flashcard', count: '10' }]);
+    expect(sentForms).toEqual([{ url: 'https://example.org/notes', studyType: 'flashcard', count: '10', difficulty: 'medium' }]);
   });
 
   it('sends pasted notes instead of a file (#70)', async () => {
@@ -147,7 +180,7 @@ describe('upload page options', () => {
     fireEvent.click(generate);
     expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
     expect(sentForms).toEqual([
-      { text: 'The stroma is the fluid inside the chloroplast.', studyType: 'flashcard', count: '10' },
+      { text: 'The stroma is the fluid inside the chloroplast.', studyType: 'flashcard', count: '10', difficulty: 'medium' },
     ]);
   });
 
@@ -159,7 +192,7 @@ describe('upload page options', () => {
     chooseFile();
     fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
     expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
-    expect(sentForms).toEqual([{ file: 'file:notes.txt', studyType: 'multiple_choice', count: '20' }]);
+    expect(sentForms).toEqual([{ file: 'file:notes.txt', studyType: 'multiple_choice', count: '20', difficulty: 'medium' }]);
   });
 });
 

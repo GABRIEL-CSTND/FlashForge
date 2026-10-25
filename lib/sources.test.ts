@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { FILE_ACCEPT, fileKind, fileProblem, linkProblem, MAX_SOURCE_CHARS, pastedTextProblem, titleFromText } from '@/lib/sources';
+import {
+  FILE_ACCEPT,
+  fileKind,
+  fileProblem,
+  linkProblem,
+  MAX_SOURCE_CHARS,
+  pastedTextProblem,
+  titleFromText,
+  topicProblem,
+} from '@/lib/sources';
 
 describe('pastedTextProblem (#70)', () => {
   it('accepts a few sentences up to the limit', () => {
@@ -71,5 +80,14 @@ describe('linkProblem (#74)', () => {
     expect(linkProblem('http://example.org')).toBeNull();
     expect(linkProblem('example.org/notes')).toBe('Paste a full link, starting with https://');
     expect(linkProblem('javascript:alert(1)')).toBe('Paste a full link, starting with https://');
+  });
+});
+
+describe('topicProblem (#79)', () => {
+  it('wants a few words, up to 100 characters', () => {
+    expect(topicProblem(' Photosynthesis ')).toBeNull();
+    expect(topicProblem('AI')).toBeNull();
+    expect(topicProblem(' x ')).toBe('Type a topic, like “Photosynthesis”.');
+    expect(topicProblem('x'.repeat(101))).toBe('Keep the topic under 100 characters.');
   });
 });

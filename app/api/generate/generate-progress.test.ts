@@ -89,7 +89,15 @@ describe('/api/generate progress', () => {
       { type: 'step', step: 'writing' },
     ]);
     expect(outcome.status).toBe(200);
-    expect(outcome.body).toEqual({ title: 'notes', sourceFilename: 'notes.txt', studyType: 'flashcard', items: ITEMS, model: FIRST });
+    expect(outcome.body).toEqual({
+      title: 'notes',
+      sourceFilename: 'notes.txt',
+      // Credit for a web page or Wikipedia article (#79); files have none.
+      source: null,
+      studyType: 'flashcard',
+      items: ITEMS,
+      model: FIRST,
+    });
   });
 
   it('says when the AI is trying again, and when a backup has taken over', async () => {

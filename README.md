@@ -2,14 +2,14 @@
 
 Upload your notes and get an AI-generated study guide in seconds.
 
-FlashForge turns a PDF (scanned ones too), Word, PowerPoint or TXT file, a photo of your notes, notes pasted as text, or a link to a web page into a study guide of 5 to 30 questions (10 by
+FlashForge turns a PDF (scanned ones too), Word, PowerPoint or TXT file, a photo of your notes, notes pasted as text, a link to a web page, or just a **topic** (looked up on Wikipedia) into a study guide of 5 to 30 questions (10 by
 default): **identification-style flashcards** (a clue on the front, a 1–4 word term on
 the back), **multiple-choice questions**, **true-or-false statements** with the
 correction shown after each false one, or a **mixed quiz** set out like a school exam
 (Part I multiple choice, Part II true or false, Part III identification). Quizzes give
 instant feedback and a score at the end. Flashcards can be studied by flipping them (and marking *Got it* or *Missed it*),
 by **typing the answer**, which the app checks and forgives one small typo, or by
-**matching** clues to terms in rounds of up to 5. Any card can be **read aloud**, one at a time
+**matching** clues to terms in rounds of up to 5. Every guide can be **easy, medium or hard**. Any card can be **read aloud**, one at a time
 or automatically, with the browser's built-in voice. Sign in
 with Google to save study guides, then rename, revisit, or delete them from **My Sets**.
 Signed in, every finished study session is saved with its score. Teachers can create classes, assign sets, and see each student's scores and
@@ -138,6 +138,7 @@ lib/
   shrink-image.ts       Shrinks photos to 1,600 pixels before upload (browser-only)
   speech.ts             Reading cards aloud with the browser's built-in speech, and the Auto setting (browser-only)
   web-page.ts           Fetches a linked web page safely (no private addresses) and keeps its main text (server-only)
+  topic.ts              Looks a typed topic up on Wikipedia and returns the best article's text (server-only)
   answer-check.ts       Checking typed answers (capitals, accents, one typo), shared by the study screen and server
   sets.ts               Study sets scoped to their owner; saving edited cards (server-only)
   ids.ts                isUuid() and newId(), shared by server and client

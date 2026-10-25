@@ -18,6 +18,12 @@ vi.mock('@/lib/gemini', async (importOriginal) => {
   };
 });
 const pdf = vi.hoisted(() => ({ text: '' }));
+// The article a topic "finds" (#79); its real lookup is checked in lib/topic.test.ts.
+const wiki = vi.hoisted(() => ({ find: null as null | ((topic: string) => Promise<unknown>) }));
+vi.mock('@/lib/topic', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/topic')>();
+  return { ...actual, findTopic: vi.fn((topic: string) => wiki.find!(topic)) };
+});
 // The page a link "fetches" (#74); its real checks are in lib/web-page.test.ts.
 const web = vi.hoisted(() => ({ fetch: null as null | ((url: string) => Promise<unknown>) }));
 vi.mock('@/lib/web-page', async (importOriginal) => {
@@ -386,5 +392,58 @@ describe('/api/generate with a web link (#74)', () => {
     const res = await sendLink('https://example.org/private');
     expect(res.status).toBe(422);
     expect((await res.json()).error).toMatch(/Pages that need signing in can't be read/);
+  });
+});
+
+describe('/api/generate with a topic and a difficulty (#79)', () => {
+  const sendTopic = (topic: string, difficulty?: string) => {
+    const form = new FormData();
+    form.append('topic', topic);
+    form.append('studyType', 'multiple_choice');
+    if (difficulty !== undefined) form.append('difficulty', difficulty);
+    return POST(new NextRequest('http://localhost/api/generate', { method: 'POST', body: form, headers: asSam }));
+  };
+
+  it('makes a guide from the Wikipedia article, focused on the topic, and credits it', async () => {
+    wiki.find = async () => ({
+      title: 'Photosynthesis',
+      text: 'Photosynthesis turns light into chemical energy in the chloroplast.',
+      url: 'https://en.wikipedia.org/wiki/Photosynthesis',
+    });
+    const res = await sendTopic(' photosynthesis ', 'hard');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      title: 'Photosynthesis',
+      sourceFilename: 'https://en.wikipedia.org/wiki/Photosynthesis',
+      source: { name: 'Wikipedia: Photosynthesis', url: 'https://en.wikipedia.org/wiki/Photosynthesis' },
+    });
+    const [text, , opts] = vi.mocked(generateStudyItems).mock.calls[0];
+    expect(text).toBe('Photosynthesis turns light into chemical energy in the chloroplast.');
+    expect(opts).toMatchObject({ difficulty: 'hard', focus: 'photosynthesis' });
+  });
+
+  it("passes on the lookup's reason, without calling the AI", async () => {
+    const { TopicError } = await import('@/lib/topic');
+    wiki.find = async () => {
+      throw new TopicError('no results', 'We couldn’t find “zzz” on Wikipedia.');
+    };
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await sendTopic('zzz');
+    errorLog.mockRestore();
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error: 'We couldn’t find “zzz” on Wikipedia.' });
+    expect(generateStudyItems).not.toHaveBeenCalled();
+  });
+
+  it('checks the topic itself before looking anything up', async () => {
+    wiki.find = vi.fn();
+    const res = await sendTopic('x');
+    expect(res.status).toBe(422);
+    expect(wiki.find).not.toHaveBeenCalled();
+  });
+
+  it.each([[undefined], ['impossible']])('uses medium for a difficulty of %j', async (difficulty) => {
+    expect((await generate(LONG_TEXT, asSam, difficulty === undefined ? {} : { difficulty })).status).toBe(200);
+    expect(vi.mocked(generateStudyItems).mock.calls[0][2]).toMatchObject({ difficulty: 'medium', focus: undefined });
   });
 });

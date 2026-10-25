@@ -77,6 +77,11 @@ describe('steps', () => {
     expect(progressLabels('file', true).sending).toBe('Uploading your photo');
     expect(progressLabels('text', false).reading).toBe('Checking your notes');
     expect(progressLabels('link', false).reading).toBe('Fetching the web page');
+    expect(progressLabels('topic', false)).toEqual({
+      sending: 'Sending your topic',
+      reading: 'Looking it up on Wikipedia',
+      writing: 'Writing your study guide with AI',
+    });
   });
 
   it('only explains a retry after the first try', () => {

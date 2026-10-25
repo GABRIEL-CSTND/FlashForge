@@ -83,6 +83,29 @@ export function isStudyMode(value: unknown): value is StudyMode {
   return value !== 'flip' && (FLASHCARD_MODES as readonly unknown[]).includes(value);
 }
 
+// How hard the questions are (#79), for every kind of guide and source.
+// Medium adds nothing to the prompt: it's how guides were always made.
+export const DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
+export type Difficulty = (typeof DIFFICULTIES)[number];
+export const DEFAULT_DIFFICULTY: Difficulty = 'medium';
+
+export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
+  easy: 'Easy',
+  medium: 'Medium',
+  hard: 'Hard',
+};
+
+export const DIFFICULTY_HINTS: Record<Difficulty, string> = {
+  easy: 'The main terms and ideas, with clear clues.',
+  medium: 'A mix of main ideas and details.',
+  hard: 'Specific details and how ideas connect, with tricky choices.',
+};
+
+// Anything else falls back to medium.
+export function parseDifficulty(value: unknown): Difficulty {
+  return (DIFFICULTIES as readonly unknown[]).includes(value) ? (value as Difficulty) : DEFAULT_DIFFICULTY;
+}
+
 // How many questions to generate (#65). The upload page offers these; the API
 // accepts any whole number from MIN to MAX.
 export const QUESTION_COUNTS = [5, 10, 15, 20, 30] as const;

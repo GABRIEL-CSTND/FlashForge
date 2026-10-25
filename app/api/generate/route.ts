@@ -1,6 +1,6 @@
 import { after, NextRequest, NextResponse } from 'next/server';
 import { generateStudyItems, GeminiError, type Attachment } from '@/lib/gemini';
-import { isStudyType, parseQuestionCount } from '@/lib/study-types';
+import { isStudyType, parseDifficulty, parseQuestionCount } from '@/lib/study-types';
 import {
   FILE_TYPES,
   fileKind,
@@ -10,9 +10,11 @@ import {
   pastedTextProblem,
   SCANNED_PDF_TEXT_CHARS,
   titleFromText,
+  topicProblem,
 } from '@/lib/sources';
 import { docxText, pptxText } from '@/lib/office-text';
 import { fetchWebPage, WebPageError } from '@/lib/web-page';
+import { findTopic, TopicError } from '@/lib/topic';
 import {
   identifyCaller,
   recordGeneration,
@@ -84,13 +86,16 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
     // CR LF; count it as one character, like the upload page does.
     const pastedRaw = formData.get('text');
     const pasted = typeof pastedRaw === 'string' ? pastedRaw.replace(/\r\n?/g, '\n') : null;
-    // A link to a web page (#74) also comes instead of a file.
+    // A link to a web page (#74) or a topic to look up (#79) also come instead of a file.
     const link = formData.get('url');
+    const topic = formData.get('topic');
     const studyTypeRaw = formData.get('studyType');
     const studyType = isStudyType(studyTypeRaw) ? studyTypeRaw : 'flashcard';
     log.studyType = studyType;
     // How many questions (#65): 5 to 30, otherwise the default 10.
     const count = parseQuestionCount(formData.get('count'));
+    // Easy, medium or hard (#79); anything else is medium.
+    const difficulty = parseDifficulty(formData.get('difficulty'));
 
     // Daily limit per role (#63), checked before any AI request.
     state.caller = await identifyCaller(req);
@@ -118,6 +123,10 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
     let sourceFilename: string | null;
     // Photos (#72) go to the AI as they are, with no text taken out first.
     let attachment: Attachment | undefined;
+    // Where a link's page or a topic's article came from, to credit it (#79).
+    let source: { name: string; url: string } | null = null;
+    // A typed topic: what the guide should focus on in its article.
+    let focus: string | undefined;
     if (pasted !== null) {
       const problem = pastedTextProblem(pasted);
       if (problem) {
@@ -133,6 +142,7 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
         text = page.text;
         title = page.title ? titleFromText(page.title) : new URL(page.url).hostname;
         sourceFilename = page.url;
+        source = { name: title, url: page.url };
       } catch (err) {
         if (!(err instanceof WebPageError)) throw err;
         console.error('[generate] web page failed:', err.message);
@@ -146,6 +156,24 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
           ),
           { success: false, errorKind: 'unreadable' }
         );
+      }
+    } else if (typeof topic === 'string') {
+      // Looked up on Wikipedia (lib/topic.ts), only after the daily limit check above.
+      const problem = topicProblem(topic);
+      if (problem) {
+        return done(NextResponse.json({ error: problem }, { status: 422 }), { success: false, errorKind: 'unreadable' });
+      }
+      try {
+        const article = await findTopic(topic.trim());
+        text = article.text;
+        title = article.title;
+        sourceFilename = article.url;
+        source = { name: `Wikipedia: ${article.title}`, url: article.url };
+        focus = topic.trim();
+      } catch (err) {
+        if (!(err instanceof TopicError)) throw err;
+        console.error('[generate] topic lookup failed:', err.message);
+        return done(NextResponse.json({ error: err.userMessage }, { status: 422 }), { success: false, errorKind: 'unreadable' });
       }
     } else {
       if (!file) {
@@ -197,6 +225,8 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
     const { items, model } = await generateStudyItems(text, studyType, {
       count,
       attachment,
+      difficulty,
+      focus,
       onRequest: (m) => {
         log.requests[m] = (log.requests[m] ?? 0) + 1;
         attempts += 1;
@@ -209,6 +239,8 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
       NextResponse.json({
         title,
         sourceFilename,
+        // Credit for a web page or Wikipedia article; null for files and pasted notes.
+        source,
         studyType,
         items,
         // Which model produced this guide (Gemini, or the Gemma backup).

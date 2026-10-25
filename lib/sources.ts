@@ -1,15 +1,27 @@
 // Where a study guide's material comes from (#20): an uploaded file (PDF,
-// Word, PowerPoint, TXT #71, or a photo #72), pasted text (#70) or a link to
-// a web page (#74). Shared by the upload page and /api/generate.
+// Word, PowerPoint, TXT #71, or a photo #72), pasted text (#70), a link to a
+// web page (#74) or a topic to look up (#79). Shared by the upload page and
+// /api/generate.
 
-export const SOURCE_KINDS = ['file', 'text', 'link'] as const;
+export const SOURCE_KINDS = ['file', 'text', 'link', 'topic'] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 
 export const SOURCE_LABELS: Record<SourceKind, string> = {
   file: 'Upload a file',
   text: 'Paste text',
   link: 'Web link',
+  topic: 'Topic',
 };
+
+// A topic (#79) is a few words, like "Photosynthesis".
+export const MAX_TOPIC_CHARS = 100;
+
+export function topicProblem(input: string): string | null {
+  const topic = input.trim();
+  if (topic.length < 2) return 'Type a topic, like “Photosynthesis”.';
+  if (topic.length > MAX_TOPIC_CHARS) return `Keep the topic under ${MAX_TOPIC_CHARS} characters.`;
+  return null;
+}
 
 // What's wrong with a typed link, before it's sent; null if it looks usable.
 // The server checks much more (lib/web-page.ts).
