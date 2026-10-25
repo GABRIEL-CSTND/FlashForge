@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { checkTypedAnswer, type TypedVerdict } from '@/lib/answer-check';
+import { speak, stopSpeaking, useAutoRead, useCanSpeak } from '@/lib/speech';
 import { CARD_LIMITS, cardKind, isTrueFalseOptions, normalizeChoice, type CardKind } from '@/lib/card-rules';
 import {
   FLASHCARD_MODE_LABELS,
@@ -114,6 +115,36 @@ function ModeSwitcher({ mode, onChange }: { mode: FlashcardMode; onChange: (mode
   );
 }
 
+// Ends the text with a full stop unless it already ends a sentence, so the
+// voice pauses between the parts it reads.
+const asSentence = (text: string) => (/[.?!…]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`);
+
+// What 🔊 reads for what's on screen (#77): the question (with the choices,
+// or "True or false?"), the answer once a flashcard is flipped, and the right
+// answer and any explanation once a question is answered. In matching, the
+// round's clues.
+function cardSpeech(
+  interaction: Interaction,
+  card: StudyItem | undefined,
+  roundCards: { card: StudyItem }[],
+  flipped: boolean,
+  answer: CardAnswer | undefined
+): string {
+  if (interaction === 'match') {
+    return ['Match each clue with its term.', ...roundCards.map((c, i) => `Clue ${i + 1}. ${asSentence(c.card.question)}`)].join(' ');
+  }
+  if (!card) return '';
+  if (interaction === 'flip') return flipped ? card.answer : card.question;
+  const trueFalse = isTrueFalseOptions(card.options);
+  const parts = [trueFalse ? `True or false? ${asSentence(card.question)}` : asSentence(card.question)];
+  if (interaction === 'choice' && !trueFalse && card.options?.length) parts.push(`Choices: ${card.options.map(asSentence).join(' ')}`);
+  if (answer !== undefined) {
+    parts.push(`The answer is ${asSentence(card.answer)}`);
+    if (card.explanation) parts.push(asSentence(card.explanation));
+  }
+  return parts.join(' ');
+}
+
 // A matched term counts if it reads the same as this card's answer (two cards
 // may share one), the same rule the server uses.
 const sameTerm = (a: string | undefined, b: string) => a !== undefined && normalizeChoice(a) === normalizeChoice(b);
@@ -193,6 +224,19 @@ export default function StudyViewer({
       : [];
   const pageAnswered =
     interaction === 'match' ? roundCards.every((c) => answers[c.index] !== undefined) : answer !== undefined;
+
+  // Read aloud (#77). With Auto on, each card is read as it appears, and the
+  // answer when a flashcard is flipped. Moving on stops what's being read.
+  const speechAvailable = useCanSpeak();
+  const [autoRead, setAutoRead] = useAutoRead();
+  const speech = view === 'card' ? cardSpeech(interaction, card, roundCards, flipped, answer) : '';
+  useEffect(() => {
+    if (autoRead && speech) speak(speech);
+    else stopSpeaking();
+    // Only when another card or side is shown, not again after each answer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRead, view, index, flipped, mode, run]);
+  useEffect(() => stopSpeaking, []);
 
   const goTo = (i: number) => {
     setFlipped(false);
@@ -408,9 +452,33 @@ export default function StudyViewer({
 
       <div className="text-center">
         <h1 className="text-xl font-semibold">{title}</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          {interaction === 'match' ? `Round ${index + 1} of ${rounds.length}` : `Card ${index + 1} of ${cards.length}`}
-        </p>
+        <div className="mt-1 flex items-center justify-center gap-3 text-sm text-gray-500">
+          <span>
+            {interaction === 'match' ? `Round ${index + 1} of ${rounds.length}` : `Card ${index + 1} of ${cards.length}`}
+          </span>
+          {speechAvailable && (
+            <>
+              <button
+                type="button"
+                onClick={() => speak(speech)}
+                className="rounded-md px-1.5 py-0.5 font-medium text-link hover:bg-accent/10"
+              >
+                🔊 Read aloud
+              </button>
+              <button
+                type="button"
+                onClick={() => setAutoRead(!autoRead)}
+                aria-pressed={autoRead}
+                title="Read each card aloud as it appears"
+                className={`rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${
+                  autoRead ? 'border-accent bg-accent/10 text-link' : 'text-gray-500'
+                }`}
+              >
+                Auto
+              </button>
+            </>
+          )}
+        </div>
         {studyType === 'mixed' && card && <PartLabel kind={cardKind(card.options)} />}
       </div>
 

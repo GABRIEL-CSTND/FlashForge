@@ -9,7 +9,8 @@ correction shown after each false one, or a **mixed quiz** set out like a school
 (Part I multiple choice, Part II true or false, Part III identification). Quizzes give
 instant feedback and a score at the end. Flashcards can be studied by flipping them (and marking *Got it* or *Missed it*),
 by **typing the answer**, which the app checks and forgives one small typo, or by
-**matching** clues to terms in rounds of up to 5. Sign in
+**matching** clues to terms in rounds of up to 5. Any card can be **read aloud**, one at a time
+or automatically, with the browser's built-in voice. Sign in
 with Google to save study guides, then rename, revisit, or delete them from **My Sets**.
 Signed in, every finished study session is saved with its score. Teachers can create classes, assign sets, and see each student's scores and
 the most-missed questions; students join with a code. Admins manage users' roles and can remove any study set.
@@ -114,7 +115,7 @@ app/
   api/teacher/sets/[id]/assignments/  Assign a set to the teacher's classes
   api/student/classes/  Student class API (list with assignments and my progress, join with a code, leave)
 components/
-  StudyViewer.tsx       Study UI: flip (Got it / Missed it), type or match flashcards, multiple choice, true or false, mixed quiz parts; reports each finish
+  StudyViewer.tsx       Study UI: flip (Got it / Missed it), type or match flashcards, multiple choice, true or false, mixed quiz parts, read aloud; reports each finish
   CardEditor.tsx        Edit mode for a set: change, add, delete and reorder cards (of any kind in a mixed quiz)
   AssignPanel.tsx       "Assign to class" dialog on a set the teacher owns
   StudentResultsPanel.tsx  One student's attempts, opened from the results table
@@ -135,6 +136,7 @@ lib/
   sources.ts            Where notes come from (file or pasted text), accepted file types and limits (shared)
   office-text.ts        Text from Word (.docx) and PowerPoint (.pptx) files, with zip-bomb limits (server-only)
   shrink-image.ts       Shrinks photos to 1,600 pixels before upload (browser-only)
+  speech.ts             Reading cards aloud with the browser's built-in speech, and the Auto setting (browser-only)
   web-page.ts           Fetches a linked web page safely (no private addresses) and keeps its main text (server-only)
   answer-check.ts       Checking typed answers (capitals, accents, one typo), shared by the study screen and server
   sets.ts               Study sets scoped to their owner; saving edited cards (server-only)

@@ -495,6 +495,20 @@ screen instead of shortening with "…".
   server scores it the same way. Teachers see *Matched* on these attempts, and wrong
   matches count on the most-missed page.
 
+### Reading cards aloud (#77)
+
+- Under the title, next to *Card 3 of 10*, **🔊 Read aloud** reads what's on screen: the
+  question (with the choices, or "True or false?" before a statement), the answer once a
+  flashcard is flipped, the right answer and any explanation once a question is answered,
+  and in matching the round's clues. **Auto** reads each card as it appears and the answer
+  when a card is flipped; moving on, finishing or leaving stops the reading.
+- It uses the browser's built-in speech (`speechSynthesis` in `lib/speech.ts`): free, no AI
+  requests, and on most phones it works offline. Where a browser can't speak, the
+  controls aren't shown. The voice is the device's default, at 0.95 speed.
+- Auto is remembered on the device (`localStorage`, falling back to the open page if
+  storage is blocked). Both values are read with `useSyncExternalStore`, so the page
+  renders the same on the server and in the browser.
+
 ### Student results for teachers (#58)
 
 - On a class page, **📊 Student results** opens `/teacher/classes/[id]/results`: one row
@@ -766,6 +780,8 @@ transaction. Run them after every database change.
   boxes in Word files may come out on their own lines.
 - **3 existing ESLint errors** (`react-hooks/set-state-in-effect`) in `app/page.tsx` and
   `app/my-sets/page.tsx`.
+- **Read aloud uses the device's default voice** (#77), so Filipino text may be read with an
+  English accent. Choosing a voice and speed is listed in #77 for later.
 - **Flipped flashcard scores are self-reported** (*Got it* / *Missed it*). Typed (#66) and
   matched (#67) answers and multiple choice are checked against the real answers, but a
   teacher can't yet require a way of studying.

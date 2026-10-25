@@ -43,6 +43,10 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **Read aloud** (#77): a **🔊 Read aloud** button on the study screen reads the card that's
+  showing (question and choices, the answer once flipped or answered, the clues in
+  matching), and **Auto** reads each card as it appears. Uses the browser's built-in voice,
+  so it's free and needs no AI; it's hidden where a browser can't speak.
 - **Web links** (#74): paste a link to an article or other public page, and the server
   fetches it and keeps its main text (no menus, ads or footers). Pages that need signing in
   get a clear message. With this, all of more file types (#20) is done.
@@ -179,7 +183,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 586 tests):
+- **Automated tests** (`npm test`, 593 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),

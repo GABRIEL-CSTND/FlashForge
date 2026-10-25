@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import StudyViewer, { type StudyResult } from '@/components/StudyViewer';
 
@@ -414,5 +414,121 @@ describe('mixed quiz (#69)', () => {
         .getAllByRole('listitem')
         .map((li) => li.textContent)
     ).toEqual(['Part I · Multiple choice0 / 1', 'Part II · True or false1 / 1', 'Part III · Identification1 / 1']);
+  });
+});
+
+describe('read aloud (#77)', () => {
+  let spoken: string[];
+  let cancels: number;
+
+  beforeEach(() => {
+    spoken = [];
+    cancels = 0;
+    vi.stubGlobal('speechSynthesis', {
+      speak: (u: { text: string }) => spoken.push(u.text),
+      cancel: () => {
+        cancels += 1;
+      },
+    });
+    vi.stubGlobal(
+      'SpeechSynthesisUtterance',
+      class {
+        text: string;
+        rate = 1;
+        constructor(text: string) {
+          this.text = text;
+        }
+      }
+    );
+    localStorage.clear();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.clear();
+  });
+
+  const readAloud = () => click('🔊 Read aloud');
+  const TF = [
+    { id: 't1', question: 'Chloroplasts make most of the ATP', answer: 'False', options: ['True', 'False'], explanation: 'Mitochondria do.' },
+  ];
+
+  it('shows no read-aloud controls where the browser cannot speak', () => {
+    vi.unstubAllGlobals();
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    expect(screen.queryByRole('button', { name: '🔊 Read aloud' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Auto' })).toBeNull();
+  });
+
+  it('reads the side of the flashcard that is showing', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    readAloud();
+    expect(spoken).toEqual(['Fluid inside the chloroplast']);
+    flip();
+    readAloud();
+    expect(spoken.at(-1)).toBe('Stroma');
+  });
+
+  it('reads the question with its choices, then the answer once answered', () => {
+    render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
+    readAloud();
+    expect(spoken).toEqual(['Layer 3? Choices: Physical. Network. Transport.']);
+    click('Transport');
+    readAloud();
+    expect(spoken.at(-1)).toBe('Layer 3? Choices: Physical. Network. Transport. The answer is Network.');
+  });
+
+  it('reads a true-or-false statement, then the correction', () => {
+    render(<StudyViewer title="Cells" studyType="true_false" cards={TF} />);
+    readAloud();
+    expect(spoken).toEqual(['True or false? Chloroplasts make most of the ATP.']);
+    click('True');
+    readAloud();
+    expect(spoken.at(-1)).toBe('True or false? Chloroplasts make most of the ATP. The answer is False. Mitochondria do.');
+  });
+
+  it("reads a matching round's clues", () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    click('Match');
+    readAloud();
+    expect(spoken.at(-1)).toBe(
+      'Match each clue with its term. Clue 1. Fluid inside the chloroplast. Clue 2. Enzyme that fixes CO2. Clue 3. Pigment that absorbs light.'
+    );
+  });
+
+  it('reads each card by itself with Auto on, and remembers the choice', () => {
+    const first = render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    expect(spoken).toEqual([]);
+    click('Auto');
+    expect(screen.getByRole('button', { name: 'Auto' }).getAttribute('aria-pressed')).toBe('true');
+    expect(spoken).toEqual(['Fluid inside the chloroplast']);
+    flip();
+    expect(spoken.at(-1)).toBe('Stroma');
+    mark('✓ Got it');
+    expect(spoken.at(-1)).toBe('Enzyme that fixes CO2');
+    expect(localStorage.getItem('flashforge_read_aloud')).toBe('1');
+
+    const cancelsBefore = cancels;
+    first.unmount();
+    expect(cancels).toBeGreaterThan(cancelsBefore);
+
+    spoken = [];
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    expect(spoken).toEqual(['Fluid inside the chloroplast']);
+    click('Auto');
+    expect(localStorage.getItem('flashforge_read_aloud')).toBe('0');
+  });
+
+  it('stops reading when the set is finished', () => {
+    render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
+    click('Auto');
+    click('Network');
+    click('Next →');
+    expect(spoken.at(-1)).toBe('Reliable transport? Choices: UDP. TCP. ARP.');
+    click('TCP');
+    const spokenBefore = spoken.length;
+    const cancelsBefore = cancels;
+    click('Finish');
+    expect(cancels).toBeGreaterThan(cancelsBefore);
+    expect(spoken).toHaveLength(spokenBefore);
   });
 });
