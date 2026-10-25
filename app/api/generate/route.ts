@@ -21,6 +21,7 @@ import {
   type GenerationState,
 } from '@/lib/generation-logs';
 import { limitMessage } from '@/lib/generation-limits';
+import { encodeEvent, PROGRESS_MIME, type ProgressEvent, type StepEvent } from '@/lib/generation-progress';
 
 export const runtime = 'nodejs';
 // Model retries are capped at ~75s (see lib/gemini.ts); leave headroom for upload + PDF parsing.
@@ -47,8 +48,8 @@ async function extractText(file: File): Promise<string> {
 
 // Pure generation endpoint: nothing is saved until the user explicitly saves
 // via /api/save-set. The only writes are the usage log (#62) and the daily
-// limit check (#63).
-export async function POST(req: NextRequest) {
+// limit check (#63). `report` is told each step as it starts (see POST below).
+async function generate(req: NextRequest, report: (event: StepEvent) => void = () => {}): Promise<NextResponse> {
   const startedAt = Date.now();
   const log: GenerationLog = {
     studyType: 'flashcard',
@@ -101,6 +102,7 @@ export async function POST(req: NextRequest) {
       console.error('[generate] daily limit check failed:', err);
     }
 
+    report({ type: 'step', step: 'reading' });
     let text: string;
     let title: string;
     let sourceFilename: string | null;
@@ -178,11 +180,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    report({ type: 'step', step: 'writing' });
+    // Every request after the first is a retry or a switch to the next model.
+    let attempts = 0;
+    let firstModel = '';
     const { items, model } = await generateStudyItems(text, studyType, {
       count,
       attachment,
       onRequest: (m) => {
         log.requests[m] = (log.requests[m] ?? 0) + 1;
+        attempts += 1;
+        if (attempts === 1) firstModel = m;
+        else report({ type: 'step', step: 'writing', attempt: attempts, backup: m !== firstModel });
       },
     });
 
@@ -220,4 +229,62 @@ export async function POST(req: NextRequest) {
       { success: false, errorKind: 'server_error' }
     );
   }
+}
+
+// Normal requests get the plain JSON answer. The upload page also asks for progress
+// (Accept: application/x-ndjson): then each step is sent as it starts, followed by one
+// "result" event with the status and body the JSON answer would have had.
+export async function POST(req: NextRequest) {
+  if (!req.headers.get('accept')?.includes(PROGRESS_MIME)) return generate(req);
+
+  const encoder = new TextEncoder();
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  let open = true;
+  const stream = new ReadableStream<Uint8Array>({
+    start(c) {
+      controller = c;
+    },
+    cancel() {
+      // The browser went away; keep generating (the usage log still needs the outcome) but stop writing.
+      open = false;
+    },
+  });
+  const send = (event: ProgressEvent) => {
+    if (!open) return;
+    try {
+      controller.enqueue(encoder.encode(encodeEvent(event)));
+    } catch {
+      open = false;
+    }
+  };
+
+  // generate() runs up to its first await right here, inside the request, which is
+  // where after() (the usage log) has to be called.
+  generate(req, send)
+    .then(async (res) => send({ type: 'result', status: res.status, body: await res.json().catch(() => ({})) }))
+    .catch(() =>
+      send({
+        type: 'result',
+        status: 500,
+        body: { error: 'Something went wrong while generating your study guide. Please try again.' },
+      })
+    )
+    .finally(() => {
+      if (!open) return;
+      open = false;
+      try {
+        controller.close();
+      } catch {
+        // already closed
+      }
+    });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': `${PROGRESS_MIME}; charset=utf-8`,
+      'Cache-Control': 'no-cache, no-transform',
+      // Ask proxies not to hold the steps back until the end.
+      'X-Accel-Buffering': 'no',
+    },
+  });
 }

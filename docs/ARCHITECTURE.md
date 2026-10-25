@@ -176,10 +176,22 @@ screen instead of shortening with "…".
      any whole number from 5 to 30, otherwise 10 (`parseQuestionCount()` in
      `lib/study-types.ts`). An unknown study type falls back to flashcards.
    - Never sends raw API errors to the browser; details go to the server log.
-3. **Show it**: the upload page swaps to `StudyViewer` on the **same URL** (`/`), so
+   - **Progress** (`lib/generation-progress.ts`): a normal request gets one JSON answer. The
+     upload page also sends `Accept: application/x-ndjson`, and then the route streams one
+     JSON event per line: a `step` event as each stage starts (`reading` once the daily
+     limit check has passed, `writing` just before the AI call, and `writing` again with
+     `attempt` and `backup` for every retry or switch to the backup model), then one
+     `result` event holding the status and body the JSON answer would have had. Limits,
+     errors and the usage log work the same either way; a refused or failed request is just
+     a `result` event with its usual status. `readGeneration()` reads this on the page and
+     falls back to plain JSON, so an older server still works.
+3. **Show it**: while it waits, the upload page shows the steps (`GenerationProgress`):
+   uploading, reading, writing, with what's done, what's under way, and a seconds counter.
+   When the server reports a retry or the backup model, that is explained under the
+   writing step. The page's own timer (15 seconds, plus one per question over 10) only
+   explains a possible slower backup when the server hasn't already said so.
+   Then the page swaps to `StudyViewer` on the **same URL** (`/`), so
    *Exit* clears the result instead of navigating (it asks first if the guide isn't saved).
-   After 15 seconds of waiting (plus one second per question over 10), the page explains
-   that a slower backup AI may be in use.
 4. **Usage log** (#62): every request to `/api/generate`, successful or not, gets a row in
    `generation_logs`. The row is reserved by the limit check and filled in with Next's
    `after()`, after the response has been sent, so logging never slows the user down. The upload page sends the user's token when signed
