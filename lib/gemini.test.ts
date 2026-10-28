@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ANSWER_LIMITS, generateStudyItems, minValidItems, mixedRequest, requestedCount } from '@/lib/gemini';
+import { lineUnits, pageUnits } from '@/lib/source-quotes';
 
 // Gemini is never called for real here: fetch is replaced by canned responses.
 
@@ -123,7 +124,7 @@ describe('true or false (#68)', () => {
     expect(sent[0].prompt).toContain('Create true-or-false statements.');
     expect(sent[0].prompt).toContain('Produce exactly 6 items.');
     expect(sent[0].body.generationConfig).toMatchObject({
-      responseSchema: { type: 'ARRAY', items: { required: ['question', 'answer', 'explanation'] } },
+      responseSchema: { type: 'ARRAY', items: { required: ['question', 'answer', 'explanation', 'source'] } },
     });
     // "Maybe" is dropped; a broken explanation is dropped but the statement kept.
     expect([...items].sort((a, b) => a.question.localeCompare(b.question))).toEqual([
@@ -299,5 +300,112 @@ describe('difficulty and focus (#79)', () => {
     mockModel(() => reply(flashcards(11)));
     await generateStudyItems('Article text.', 'flashcard', { focus: 'the "Calvin\ncycle"' });
     expect(sent[0].prompt).toContain('Focus on what the text says about “the Calvin cycle”.');
+  });
+});
+
+describe('where a card came from', () => {
+  const notes =
+    'Cells are the basic unit of life.\nThe mitochondria is the organelle that produces most of the cell energy as ATP.\nRibosomes assemble proteins by translating messenger RNA.';
+  const quoted = (i: number, source: unknown) => ({ question: `Quote clue ${i}`, answer: `Quote term ${i}`, source });
+  // 11 cards, the first few with the given quotes and the rest without any.
+  const cardsWith = (first: unknown[]) => [...first, ...flashcards(11).slice(first.length)];
+
+  it('asks for the sentence on a text source, in the prompt and in the schema', async () => {
+    mockModel(() => reply(flashcards(11)));
+    await generateStudyItems(notes, 'flashcard');
+    expect(sent[0].prompt).toContain('"source" field');
+    expect(sent[0].body.generationConfig).toMatchObject({
+      responseSchema: { type: 'ARRAY', items: { required: ['question', 'answer', 'source'] } },
+    });
+  });
+
+  it('keeps a quote that is in the text, with the line it is on', async () => {
+    const { text, units } = lineUnits(notes);
+    mockModel(() => reply(cardsWith([quoted(1, 'Ribosomes assemble proteins by translating messenger RNA.')])));
+    const { items } = await generateStudyItems(text, 'flashcard', { units });
+    expect(items[0]).toMatchObject({
+      question: 'Quote clue 1',
+      source: 'Ribosomes assemble proteins by translating messenger RNA.',
+      sourceLocation: 'Line 3',
+    });
+  });
+
+  it('says which page a PDF quote is on', async () => {
+    const { text, units } = pageUnits(['An introduction to the cell.', 'Ribosomes assemble proteins by translating messenger RNA.']);
+    mockModel(() => reply(cardsWith([quoted(1, 'Ribosomes assemble proteins by translating messenger RNA.')])));
+    const { items } = await generateStudyItems(text, 'flashcard', { units });
+    expect(items[0].sourceLocation).toBe('Page 2');
+  });
+
+  it('keeps the quote without a place when the text has no pages or lines', async () => {
+    mockModel(() => reply(cardsWith([quoted(1, 'The mitochondria is the organelle that produces most of the cell energy as ATP.')])));
+    const { items } = await generateStudyItems(notes, 'flashcard');
+    expect(items[0].source).toBe('The mitochondria is the organelle that produces most of the cell energy as ATP.');
+    expect(items[0].sourceLocation).toBeUndefined();
+  });
+
+  it('drops a quote that is not in the text, but keeps the card', async () => {
+    const { text, units } = lineUnits(notes);
+    mockModel(() => reply(cardsWith([quoted(1, 'The nucleus is where the genetic material of the cell is stored.')])));
+    const { items } = await generateStudyItems(text, 'flashcard', { units });
+    expect(items[0]).toMatchObject({ question: 'Quote clue 1', answer: 'Quote term 1' });
+    expect(items[0].source).toBeUndefined();
+    expect(items[0].sourceLocation).toBeUndefined();
+  });
+
+  it('keeps the real pieces of a table row the PDF text keeps apart', async () => {
+    const { text, units } = pageUnits([
+      'down away from bad difficult painful de dys dehydrate to remove water dysphagia difficulty swallowing',
+    ]);
+    mockModel(() => reply(cardsWith([quoted(1, 'Down, away from de- Dehydrate (to remove water)')])));
+    const { items } = await generateStudyItems(text, 'flashcard', { units });
+    expect(items[0].source).toBe('Down, away from … de- … Dehydrate (to remove water)');
+    expect(items[0].sourceLocation).toBe('Page 1');
+  });
+
+  it('works for multiple choice and true or false too', async () => {
+    const { text, units } = lineUnits(notes);
+    const choice = (source: string) => ({
+      question: 'Which organelle makes most of the cell energy?',
+      options: ['Mitochondria', 'Ribosome', 'Nucleus', 'Golgi'],
+      answer: 'Mitochondria',
+      source,
+    });
+    mockModel(() => reply(Array.from({ length: 12 }, (_, i) => ({ ...choice('The mitochondria is the organelle that produces most of the cell energy as ATP.'), question: `Which organelle makes energy, version ${i}?` }))));
+    const { items } = await generateStudyItems(text, 'multiple_choice', { units });
+    expect(items[0]).toMatchObject({ sourceLocation: 'Line 2' });
+  });
+
+  it('does not ask for a quote from a photo, and never returns one', async () => {
+    mockModel(() => reply(flashcards(11).map((c) => ({ ...c, source: 'A sentence the AI says it can see in the photo.' }))));
+    const { items } = await generateStudyItems('', 'flashcard', { attachment: { mimeType: 'image/png', data: 'AAAA' } });
+    expect(sent[0].prompt).not.toContain('"source" field');
+    expect(JSON.stringify(sent[0].body)).not.toContain('"source"');
+    expect(items.every((i) => i.source === undefined && i.sourceLocation === undefined)).toBe(true);
+  });
+
+  it('tells Gemma about the field in the prompt', async () => {
+    mockModel((req) => (req.model === 'gemma-4-26b-a4b-it' ? reply(flashcards(11)) : new Response('quota', { status: 429 })));
+    await generateStudyItems(notes, 'flashcard');
+    expect(sent.at(-1)!.model).toBe('gemma-4-26b-a4b-it');
+    expect(sent.at(-1)!.prompt).toContain('Each object also has a string field "source".');
+  });
+
+  it('logs how many quotes were kept, never the text itself', async () => {
+    const { text, units } = lineUnits(notes);
+    mockModel(() =>
+      reply(
+        cardsWith([
+          quoted(1, 'Ribosomes assemble proteins by translating messenger RNA.'),
+          quoted(2, 'Something the notes never say anywhere at all.'),
+        ])
+      )
+    );
+    await generateStudyItems(text, 'flashcard', { units });
+    const logged = vi.mocked(console.log).mock.calls.flat().join(' ');
+    expect(logged).toContain('quotes: 1 whole / 0 in pieces / 1 dropped');
+    expect(logged).not.toContain('Ribosomes');
+    expect(logged).not.toContain('Something the notes');
+
   });
 });

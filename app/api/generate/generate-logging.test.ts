@@ -32,7 +32,11 @@ vi.mock('@/lib/web-page', async (importOriginal) => {
 });
 vi.mock('unpdf', () => ({
   getDocumentProxy: async () => ({}),
-  extractText: async () => ({ text: pdf.text, totalPages: 1 }),
+  // Like the real one: a list of pages when pages are kept apart, one string when merged.
+  extractText: async (_pdf: unknown, options?: { mergePages?: boolean }) => ({
+    text: options?.mergePages === false ? [pdf.text] : pdf.text,
+    totalPages: 1,
+  }),
 }));
 const fake = vi.hoisted(() => ({ current: null as null | ReturnType<typeof import('@/test-utils/fake-supabase').createFakeSupabase> }));
 vi.mock('@/lib/supabase-admin', () => ({
@@ -445,5 +449,68 @@ describe('/api/generate with a topic and a difficulty (#79)', () => {
   it.each([[undefined], ['impossible']])('uses medium for a difficulty of %j', async (difficulty) => {
     expect((await generate(LONG_TEXT, asSam, difficulty === undefined ? {} : { difficulty })).status).toBe(200);
     expect(vi.mocked(generateStudyItems).mock.calls[0][2]).toMatchObject({ difficulty: 'medium', focus: undefined });
+  });
+});
+
+
+describe('/api/generate tells the AI where each part of the text is (quotes)', () => {
+  const unitsSent = () => vi.mocked(generateStudyItems).mock.calls[0][2]?.units;
+  const post = (fields: Record<string, string | File>) => {
+    const form = new FormData();
+    for (const [k, v] of Object.entries(fields)) form.append(k, v);
+    form.append('studyType', 'flashcard');
+    return POST(new NextRequest('http://localhost/api/generate', { method: 'POST', body: form, headers: asSam }));
+  };
+
+  it('gives a text file as lines, with Windows line endings made the same', async () => {
+    const file = new File(['First line of the notes.\r\nThe stroma holds the Calvin cycle and RuBisCO.'], 'notes.txt', { type: 'text/plain' });
+    expect((await post({ file })).status).toBe(200);
+    expect(vi.mocked(generateStudyItems).mock.calls[0][0]).toBe('First line of the notes.\nThe stroma holds the Calvin cycle and RuBisCO.');
+    expect(unitsSent()).toEqual({
+      label: 'Line',
+      texts: ['First line of the notes.', 'The stroma holds the Calvin cycle and RuBisCO.'],
+      separator: '\n',
+    });
+  });
+
+  it('gives pasted text as lines', async () => {
+    expect((await post({ text: 'Photosynthesis basics\nThe stroma holds the Calvin cycle; chlorophyll absorbs light.' })).status).toBe(200);
+    expect(unitsSent()).toMatchObject({ label: 'Line', texts: ['Photosynthesis basics', 'The stroma holds the Calvin cycle; chlorophyll absorbs light.'] });
+  });
+
+  it('gives a PDF as pages, read apart rather than merged', async () => {
+    // Long enough not to be taken for a scan (see SCANNED_PDF_TEXT_CHARS).
+    pdf.text = 'The stroma holds the Calvin cycle and RuBisCO, which fixes carbon dioxide into sugars. '.repeat(2).trim();
+    const file = new File(['%PDF-1.4'], 'Chapter 2.pdf', { type: 'application/pdf' });
+    expect((await post({ file })).status).toBe(200);
+    expect(unitsSent()).toEqual({ label: 'Page', texts: [pdf.text], separator: '\n\n' });
+  });
+
+  it('gives none for a Word file, which has no pages or lines to point at', async () => {
+    const { strToU8, zipSync } = await import('fflate');
+    const xml = '<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>The stroma holds the Calvin cycle and RuBisCO.</w:t></w:r></w:p></w:body></w:document>';
+    const file = new File([zipSync({ 'word/document.xml': strToU8(xml) }) as BlobPart], 'Bio handout.docx');
+    expect((await post({ file })).status).toBe(200);
+    expect(unitsSent()).toBeUndefined();
+  });
+
+  it('gives none for a web page', async () => {
+    web.fetch = async () => ({ title: 'Photosynthesis', text: 'The stroma holds the Calvin cycle; chlorophyll absorbs light.', url: 'https://example.org/p' });
+    expect((await post({ url: 'https://example.org/p' })).status).toBe(200);
+    expect(unitsSent()).toBeUndefined();
+  });
+
+  it('gives none for a photo or a scanned PDF, which are read by the AI itself', async () => {
+    const photo = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'Whiteboard.jpg', { type: 'image/jpeg' });
+    expect((await post({ file: photo })).status).toBe(200);
+    expect(unitsSent()).toBeUndefined();
+
+    vi.mocked(generateStudyItems).mockClear();
+    pdf.text = ' 1 \n 2 ';
+    const scanned = new File(['%PDF-1.4 scanned pages'], 'Chapter 2.pdf', { type: 'application/pdf' });
+    expect((await post({ file: scanned })).status).toBe(200);
+    expect(vi.mocked(generateStudyItems).mock.calls[0][2]?.attachment).toBeDefined();
+    expect(unitsSent()).toBeUndefined();
+
   });
 });

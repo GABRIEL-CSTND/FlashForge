@@ -23,6 +23,11 @@ export interface StudyItem {
   options?: string[] | null;
   // Shown after answering, e.g. the corrected fact for a false statement (#68).
   explanation?: string | null;
+  // Where the card comes from in the uploaded file: the sentence it is based on
+  // and where that sits, e.g. "Page 3" (lib/source-quotes.ts). Missing for older
+  // sets, photos and files without pages or lines.
+  source?: string | null;
+  sourceLocation?: string | null;
 }
 
 export type FlashcardMark = 'got' | 'missed';
@@ -525,6 +530,8 @@ export default function StudyViewer({
             {!flipped && <p className="text-xs text-gray-400 mt-4">Tap to flip</p>}
           </button>
 
+          {flipped && <SourceNote card={card} />}
+
           {flipped && (
             <div className="flex gap-4" role="group" aria-label="Did you know it?">
               <button
@@ -565,6 +572,21 @@ function PartLabel({ kind }: { kind: CardKind }) {
     <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-link">
       Part {part.numeral} · {part.label}
     </p>
+  );
+}
+
+// Where a card comes from in the uploaded file: the sentence it is based on and
+// where that sits, e.g. "Page 3". Only shown once the answer is, so it doesn't
+// give the answer away. A card with no source shows nothing.
+function SourceNote({ card }: { card: StudyItem }) {
+  if (!card.source) return null;
+  return (
+    <div className="border-l-2 border-accent/40 pl-3 text-left">
+      <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">
+        From your document{card.sourceLocation ? ` · ${card.sourceLocation}` : ''}
+      </p>
+      <p className="text-sm text-gray-600 italic">&ldquo;{card.source}&rdquo;</p>
+    </div>
   );
 }
 
@@ -611,6 +633,7 @@ function ChoiceCard({
         </p>
       )}
       {answered && card.explanation && <p className="text-center text-sm text-gray-500">{card.explanation}</p>}
+      {answered && <SourceNote card={card} />}
     </div>
   );
 }
@@ -720,6 +743,7 @@ function MatchingRound({
                       </>
                     )}
                   </p>
+                  <SourceNote card={card} />
                 </>
               )}
             </li>
@@ -816,6 +840,7 @@ function TypedCard({
           )}
         </p>
       )}
+      {answered && <SourceNote card={card} />}
     </div>
   );
 }

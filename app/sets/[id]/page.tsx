@@ -51,8 +51,20 @@ interface Flashcard {
   options: string[] | null;
   // True or false (#68): shown after answering.
   explanation: string | null;
+  // Where the card came from in the uploaded file (lib/source-quotes.ts).
+  source?: string | null;
+  sourceLocation?: string | null;
   position: number;
 }
+
+// A row of the flashcards table. The quote is stored as source_excerpt and
+// source_location, and the study screen reads it as source and sourceLocation.
+type FlashcardRow = Flashcard & { source_excerpt?: string | null; source_location?: string | null };
+const fromRow = (row: FlashcardRow): Flashcard => ({
+  ...row,
+  source: row.source_excerpt ?? null,
+  sourceLocation: row.source_location ?? null,
+});
 
 export default function SetPage() {
   const params = useParams<{ id: string }>();
@@ -96,7 +108,7 @@ export default function SetPage() {
         .eq('set_id', params.id)
         .order('position', { ascending: true });
 
-      setCards(cardData || []);
+      setCards((cardData || []).map(fromRow));
       setLoading(false);
     };
     load();
@@ -173,7 +185,17 @@ export default function SetPage() {
         const cardIndex = typeof res.data.cardIndex === 'number' ? res.data.cardIndex : null;
         return { ok: false, error: errorMessage(res.data), cardIndex };
       }
-      setCards(res.data.cards as Flashcard[]);
+      // The reply has the cards' text but not where each came from, and an edit
+      // doesn't change that, so carry it over by card id.
+      const saved = res.data.cards as Flashcard[];
+      setCards((before) => {
+        const old = new Map(before.map((c) => [c.id, c]));
+        return saved.map((c) => ({
+          ...c,
+          source: old.get(c.id)?.source ?? null,
+          sourceLocation: old.get(c.id)?.sourceLocation ?? null,
+        }));
+      });
       setEditingCards(false);
       setViewerVersion((v) => v + 1);
       return { ok: true };

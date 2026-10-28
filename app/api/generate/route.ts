@@ -13,6 +13,7 @@ import {
   topicProblem,
 } from '@/lib/sources';
 import { docxText, pptxText } from '@/lib/office-text';
+import { lineUnits, pageUnits, type SourceUnits } from '@/lib/source-quotes';
 import { fetchWebPage, WebPageError } from '@/lib/web-page';
 import { findTopic, TopicError } from '@/lib/topic';
 import {
@@ -29,22 +30,25 @@ export const runtime = 'nodejs';
 // Model retries are capped at ~75s (see lib/gemini.ts); leave headroom for upload + PDF parsing.
 export const maxDuration = 90;
 
-async function extractText(file: File): Promise<string> {
+// `units` says how the text splits into PDF pages or text lines, so a card can say
+// where its quote is (lib/source-quotes.ts). Word and PowerPoint files have no
+// pages or lines to point at, so they get none.
+async function extractText(file: File): Promise<{ text: string; units?: SourceUnits }> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   switch (fileKind(file.name, file.type)) {
     case 'pdf': {
       const { extractText: extractPdfText, getDocumentProxy } = await import('unpdf');
       const pdf = await getDocumentProxy(bytes);
-      const { text } = await extractPdfText(pdf, { mergePages: true });
-      return text;
+      const { text: pages } = await extractPdfText(pdf, { mergePages: false });
+      return pageUnits(pages);
     }
     // Word and PowerPoint (#71).
     case 'docx':
-      return docxText(bytes);
+      return { text: docxText(bytes) };
     case 'pptx':
-      return pptxText(bytes);
+      return { text: pptxText(bytes) };
     default:
-      return Buffer.from(bytes).toString('utf-8');
+      return lineUnits(Buffer.from(bytes).toString('utf-8'));
   }
 }
 
@@ -127,12 +131,14 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
     let source: { name: string; url: string } | null = null;
     // A typed topic: what the guide should focus on in its article.
     let focus: string | undefined;
+    // Where each page or line of 	ext is, for saying where a card's quote is from.
+    let units: SourceUnits | undefined;
     if (pasted !== null) {
       const problem = pastedTextProblem(pasted);
       if (problem) {
         return done(NextResponse.json({ error: problem }, { status: 422 }), { success: false, errorKind: 'unreadable' });
       }
-      text = pasted;
+      ({ text, units } = lineUnits(pasted));
       title = titleFromText(pasted);
       sourceFilename = null;
     } else if (typeof link === 'string') {
@@ -190,12 +196,13 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
           attachment = { mimeType: FILE_TYPES[kind].mime, data: Buffer.from(await file.arrayBuffer()).toString('base64') };
           text = '';
         } else {
-          text = await extractText(file);
+          ({ text, units } = await extractText(file));
           // A scanned PDF (#73) is pictures of pages with little or no text in
           // it, so the AI reads the PDF itself.
           if (kind === 'pdf' && text.replace(/\s+/g, '').length < SCANNED_PDF_TEXT_CHARS) {
             attachment = { mimeType: FILE_TYPES.pdf.mime, data: Buffer.from(await file.arrayBuffer()).toString('base64') };
             text = '';
+            units = undefined;
           }
         }
       } catch (err) {
@@ -227,6 +234,7 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
       attachment,
       difficulty,
       focus,
+      units,
       onRequest: (m) => {
         log.requests[m] = (log.requests[m] ?? 0) + 1;
         attempts += 1;

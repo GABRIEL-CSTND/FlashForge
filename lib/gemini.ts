@@ -1,5 +1,6 @@
 import { CARD_LIMITS, normalizeChoice, toTrueFalse, TRUE_FALSE_OPTIONS } from '@/lib/card-rules';
 import { MAX_SOURCE_CHARS } from '@/lib/sources';
+import { createSourceChecker, type SourceUnits } from '@/lib/source-quotes';
 import {
   DEFAULT_DIFFICULTY,
   DEFAULT_QUESTION_COUNT,
@@ -99,6 +100,11 @@ export interface GeneratedItem {
   options?: string[];
   // True or false (#68): the corrected fact for a false statement.
   explanation?: string;
+  // Where the card comes from in the uploaded text: the sentence it is based on,
+  // and where that sits, e.g. "Page 3" (lib/source-quotes.ts). Only for text
+  // sources, and only when the sentence is really in the text.
+  source?: string;
+  sourceLocation?: string;
 }
 
 // `message` is the detailed reason for server logs; `userMessage` is safe to
@@ -179,6 +185,16 @@ const GEMMA_FORMAT: Record<StudyType, string> = {
     'Return ONLY a JSON array of objects with fields "type" ("multiple_choice", "true_false" or "identification"), "question" (string), "answer" (string), "options" (array of exactly 4 strings, multiple_choice only) and "explanation" (string, true_false only). No other text.',
 };
 
+// Asked for with every text source, so a card can show where its answer comes
+// from. The copy is checked against the real text afterwards (lib/source-quotes.ts).
+const SOURCE_INSTRUCTION = `Every item also has a "source" field: the one sentence from the TEXT that the item is based on, copied exactly, word for word. Do not paraphrase, shorten, or combine sentences. If the information is in a table, copy the row's text in the order it appears in the TEXT; never rearrange words or add words that are not there.`;
+
+// Gemma gets the format in the prompt, so the extra field is added to it here.
+const gemmaFormat = (studyType: StudyType, withSource: boolean) =>
+  withSource
+    ? GEMMA_FORMAT[studyType].replace('No other text.', 'Each object also has a string field "source". No other text.')
+    : GEMMA_FORMAT[studyType];
+
 // The parts of a mixed quiz (#69), with how many of each to write.
 function mixedInstructions(count: number): string {
   const ask = mixedRequest(count);
@@ -244,12 +260,20 @@ function answerTooLong(s: string): boolean {
   return looksBroken(s, ANSWER_LIMITS.chars) || s.trim().split(/\s+/).length > ANSWER_LIMITS.words;
 }
 
+// The sentence a card is based on (lib/source-quotes.ts). Optional: a missing or
+// broken one is dropped, not the card.
+function cleanSource(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const s = value.trim();
+  return s.length >= 10 && !looksBroken(s, 400) ? s : undefined;
+}
+
 function validateFlashcard(item: GeneratedItem): GeneratedItem | null {
   if (typeof item.question !== 'string' || typeof item.answer !== 'string') return null;
   const question = item.question.trim();
   const answer = item.answer.trim();
   if (looksBroken(question, 300) || answerTooLong(answer)) return null;
-  return { question, answer };
+  return { question, answer, source: cleanSource(item.source) };
 }
 
 // The model doesn't reliably follow the "answer must match one option" rule,
@@ -268,7 +292,12 @@ function validateMultipleChoice(item: GeneratedItem): GeneratedItem | null {
   const matches = options.filter((o) => normalize(o) === normalize(item.answer));
   if (matches.length !== 1) return null;
 
-  return { question: item.question.trim(), answer: matches[0], options: shuffle(options) };
+  return {
+    question: item.question.trim(),
+    answer: matches[0],
+    options: shuffle(options),
+    source: cleanSource(item.source),
+  };
 }
 
 // True or false (#68): stored like a multiple-choice card with the options
@@ -284,6 +313,7 @@ function validateTrueFalse(item: GeneratedItem): GeneratedItem | null {
     question,
     answer,
     options: [...TRUE_FALSE_OPTIONS],
+    source: cleanSource(item.source),
     ...(explanation && !looksBroken(explanation, CARD_LIMITS.explanation) ? { explanation } : {}),
   };
 }
@@ -404,6 +434,20 @@ function extractResponseText(data: {
     .replace(/\s*```$/, '');
 }
 
+// Text sources also get a "source" field on every card (see SOURCE_INSTRUCTION).
+// A photo or scanned PDF doesn't: there is no text to check the sentence against.
+function withSourceField(schema: object): object {
+  const s = schema as { properties: Record<string, object>; required: string[] };
+  return {
+    ...s,
+    properties: {
+      ...s.properties,
+      source: { type: 'STRING', description: 'The exact sentence from the text this card is based on' },
+    },
+    required: [...s.required, 'source'],
+  };
+}
+
 async function callModel(
   model: string,
   apiKey: string,
@@ -475,6 +519,7 @@ export async function generateStudyItems(
     attachment,
     difficulty = DEFAULT_DIFFICULTY,
     focus,
+    units,
   }: {
     // How many items the guide should have (#65); callers check the range.
     count?: number;
@@ -486,6 +531,9 @@ export async function generateStudyItems(
     // How hard the questions are, and what to focus on, e.g. a typed topic (#79).
     difficulty?: Difficulty;
     focus?: string;
+    // How `sourceText` splits into PDF pages or text lines, so a card's quote can
+    // say where it is (lib/source-quotes.ts).
+    units?: SourceUnits;
   } = {}
 ): Promise<{ items: GeneratedItem[]; model: string }> {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -507,6 +555,7 @@ Base everything strictly on what the ${material} shows. Avoid trivial or overly 
 If the ${material} has no readable study material, return an empty array [].`
     : `You are creating a study guide from the text below.
 Produce exactly ${requestedCount(studyType, count)} items. ${instructionsFor(studyType, count)}${extra}
+${SOURCE_INSTRUCTION}
 Base everything strictly on the provided text. Avoid trivial or overly broad questions.
 
 TEXT:
@@ -514,18 +563,23 @@ TEXT:
 ${sourceText.slice(0, MAX_SOURCE_CHARS)}
 """`;
   const attachmentParts = attachment ? [{ inlineData: { mimeType: attachment.mimeType, data: attachment.data } }] : [];
+  // Quotes are only asked for with text; a photo or scanned PDF has none to check.
+  const withSource = !attachment;
 
   const bodies: Record<ModelFamily, string> = {
     gemini: JSON.stringify({
       contents: [{ parts: [{ text: prompt }, ...attachmentParts] }],
       generationConfig: {
         responseMimeType: 'application/json',
-        responseSchema: { type: 'ARRAY', items: ITEM_SCHEMAS[studyType] },
+        responseSchema: {
+          type: 'ARRAY',
+          items: withSource ? withSourceField(ITEM_SCHEMAS[studyType]) : ITEM_SCHEMAS[studyType],
+        },
         thinkingConfig: { thinkingLevel: THINKING_LEVEL },
       },
     }),
     gemma: JSON.stringify({
-      contents: [{ parts: [{ text: `${prompt}\n\n${GEMMA_FORMAT[studyType]}` }, ...attachmentParts] }],
+      contents: [{ parts: [{ text: `${prompt}\n\n${gemmaFormat(studyType, withSource)}` }, ...attachmentParts] }],
       generationConfig: { responseMimeType: 'application/json' },
     }),
   };
@@ -552,16 +606,28 @@ ${sourceText.slice(0, MAX_SOURCE_CHARS)}
           Math.min(modelTimeoutMs, remaining),
           attachment
         );
-        const items = finalItems(studyType, rawItems, count);
-        if (items.length < minValid) {
-          throw new GeminiError(`only ${items.length}/${rawItems.length} items passed validation`, {
+        const valid = finalItems(studyType, rawItems, count);
+        if (valid.length < minValid) {
+          throw new GeminiError(`only ${valid.length}/${rawItems.length} items passed validation`, {
             retryable: true,
           });
         }
 
+        // Each card's quote is checked against the real text, so one is only shown
+        // when it is really in the document. A photo has no text to check against,
+        // so its cards never carry one. The card itself always stays.
+        const checker = withSource ? createSourceChecker(sourceText, MAX_SOURCE_CHARS, units) : undefined;
+        const items = valid.map((item) =>
+          checker ? checker.check(item) : { ...item, source: undefined, sourceLocation: undefined }
+        );
+
+        // Counts only: the document's own text never goes in the log.
+        const quotes = checker
+          ? `, quotes: ${checker.stats.whole} whole / ${checker.stats.pieces} in pieces / ${checker.stats.dropped} dropped`
+          : '';
         console.log(
           `[gemini] ${model} generated ${items.length}/${rawItems.length} valid ${studyType} items in ${Date.now() - startedAt}ms` +
-            ` (attempt ${attempt}, ${outputTokens ?? '?'} output tokens)`
+            ` (attempt ${attempt}, ${outputTokens ?? '?'} output tokens${quotes})`
         );
         return { items, model };
       } catch (err) {
