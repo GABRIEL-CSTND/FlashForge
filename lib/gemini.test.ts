@@ -445,4 +445,18 @@ describe('whole document coverage (#38)', () => {
       sourceLocation: 'Page 1',
     });
   });
+
+  it('checks quotes in a long text file against the same parts the AI read', async () => {
+    // About 60,000 characters in 200 paragraphs; the last one is on line 399.
+    const last = 'Ribosomes translate messenger RNA into chains of amino acids.';
+    const raw = Array.from({ length: 200 }, (_, i) =>
+      i === 199 ? last : `Paragraph ${i + 1}. ${'Cells divide and grow. '.repeat(13)}`
+    ).join('\n\n');
+    const { text, units } = lineUnits(raw);
+    mockModel(() => reply([{ question: 'What translates mRNA?', answer: 'Ribosomes', source: last }, ...flashcards(10)]));
+
+    const { items } = await generateStudyItems(text, 'flashcard', { units });
+    expect(sent[0].prompt).toContain(text);
+    expect(items[0]).toMatchObject({ answer: 'Ribosomes', source: last, sourceLocation: 'Line 399' });
+  });
 });

@@ -289,8 +289,17 @@ screen instead of shortening with "…".
   flashcards or true-or-false statements, or 20% more multiple-choice questions, than the
   user chose (11 or 12 for 10),
   and the guide keeps the first valid ones up to the chosen count.
-- Only the first 30,000 characters of the file are used (#38 tracks sampling the whole
-  document).
+- **Long documents** (#38): the AI gets up to 30,000 characters. A longer PDF is sampled
+  by whole pages spread over the whole document (always the first and the last page,
+  blank pages left out), a longer TXT file by whole paragraphs, and other long text
+  (Word, PowerPoint, web pages, topics) by paragraphs or lines (`lib/source-quotes.ts`).
+  Kept pages and lines keep their real numbers, so a quote from page 40 says *Page 40*.
+  Wherever something was left out, the text has a "[… part of the document left out …]"
+  line, so a sentence cut off at the end of a kept page isn't read as going on in the
+  next kept one, and the quote check never matches a quote, whole or in pieces, across
+  that gap. Text that comes with its pages or lines is sampled once, with them, so the AI
+  and the quote check always have the same text. The prompt also asks for questions from
+  the beginning, middle and end.
 
 **Validation**, applied to every model's output:
 - Thought parts and ```` ```json ```` fences are stripped before parsing.
@@ -811,7 +820,8 @@ transaction. Run them after every database change.
   usage history before that.
 - **Legacy sets with no owner (28 of them) are publicly readable**, and nobody can edit
   their cards.
-- **Text extraction:** only the first 30,000 characters are used (#38), PDFs are
+- **Text extraction:** a long document is sampled down to 30,000 characters, so the AI
+  only sees part of it (#38); PDFs are
   uploaded to the server whole (#44), files are limited to 4 MB, and only PDF, Word,
   PowerPoint and TXT files and JPG, PNG or WebP photos work so far, plus links to public
   web pages; pages that need signing in, or that build their text with JavaScript, have

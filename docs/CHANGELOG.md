@@ -43,6 +43,13 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **Whole long documents** (#38): a PDF or text file longer than the 30,000 characters the
+  AI takes is no longer cut off after roughly its first 10 pages. Pages, or paragraphs,
+  from across the whole document are sent instead, always with the first and the last,
+  and each keeps its real page or line number for the quotes under the cards. Wherever
+  something was left out, the AI sees a "part of the document left out" line, so a
+  sentence cut off at the end of one page isn't read as going on in a later one, and no
+  quote is accepted across that gap.
 - **Topics and difficulty** (#79): with no notes, students can type a topic ("photosynthesis",
   "the OSI model"); the app looks it up on Wikipedia, makes the guide from the best
   article (skipping "may refer to" pages) and credits it with a link. While it works,
@@ -198,7 +205,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 644 tests):
+- **Automated tests** (`npm test`, 709 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),

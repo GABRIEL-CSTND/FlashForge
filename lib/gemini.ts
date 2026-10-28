@@ -546,7 +546,10 @@ export async function generateStudyItems(
     .filter(Boolean)
     .map((line) => `\n${line}`)
     .join('');
-  const sampledText = sampleText(sourceText, MAX_SOURCE_CHARS);
+  // Text that comes with its pages or lines was sampled along with them (pageUnits,
+  // lineUnits), so the AI reads exactly what the quote check searches; other long
+  // text is sampled here (#38).
+  const sampledText = units ? sourceText.slice(0, MAX_SOURCE_CHARS) : sampleText(sourceText, MAX_SOURCE_CHARS);
   const prompt = attachment
     ? `You are creating a study guide from the attached ${
         material === 'document' ? 'document (scanned pages)' : 'photo (of notes, a whiteboard, or a page)'

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { createSourceChecker, lineUnits, pageUnits, samplePages, sampleText, sourceKey } from '@/lib/source-quotes';
+import {
+  createSourceChecker,
+  GAP_MARKER,
+  joinUnits,
+  lineUnits,
+  pageUnits,
+  samplePages,
+  sampleText,
+  sourceKey,
+} from '@/lib/source-quotes';
 
 const MAX = 30_000;
 
@@ -242,5 +251,86 @@ describe('sampling long documents across beginning, middle, and end (#38)', () =
   it('leaves short unpaged text unchanged', () => {
     const shortText = 'Intro paragraph.\n\nConclusion paragraph.';
     expect(sampleText(shortText, 5_000)).toBe(shortText);
+  });
+});
+
+describe('gaps in a sampled document (#38)', () => {
+  // A page of exactly 100 characters that starts and ends with the given words.
+  const page = (start: string, end: string) => `${start} ${'.'.repeat(98 - start.length - end.length)} ${end}`;
+  // Room for three of the five pages and the two gaps between them, so pages 1, 3
+  // and 5 are kept. Page 1 stops mid-sentence; the real page 2 finishes it.
+  const pages = [
+    page('Page 1 begins.', 'The enzyme that copies DNA is'),
+    page('DNA polymerase, which reads the template strand.', 'Page 2 ends.'),
+    page('RNA polymerase, which makes messenger RNA.', 'Page 3 ends.'),
+    page('Page 4 begins.', 'Page 4 ends.'),
+    page('Page 5 begins.', 'Page 5 ends.'),
+  ];
+  const max = 3 * 100 + 2 * GAP_MARKER.length;
+  const acrossGap = 'The enzyme that copies DNA is RNA polymerase, which makes messenger RNA.';
+
+  it('marks where pages were left out, so a cut-off sentence does not run on', () => {
+    const { text, units } = pageUnits(pages, max);
+    expect(units.numbers).toEqual([1, 3, 5]);
+    expect(units.gapBefore).toEqual([false, true, true]);
+    expect(text).toBe(joinUnits(units));
+    expect(text).toContain(`The enzyme that copies DNA is${GAP_MARKER}RNA polymerase`);
+    expect(text.length).toBeLessThanOrEqual(max);
+  });
+
+  it('never accepts a quote that runs across a gap, whole or in pieces', () => {
+    const { text, units } = pageUnits(pages, max);
+    const { check, stats } = createSourceChecker(text, max, units);
+    expect(check({ source: acrossGap }).source).toBeUndefined();
+    expect(stats).toEqual({ whole: 0, pieces: 0, dropped: 1 });
+    // A quote on one side of a gap is still found, on its real page.
+    expect(check({ source: 'RNA polymerase, which makes messenger RNA.' }).sourceLocation).toBe('Page 3');
+  });
+
+  it('does the same for long text without pages', () => {
+    // Three paragraphs of 200 characters, with room for the first and the last.
+    const paragraphs = [
+      `${'.'.repeat(170)} The enzyme that copies DNA is`,
+      'DNA polymerase, which reads the template strand.'.padEnd(200, '.'),
+      'RNA polymerase, which makes messenger RNA.'.padEnd(200, '.'),
+    ];
+    const maxText = 2 * 200 + GAP_MARKER.length;
+    const sampled = sampleText(paragraphs.join('\n\n'), maxText);
+    expect(sampled).toBe(paragraphs[0] + GAP_MARKER + paragraphs[2]);
+    const { check } = createSourceChecker(sampled, maxText);
+    expect(check({ source: acrossGap }).source).toBeUndefined();
+    expect(check({ source: 'RNA polymerase, which makes messenger RNA.' }).source).toBeDefined();
+  });
+});
+
+describe('long text files and long pages (#38)', () => {
+  // 60 paragraphs of two long lines with a blank line between paragraphs, so
+  // paragraph k is on lines 3k - 2 and 3k - 1. Windows line endings between them.
+  const raw = Array.from(
+    { length: 60 },
+    (_, i) => `Paragraph ${i + 1} opens here. ${'a'.repeat(280)}\nParagraph ${i + 1} closes here. ${'b'.repeat(280)}`
+  ).join('\r\n\r\n');
+
+  it('samples whole paragraphs from across a long text file, keeping the real line numbers', () => {
+    const { text, units } = lineUnits(raw, 10_000);
+    expect(text.length).toBeLessThanOrEqual(10_000);
+    expect(text).toBe(joinUnits(units));
+    expect(text.startsWith('Paragraph 1 opens here.')).toBe(true);
+    expect(text).toContain('Paragraph 60 closes here.');
+    expect(units.numbers![0]).toBe(1);
+    expect(units.gapBefore!.some(Boolean)).toBe(true);
+    // A paragraph is kept whole: both of its lines, or neither.
+    const kept = units.texts.filter((t) => t.startsWith('Paragraph ')).map((t) => t.split(' ')[1]);
+    expect(new Set(kept).size * 2).toBe(kept.length);
+
+    const { check } = createSourceChecker(text, 10_000, units);
+    expect(check({ source: 'Paragraph 60 closes here.' }).sourceLocation).toBe('Line 179');
+  });
+
+  it('cuts a single page longer than the limit, so the AI and the quote check have the same text', () => {
+    const { text, units } = pageUnits(['Mitochondria make most of the ATP. '.repeat(100)], 1_000);
+    expect(text.length).toBe(1_000);
+    expect(units.texts).toEqual([text]);
+    expect(units.numbers).toEqual([1]);
   });
 });
