@@ -64,8 +64,18 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
     Object.assign(log, outcome, { durationMs: Date.now() - startedAt });
     return res;
   };
-  // Runs once the response has gone out, so logging never slows generation down.
-  after(() => recordGeneration(req, state, log));
+  // The usage log is written once the response has gone out, so it never slows
+  // generation down, and only once the generation itself has finished. With
+  // progress on, the response can end first (the student closes the page) while
+  // the AI is still working; logging right then would save a failure that
+  // doesn't count toward the daily limit (#63), though the AI was used. after()
+  // keeps the server running until this has finished.
+  let finish!: () => void;
+  const finished = new Promise<void>((resolve) => (finish = resolve));
+  after(async () => {
+    await finished;
+    await recordGeneration(req, state, log);
+  });
 
   try {
     const formData = await req.formData();
@@ -228,6 +238,8 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
       ),
       { success: false, errorKind: 'server_error' }
     );
+  } finally {
+    finish();
   }
 }
 

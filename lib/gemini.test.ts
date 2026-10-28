@@ -166,7 +166,8 @@ describe('mixed quiz (#69)', () => {
   });
 
   it('fills a short part from the other parts\' spares, and guesses a missing type', async () => {
-    const { type: _t, ...untyped } = idItem(1);
+    const untyped: Record<string, unknown> = { ...idItem(1) };
+    delete untyped.type;
     mockModel(() => reply([...[1, 2, 3, 4, 5].map(mcItem), ...[1, 2, 3, 4].map(tfItem), untyped, { ...idItem(2), answer: 'x '.repeat(20) }]));
     const { items } = await generateStudyItems('Notes.', 'mixed', { count: 10 });
     // Identification has 1 usable item, so a spare multiple-choice and true-or-false one fill in.

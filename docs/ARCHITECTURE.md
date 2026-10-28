@@ -194,7 +194,11 @@ screen instead of shortening with "…".
    *Exit* clears the result instead of navigating (it asks first if the guide isn't saved).
 4. **Usage log** (#62): every request to `/api/generate`, successful or not, gets a row in
    `generation_logs`. The row is reserved by the limit check and filled in with Next's
-   `after()`, after the response has been sent, so logging never slows the user down. The upload page sends the user's token when signed
+   `after()`, after the response has been sent, so logging never slows the user down.
+   It also waits for the generation itself to finish: with progress on, the response can
+   end first (the student closes the page) while the AI is still working, and the row
+   must still get the real outcome, or an abandoned request would be saved as a failure
+   that doesn't count toward the daily limit. The upload page sends the user's token when signed
    in, so the log knows who generated it. See "Admin: AI usage" below.
 5. **Save** (optional, requires sign-in): `POST /api/save-set` verifies the user's token,
    checks the study type and every card with the card editor's rules (`validateCards()`,

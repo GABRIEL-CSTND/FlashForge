@@ -47,13 +47,15 @@ already applied there.
   showing (question and choices, the answer once flipped or answered, the clues in
   matching), and **Auto** reads each card as it appears. Uses the browser's built-in voice,
   so it's free and needs no AI; it's hidden where a browser can't speak.
-- **Progress while a study guide is being made:** the upload page now shows each step of
+- **Progress while a study guide is being made** (#42): the upload page now shows each step of
   the wait: uploading, reading, then writing with the AI, with what's done, what's under
   way and a seconds counter, so the wait feels shorter and it's clear the app hasn't
   frozen. If the AI needs another try, or a slower backup takes over, it says so under the
   writing step. The steps are real: the server reports each stage as it starts (as a
   stream of one JSON event per line, only when the page asks for it), and answers exactly
-  as before otherwise, so the daily limits, errors and the usage log are unchanged.
+  as before otherwise, so the daily limits, errors and the usage log are unchanged. If the
+  page is closed while the AI is working, the usage log still waits for the real outcome,
+  so abandoned requests count toward the daily limit like finished ones.
 - **Web links** (#74): paste a link to an article or other public page, and the server
   fetches it and keeps its main text (no menus, ads or footers). Pages that need signing in
   get a clear message. With this, all of more file types (#20) is done.
@@ -190,7 +192,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 593 tests):
+- **Automated tests** (`npm test`, 629 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),

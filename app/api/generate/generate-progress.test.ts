@@ -143,6 +143,33 @@ describe('/api/generate progress', () => {
     ]);
   });
 
+  it('logs the real outcome even when the browser leaves before the guide is ready', async () => {
+    let release!: () => void;
+    const aiWorking = new Promise<void>((resolve) => (release = resolve));
+    gemini.run = async (onRequest) => {
+      onRequest(FIRST);
+      await aiWorking;
+      return { items: ITEMS, model: FIRST };
+    };
+    const res = await request(LONG_TEXT, { accept: PROGRESS_MIME, authorization: 'Bearer sam' });
+    const reader = res.body!.getReader();
+    // Read up to the "writing" step, then leave, like closing the page.
+    let received = '';
+    while (!received.includes('"writing"')) received += new TextDecoder().decode((await reader.read()).value);
+    await reader.cancel();
+
+    // The response is over, so the usage log starts now, while the AI is still working.
+    const logging = Promise.all(pending.callbacks.map((fn) => fn()));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fake.current!.db.rows.generation_logs).toEqual([expect.objectContaining({ success: null })]);
+
+    release();
+    await logging;
+    expect(fake.current!.db.rows.generation_logs).toEqual([
+      expect.objectContaining({ user_id: STUDENT.id, success: true, error_kind: null, model: FIRST, requests: { [FIRST]: 1 } }),
+    ]);
+  });
+
   it('answers with plain JSON, exactly as before, when progress is not asked for', async () => {
     const res = await request(LONG_TEXT);
     expect(res.headers.get('content-type')).toContain('application/json');
