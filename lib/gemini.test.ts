@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { generateStudyItems, minValidItems, mixedRequest, requestedCount } from '@/lib/gemini';
+import { ANSWER_LIMITS, generateStudyItems, minValidItems, mixedRequest, requestedCount } from '@/lib/gemini';
 
 // Gemini is never called for real here: fetch is replaced by canned responses.
 
@@ -229,5 +229,56 @@ describe('scanned PDFs (#73)', () => {
       unreadable: true,
       userMessage: "We couldn't find any notes to study in this file. Try a clearer scan, or paste the text.",
     });
+  });
+});
+
+describe('short answers', () => {
+  const mc = (i: number, options: string[], answer = options[0]) => ({ question: `Clue ${i}`, options, answer });
+  const words = (s: string) => s.trim().split(/\s+/).length;
+
+  it('allows a little slack over the 1 to 4 words the prompt asks for', () => {
+    expect(ANSWER_LIMITS).toEqual({ chars: 60, words: 6 });
+  });
+
+  it('drops flashcards with an overly long answer and keeps short ones', async () => {
+    mockModel(() =>
+      reply([
+        { question: 'Clue 1', answer: 'Mitochondria' },
+        { question: 'Clue 2', answer: 'Treaty of Paris' },
+        { question: 'Clue 3', answer: 'one two three four five six' }, // 6 words: still fine
+        { question: 'Clue 4', answer: 'one two three four five six seven' }, // 7 words
+        { question: 'Clue 5', answer: 'The process by which plants convert light into chemical energy' },
+        { question: 'Clue 6', answer: 'Supercalifragilisticexpialidocious Pneumonoultramicroscopicsilicovolcanoconiosis' }, // 80 chars
+      ])
+    );
+    const { items } = await generateStudyItems('Some notes.', 'flashcard', { count: 5 });
+    expect(items.map((i) => i.answer)).toEqual(['Mitochondria', 'Treaty of Paris', 'one two three four five six']);
+  });
+
+  it('drops a multiple-choice card when any choice is a long sentence', async () => {
+    const colours = ['Red', 'Blue', 'Green', 'Yellow'];
+    mockModel(() =>
+      reply([
+        mc(1, colours),
+        mc(2, colours),
+        mc(3, colours),
+        // a wrong choice is a sentence
+        mc(4, ['Red', 'Blue', 'Green', 'The colour that results from mixing blue and yellow pigments together']),
+        // the correct answer itself is a sentence
+        mc(5, ['The colour that results from mixing blue and yellow pigments together', 'Red', 'Blue', 'Green']),
+      ])
+    );
+    const { items } = await generateStudyItems('Some notes.', 'multiple_choice', { count: 5 });
+    expect(items.map((i) => i.question)).toEqual(['Clue 1', 'Clue 2', 'Clue 3']);
+    for (const item of items) {
+      expect(item.options).toHaveLength(4);
+      for (const text of [item.answer, ...(item.options ?? [])]) expect(words(text)).toBeLessThanOrEqual(ANSWER_LIMITS.words);
+    }
+  });
+
+  it('asks for short choices in the multiple-choice prompt', async () => {
+    mockModel(() => reply([mc(1, ['A', 'B', 'C', 'D']), mc(2, ['A', 'B', 'C', 'D']), mc(3, ['A', 'B', 'C', 'D'])]));
+    await generateStudyItems('Some notes.', 'multiple_choice', { count: 5 });
+    expect(sent[0].prompt).toContain('Every choice is 1 to 4 words');
   });
 });
