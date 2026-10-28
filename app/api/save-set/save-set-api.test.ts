@@ -101,3 +101,67 @@ describe('POST /api/save-set', () => {
     expect(db.rows.flashcard_sets).toEqual([]);
   });
 });
+
+describe('POST /api/save-set: where each card came from', () => {
+  const quotes = () => db.rows.flashcards.map((c) => [c.source_excerpt, c.source_location]);
+
+  it('saves the quote and where it is, and nothing for a card without one', async () => {
+    const res = await save({
+      title: 'Cells',
+      studyType: 'flashcard',
+      items: [
+        { question: 'Q1', answer: 'A1', source: '  Ribosomes assemble proteins.  ', sourceLocation: 'Page 3' },
+        { question: 'Q2', answer: 'A2' },
+      ],
+    });
+    expect(res.status).toBe(200);
+    expect(quotes()).toEqual([
+      ['Ribosomes assemble proteins.', 'Page 3'],
+      [null, null],
+    ]);
+  });
+
+  it('pairs each quote with its own card by position', async () => {
+    await save({
+      title: 'Cells',
+      studyType: 'flashcard',
+      items: [
+        { question: 'Q1', answer: 'A1' },
+        { question: 'Q2', answer: 'A2', source: 'The middle card’s sentence.', sourceLocation: 'Line 7' },
+        { question: 'Q3', answer: 'A3' },
+      ],
+    });
+    expect(db.rows.flashcards.map((c) => [c.answer, c.source_excerpt, c.source_location])).toEqual([
+      ['A1', null, null],
+      ['A2', 'The middle card’s sentence.', 'Line 7'],
+      ['A3', null, null],
+    ]);
+  });
+
+  it('keeps them to short plain text, or nothing', async () => {
+    await save({
+      title: 'Cells',
+      studyType: 'flashcard',
+      items: [
+        { question: 'Q1', answer: 'A1', source: 'x'.repeat(5000), sourceLocation: 'y'.repeat(500) },
+        { question: 'Q2', answer: 'A2', source: 42, sourceLocation: { page: 3 } },
+        { question: 'Q3', answer: 'A3', source: '   ', sourceLocation: '' },
+      ],
+    });
+    expect(db.rows.flashcards[0].source_excerpt).toHaveLength(600);
+    expect(db.rows.flashcards[0].source_location).toHaveLength(40);
+    expect(quotes().slice(1)).toEqual([
+      [null, null],
+      [null, null],
+    ]);
+  });
+
+  it('saves them on a true-or-false set too', async () => {
+    await save({
+      title: 'Cells',
+      studyType: 'true_false',
+      items: [{ ...TF_ITEMS[0], source: 'Mitochondria make most of the ATP.', sourceLocation: 'Page 2' }],
+    });
+    expect(quotes()).toEqual([['Mitochondria make most of the ATP.', 'Page 2']]);
+  });
+});

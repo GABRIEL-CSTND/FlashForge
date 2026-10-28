@@ -8,6 +8,18 @@ interface SaveItem {
   answer: string;
   options?: string[] | null;
   explanation?: string | null;
+  // Where the card came from in the uploaded file (lib/source-quotes.ts).
+  source?: string | null;
+  sourceLocation?: string | null;
+}
+
+// The quote and its location come from /api/generate, but this body is whatever
+// the caller sent, so keep them to short plain text, or nothing.
+const MAX_QUOTE_CHARS = 600;
+const MAX_LOCATION_CHARS = 40;
+function shortText(value: unknown, max: number): string | null {
+  if (typeof value !== 'string') return null;
+  return value.trim().slice(0, max) || null;
 }
 
 // Save a freshly generated guide (signed-in users only). The cards are checked
@@ -66,12 +78,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: setError?.message || 'Failed to create set' }, { status: 500 });
     }
 
+    // validateCards keeps the cards in order, one for one, but doesn't carry the
+    // quote, so each card's quote is read from the item at the same position.
     const rows = checked.cards.map((card, i) => ({
       set_id: newSet.id,
       question: card.question,
       answer: card.answer,
       options: card.options,
       explanation: card.explanation,
+      source_excerpt: shortText(items[i]?.source, MAX_QUOTE_CHARS),
+      source_location: shortText(items[i]?.sourceLocation, MAX_LOCATION_CHARS),
       position: i,
     }));
 

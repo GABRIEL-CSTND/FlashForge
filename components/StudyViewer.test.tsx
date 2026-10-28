@@ -532,3 +532,95 @@ describe('read aloud (#77)', () => {
     expect(spoken).toHaveLength(spokenBefore);
   });
 });
+
+describe('where a card came from', () => {
+  const FROM = /From your document/;
+  const SOURCED_FLASH = [
+    { id: 'f1', question: 'Fluid inside the chloroplast', answer: 'Stroma', source: 'The stroma is the fluid inside the chloroplast.', sourceLocation: 'Page 4' },
+    { id: 'f2', question: 'Enzyme that fixes CO2', answer: 'RuBisCO' },
+    { id: 'f3', question: 'Pigment that absorbs light', answer: 'Chlorophyll', source: 'Chlorophyll is the pigment that absorbs light.' },
+  ];
+  const SOURCED_MC = [
+    { id: 'c1', question: 'Layer 3?', answer: 'Network', options: ['Physical', 'Network', 'Transport'], source: 'Layer 3 is the network layer.', sourceLocation: 'Page 2' },
+    { id: 'c2', question: 'Reliable transport?', answer: 'TCP', options: ['UDP', 'TCP', 'ARP'] },
+  ];
+
+  it('shows the quote and its page after a flashcard is flipped, not before', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={SOURCED_FLASH} />);
+    expect(screen.queryByText(FROM)).toBeNull();
+    expect(screen.queryByText(/The stroma is the fluid/)).toBeNull();
+
+    flip();
+    expect(screen.getByText('From your document · Page 4')).toBeTruthy();
+    expect(screen.getByText(/The stroma is the fluid inside the chloroplast\./)).toBeTruthy();
+  });
+
+  it('shows nothing for a card that has no quote', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={SOURCED_FLASH} />);
+    flip();
+    fireEvent.click(screen.getByRole('button', { name: /Got it/ }));
+    expect(screen.getByText('Enzyme that fixes CO2')).toBeTruthy();
+    flip();
+    expect(screen.queryByText(FROM)).toBeNull();
+  });
+
+  it('leaves out the place when the quote has none', () => {
+    render(
+      <StudyViewer
+        title="Photosynthesis"
+        studyType="flashcard"
+        cards={[SOURCED_FLASH[2], SOURCED_FLASH[1], SOURCED_FLASH[0]]}
+      />
+    );
+    flip();
+    expect(screen.getByText('From your document')).toBeTruthy();
+    expect(screen.getByText(/Chlorophyll is the pigment that absorbs light\./)).toBeTruthy();
+  });
+
+  it('shows the quote after a choice is picked, not before', () => {
+    render(<StudyViewer title="Networking" studyType="multiple_choice" cards={SOURCED_MC} />);
+    expect(screen.queryByText(FROM)).toBeNull();
+    click('Physical');
+    expect(screen.getByText('From your document · Page 2')).toBeTruthy();
+    expect(screen.getByText(/Layer 3 is the network layer\./)).toBeTruthy();
+  });
+
+  it('shows the quote after a typed answer is checked, not before', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={SOURCED_FLASH} />);
+    click('Type');
+    expect(screen.queryByText(FROM)).toBeNull();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: 'Stroma' } });
+    click('Check');
+    expect(screen.getByText('From your document · Page 4')).toBeTruthy();
+  });
+
+  it('shows the quote for each clue once a matching round is checked', () => {
+    const SIX = [
+      ...SOURCED_FLASH,
+      { id: 'f4', question: 'Stage that makes glucose', answer: 'Calvin cycle' },
+      { id: 'f5', question: 'Gas given off', answer: 'Oxygen' },
+      { id: 'f6', question: 'Organelle where it happens', answer: 'Chloroplast' },
+    ];
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={SIX} />);
+    click('Match');
+    // Terms are shuffled, so pick each by name.
+    const matchTerm = (clue: string, term: string) => {
+      const select = screen.getByRole('combobox', { name: clue }) as HTMLSelectElement;
+      const option = within(select)
+        .getAllByRole('option')
+        .find((o) => o.textContent?.endsWith(`. ${term}`)) as HTMLOptionElement;
+      fireEvent.change(select, { target: { value: option.value } });
+    };
+    matchTerm('Fluid inside the chloroplast', 'Stroma');
+    matchTerm('Enzyme that fixes CO2', 'RuBisCO');
+    matchTerm('Pigment that absorbs light', 'Chlorophyll');
+    expect(screen.queryByText(FROM)).toBeNull();
+
+    click('Check answers');
+    expect(screen.getByText('From your document · Page 4')).toBeTruthy();
+    expect(screen.getByText(/The stroma is the fluid inside the chloroplast\./)).toBeTruthy();
+    expect(screen.getByText(/Chlorophyll is the pigment that absorbs light\./)).toBeTruthy();
+    // The clue with no quote adds nothing: two of the three have one.
+    expect(screen.getAllByText(FROM)).toHaveLength(2);
+  });
+});

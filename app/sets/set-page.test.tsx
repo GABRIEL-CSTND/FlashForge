@@ -264,3 +264,46 @@ describe('saving study results (#57)', () => {
     expect((await screen.findByRole('alert')).textContent).toBe("Couldn't reach the server, so your score wasn't saved.");
   });
 });
+
+describe('where a saved card came from', () => {
+  const QUOTE = 'Chlorophyll is the pigment that absorbs light.';
+  const flipCard = async () => fireEvent.click(await screen.findByRole('button', { name: /Tap to flip/ }));
+
+  it('shows the saved quote and its page once the card is flipped', async () => {
+    state.cards = [
+      { id: CARD, question: 'Pigment that absorbs light', answer: 'Chlorophyll', options: null, position: 0, source_excerpt: QUOTE, source_location: 'Page 6' },
+    ];
+    render(<SetPage />);
+    await flipCard();
+    expect(screen.getByText('From your document · Page 6')).toBeTruthy();
+    expect(screen.getByText(new RegExp(QUOTE.replace('.', '\\.')))).toBeTruthy();
+  });
+
+  it('shows nothing for a card saved before quotes existed', async () => {
+    render(<SetPage />);
+    await flipCard();
+    expect(screen.queryByText(/From your document/)).toBeNull();
+  });
+
+  it('keeps the quote after the owner edits the cards', async () => {
+    state.cards = [
+      { id: CARD, question: 'Pigment that absorbs light', answer: 'Chlorophyll', options: null, position: 0, source_excerpt: QUOTE, source_location: 'Page 6' },
+    ];
+    // The reply to an edit has the card's text but not where it came from.
+    state.apiResult = {
+      ok: true,
+      status: 200,
+      data: { cards: [{ id: CARD, question: 'Green pigment that absorbs light', answer: 'Chlorophyll', options: null, position: 0 }] },
+    };
+    render(<SetPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /Edit cards/ }));
+    fireEvent.change(within(screen.getByRole('listitem', { name: 'Card 1' })).getByLabelText('Question'), {
+      target: { value: 'Green pigment that absorbs light' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('Green pigment that absorbs light')).toBeTruthy();
+
+    await flipCard();
+    expect(screen.getByText('From your document · Page 6')).toBeTruthy();
+  });
+});
