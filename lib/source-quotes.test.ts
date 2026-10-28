@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSourceChecker, lineUnits, pageUnits, sourceKey } from '@/lib/source-quotes';
+import { createSourceChecker, lineUnits, pageUnits, samplePages, sampleText, sourceKey } from '@/lib/source-quotes';
 
 const MAX = 30_000;
 
@@ -163,5 +163,84 @@ describe('createSourceChecker: table rows kept in pieces', () => {
     check({ source: 'Down, away from de- Dehydrate (to remove water)' });
     check({ source: 'Something the document never says at all' });
     expect(stats).toEqual({ whole: 1, pieces: 1, dropped: 1 });
+  });
+});
+
+describe('sampling long documents across beginning, middle, and end (#38)', () => {
+  it('leaves short documents (<= maxChars) intact without sampling', () => {
+    const pages = ['Page 1 content.', 'Page 2 content.', 'Page 3 content.'];
+    const { text, units } = pageUnits(pages, 1000);
+    expect(text).toBe('Page 1 content.\n\nPage 2 content.\n\nPage 3 content.');
+    expect(units.texts).toEqual(pages);
+    expect(units.numbers).toBeUndefined();
+  });
+
+  it('samples pages from a 40+ page document covering beginning, middle, and end', () => {
+    // 40 pages of 1,000 characters each = 40,000+ characters, exceeding 30,000 budget.
+    const pages = Array.from({ length: 40 }, (_, i) => `Page ${i + 1} content about biological cells. `.padEnd(1000, '.'));
+    const { text, units } = pageUnits(pages, 30_000);
+
+    expect(text.length).toBeLessThanOrEqual(30_000);
+    // Covers beginning (page 1)
+    expect(units.numbers![0]).toBe(1);
+    // Covers end (page 40)
+    expect(units.numbers!.at(-1)).toBe(40);
+    // Covers middle
+    expect(units.numbers!.some((n) => n >= 18 && n <= 22)).toBe(true);
+    // Numbers are strictly ascending
+    for (let i = 1; i < units.numbers!.length; i++) {
+      expect(units.numbers![i]).toBeGreaterThan(units.numbers![i - 1]);
+    }
+  });
+
+  it('locates quotes with their true original page number even when sampled', () => {
+    const pages = Array.from({ length: 40 }, (_, i) =>
+      i === 0
+        ? 'Photosynthesis takes place inside the chloroplasts of plant cells.'.padEnd(1000, '.')
+        : i === 39
+        ? 'Ribosomes are macromolecular machines found within all cells that perform biological protein synthesis.'.padEnd(1000, '.')
+        : `Page ${i + 1} general notes. `.padEnd(1000, '.')
+    );
+    const { text, units } = pageUnits(pages, 30_000);
+    const { check } = createSourceChecker(text, 30_000, units);
+
+    const first = check({ source: 'Photosynthesis takes place inside the chloroplasts of plant cells.' });
+    expect(first.sourceLocation).toBe('Page 1');
+
+    const last = check({
+      source: 'Ribosomes are macromolecular machines found within all cells that perform biological protein synthesis.',
+    });
+    expect(last.sourceLocation).toBe('Page 40');
+  });
+
+  it('skips blank pages while preserving real page numbers for non-blank pages', () => {
+    const pages = [
+      'First page notes.',
+      '   \n\t  ', // blank page 2
+      'Third page notes.',
+      '',            // blank page 4
+      'Fifth page notes.',
+    ];
+    // Set low maxChars to force sampling
+    const { units } = samplePages(pages, 40);
+    expect(units.numbers).toBeDefined();
+    // Non-blank page numbers must be from [1, 3, 5], never [2, 4]
+    expect(units.numbers!.every((n) => [1, 3, 5].includes(n))).toBe(true);
+  });
+
+  it('samples paragraphs of long unpaged text across beginning, middle, and end', () => {
+    const paragraphs = Array.from({ length: 30 }, (_, i) => `Paragraph ${i + 1}: ` + 'details. '.repeat(100));
+    const fullText = paragraphs.join('\n\n');
+    expect(fullText.length).toBeGreaterThan(25_000);
+
+    const sampled = sampleText(fullText, 5_000);
+    expect(sampled.length).toBeLessThanOrEqual(5_000);
+    expect(sampled).toContain('Paragraph 1:');
+    expect(sampled).toContain('Paragraph 30:');
+  });
+
+  it('leaves short unpaged text unchanged', () => {
+    const shortText = 'Intro paragraph.\n\nConclusion paragraph.';
+    expect(sampleText(shortText, 5_000)).toBe(shortText);
   });
 });

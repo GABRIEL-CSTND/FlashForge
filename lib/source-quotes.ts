@@ -1,3 +1,5 @@
+import { MAX_SOURCE_CHARS } from '@/lib/sources';
+
 // Where a card's answer comes from in the uploaded material. The AI is asked to
 // copy the sentence a card is based on; this checks that sentence against the real
 // text, so a quote is only ever shown when it is really in the document, and says
@@ -12,14 +14,161 @@ export interface SourceUnits {
   label: 'Page' | 'Line';
   texts: string[];
   separator: string;
+  numbers?: number[];
 }
 
 const PAGE_SEPARATOR = '\n\n';
 const LINE_SEPARATOR = '\n';
 
 // A PDF's pages: the text for the AI, and the pages to find a quote in.
-export function pageUnits(pages: string[]): { text: string; units: SourceUnits } {
-  return { text: pages.join(PAGE_SEPARATOR), units: { label: 'Page', texts: pages, separator: PAGE_SEPARATOR } };
+
+// If all pages combined fit inside maxChars, keep them all as they are.
+// If they exceed maxChars, sample pages evenly across the whole document
+// (beginning, middle, and end) so long PDFs don't only get questions from
+// the first few pages (#38), recording each page's real 1-based page number.
+export function samplePages(
+  pages: string[],
+  maxChars: number = MAX_SOURCE_CHARS
+): { text: string; units: SourceUnits } {
+  const totalChars =
+    pages.reduce((sum, p) => sum + p.length, 0) + Math.max(0, pages.length - 1) * PAGE_SEPARATOR.length;
+  if (totalChars <= maxChars) {
+    return { text: pages.join(PAGE_SEPARATOR), units: { label: 'Page', texts: pages, separator: PAGE_SEPARATOR } };
+  }
+
+  const nonBlank: { text: string; number: number }[] = [];
+  pages.forEach((p, idx) => {
+    if (p.trim().length > 0) nonBlank.push({ text: p, number: idx + 1 });
+  });
+
+  if (nonBlank.length === 0) {
+    return { text: '', units: { label: 'Page', texts: [], separator: PAGE_SEPARATOR } };
+  }
+
+  const total = nonBlank.length;
+
+  function getIndices(K: number): number[] {
+    if (K <= 1) return [0];
+    const set = new Set<number>();
+    const res: number[] = [];
+    for (let i = 0; i < K; i++) {
+      const idx = Math.round((i * (total - 1)) / (K - 1));
+      if (!set.has(idx)) {
+        set.add(idx);
+        res.push(idx);
+      }
+    }
+    return res;
+  }
+
+  function charsFor(indices: number[]): number {
+    return (
+      indices.reduce((sum, idx) => sum + nonBlank[idx].text.length, 0) +
+      (indices.length - 1) * PAGE_SEPARATOR.length
+    );
+  }
+
+  let bestIndices = getIndices(1);
+  let low = 1;
+  let high = total;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const indices = getIndices(mid);
+    if (charsFor(indices) <= maxChars) {
+      bestIndices = indices;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  if (bestIndices.length <= 1 && total > 1) {
+    const count = Math.min(total, 5);
+    const indices = getIndices(count);
+    const perPage = Math.floor((maxChars - (indices.length - 1) * PAGE_SEPARATOR.length) / indices.length);
+    const texts = indices.map((idx) => nonBlank[idx].text.slice(0, Math.max(100, perPage)));
+    const numbers = indices.map((idx) => nonBlank[idx].number);
+    return {
+      text: texts.join(PAGE_SEPARATOR),
+      units: { label: 'Page', texts, separator: PAGE_SEPARATOR, numbers },
+    };
+  }
+
+  const texts = bestIndices.map((idx) => nonBlank[idx].text);
+  const numbers = bestIndices.map((idx) => nonBlank[idx].number);
+  return {
+    text: texts.join(PAGE_SEPARATOR),
+    units: { label: 'Page', texts, separator: PAGE_SEPARATOR, numbers },
+  };
+}
+
+// For text without pages (Word, PowerPoint, web pages, plain text): if it exceeds
+// maxChars, sample paragraphs evenly across the document (beginning, middle, end)
+// so the study guide covers the whole document instead of only the start (#38).
+export function sampleText(rawText: string, maxChars: number = MAX_SOURCE_CHARS): string {
+  if (rawText.length <= maxChars) return rawText;
+
+  const paragraphs = rawText
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (paragraphs.length <= 1) {
+    const lines = rawText
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (lines.length <= 1) return rawText.slice(0, maxChars);
+    return sampleArray(lines, '\n', maxChars);
+  }
+  return sampleArray(paragraphs, '\n\n', maxChars);
+}
+
+function sampleArray(items: string[], separator: string, maxChars: number): string {
+  const total = items.length;
+  function getIndices(K: number): number[] {
+    if (K <= 1) return [0];
+    const set = new Set<number>();
+    const res: number[] = [];
+    for (let i = 0; i < K; i++) {
+      const idx = Math.round((i * (total - 1)) / (K - 1));
+      if (!set.has(idx)) {
+        set.add(idx);
+        res.push(idx);
+      }
+    }
+    return res;
+  }
+
+  function charsFor(indices: number[]): number {
+    return indices.reduce((sum, idx) => sum + items[idx].length, 0) + (indices.length - 1) * separator.length;
+  }
+
+  let bestIndices = getIndices(1);
+  let low = 1;
+  let high = total;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const indices = getIndices(mid);
+    if (charsFor(indices) <= maxChars) {
+      bestIndices = indices;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  if (bestIndices.length <= 1 && total > 1) {
+    const count = Math.min(total, 5);
+    const indices = getIndices(count);
+    const perItem = Math.floor((maxChars - (indices.length - 1) * separator.length) / indices.length);
+    return indices.map((idx) => items[idx].slice(0, Math.max(100, perItem))).join(separator);
+  }
+
+  return bestIndices.map((idx) => items[idx]).join(separator);
+}
+
+export function pageUnits(pages: string[], maxChars: number = MAX_SOURCE_CHARS): { text: string; units: SourceUnits } {
+  return samplePages(pages, maxChars);
 }
 
 // Plain text's lines. Line endings are made the same first, so line numbers and
@@ -72,7 +221,7 @@ function buildLocator(
     consumed += text.length + units.separator.length;
     if (!unitKey) return;
     if (key) key += ' ';
-    starts.push({ offset: key.length, number: i + 1 });
+    starts.push({ offset: key.length, number: units.numbers && units.numbers[i] !== undefined ? units.numbers[i] : i + 1 });
     key += unitKey;
   });
 

@@ -409,3 +409,40 @@ describe('where a card came from', () => {
 
   });
 });
+
+describe('whole document coverage (#38)', () => {
+  it('instructs the model to spread questions across the entire text', async () => {
+    mockModel(() => reply(flashcards(11)));
+    await generateStudyItems('Notes about biology.', 'flashcard');
+    expect(sent[0].prompt).toContain('Spread questions across the entire text, covering the beginning, middle, and end.');
+  });
+
+  it('samples a 40+ page PDF and preserves quotes from the beginning and end (#38)', async () => {
+    const pages = Array.from({ length: 45 }, (_, i) =>
+      i === 0
+        ? 'Photosynthesis occurs within plant chloroplasts.'.padEnd(1000, '.')
+        : i === 44
+        ? 'Ribosomes synthesize cellular proteins from amino acids.'.padEnd(1000, '.')
+        : `Page ${i + 1} content. `.padEnd(1000, '.')
+    );
+    const { text, units } = pageUnits(pages);
+
+    mockModel(() =>
+      reply([
+        { question: 'What synthesizes proteins?', answer: 'Ribosomes', source: 'Ribosomes synthesize cellular proteins from amino acids.' },
+        { question: 'Where does photosynthesis happen?', answer: 'Chloroplasts', source: 'Photosynthesis occurs within plant chloroplasts.' },
+        ...flashcards(9),
+      ])
+    );
+
+    const { items } = await generateStudyItems(text, 'flashcard', { units });
+    expect(items[0]).toMatchObject({
+      answer: 'Ribosomes',
+      sourceLocation: 'Page 45',
+    });
+    expect(items[1]).toMatchObject({
+      answer: 'Chloroplasts',
+      sourceLocation: 'Page 1',
+    });
+  });
+});
