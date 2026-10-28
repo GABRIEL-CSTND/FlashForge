@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/supabase', () => ({
@@ -17,6 +17,7 @@ const shrink = vi.hoisted(() => ({ to: null as null | File }));
 vi.mock('@/lib/shrink-image', () => ({ shrinkImage: vi.fn(async (file: File) => shrink.to ?? file) }));
 
 import UploadPage from '@/app/page';
+import { encodeEvent, PROGRESS_MIME, type ProgressEvent } from '@/lib/generation-progress';
 
 // What the page sent to /api/generate, as plain fields.
 let sentForms: Record<string, string>[];
@@ -159,5 +160,121 @@ describe('upload page options', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
     expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
     expect(sentForms).toEqual([{ file: 'file:notes.txt', studyType: 'multiple_choice', count: '20' }]);
+  });
+});
+
+describe('progress while generating', () => {
+  const encoder = new TextEncoder();
+  const currentStep = () => document.querySelector('[aria-current="step"]')?.textContent ?? null;
+  const RESULT: ProgressEvent = {
+    type: 'result',
+    status: 200,
+    body: {
+      title: 'notes',
+      sourceFilename: 'notes.txt',
+      studyType: 'flashcard',
+      items: [{ question: 'Fluid inside the chloroplast', answer: 'Stroma' }],
+    },
+  };
+
+  // A server whose steps the test sends one at a time.
+  function serverYouControl() {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c;
+      },
+    });
+    const fetchMock = vi.fn(async () => new Response(stream, { status: 200, headers: { 'Content-Type': PROGRESS_MIME } }));
+    vi.stubGlobal('fetch', fetchMock);
+    return {
+      fetchMock,
+      send: (event: ProgressEvent) => controller.enqueue(encoder.encode(encodeEvent(event))),
+      end: () => controller.close(),
+    };
+  }
+
+  it('shows each step as the server reaches it, then the study guide', async () => {
+    const server = serverYouControl();
+    render(<UploadPage />);
+    chooseFile();
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+
+    // Nothing from the server yet: the upload is the step under way.
+    await waitFor(() => expect(currentStep()).toBe('Uploading your file'));
+    expect(screen.getByText('Reading your file')).toBeTruthy();
+
+    server.send({ type: 'step', step: 'reading' });
+    await waitFor(() => expect(currentStep()).toBe('Reading your file'));
+
+    server.send({ type: 'step', step: 'writing' });
+    await waitFor(() => expect(currentStep()).toBe('Writing your study guide with AI'));
+    expect(screen.getByText('Working for 0s')).toBeTruthy();
+
+    server.send({ type: 'step', step: 'writing', attempt: 2 });
+    expect(await screen.findByText("That try didn't work out, so we're trying again (try 2).")).toBeTruthy();
+    // The server's real news replaces the time-based guess.
+    expect(screen.queryByText(/extra busy right now/)).toBeNull();
+
+    server.send(RESULT);
+    server.end();
+    expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
+    expect(screen.queryByRole('list', { name: 'Progress' })).toBeNull();
+  });
+
+  it('asks the server for progress', async () => {
+    const server = serverYouControl();
+    render(<UploadPage />);
+    chooseFile();
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    await waitFor(() => expect(server.fetchMock).toHaveBeenCalled());
+    const init = (server.fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect((init.headers as Record<string, string>).Accept).toBe(PROGRESS_MIME);
+    server.send(RESULT);
+    server.end();
+    await screen.findByText('Fluid inside the chloroplast');
+  });
+
+  it('shows what went wrong, and clears the steps, when the server fails', async () => {
+    const server = serverYouControl();
+    render(<UploadPage />);
+    chooseFile();
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    server.send({ type: 'step', step: 'reading' });
+    server.send({ type: 'result', status: 503, body: { error: 'The AI is busy right now. Please try again.' } });
+    server.end();
+    expect(await screen.findByText('The AI is busy right now. Please try again.')).toBeTruthy();
+    expect(screen.queryByRole('list', { name: 'Progress' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Generate Study Guide' })).toBeTruthy();
+  });
+
+  it('tells the user when the connection drops mid-way', async () => {
+    const server = serverYouControl();
+    render(<UploadPage />);
+    chooseFile();
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    server.send({ type: 'step', step: 'writing' });
+    server.end();
+    expect(await screen.findByText(/connection was interrupted/)).toBeTruthy();
+    expect(screen.queryByRole('list', { name: 'Progress' })).toBeNull();
+  });
+
+  it('starts from the first step again on the next try', async () => {
+    const first = serverYouControl();
+    render(<UploadPage />);
+    chooseFile();
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    first.send({ type: 'step', step: 'writing' });
+    await waitFor(() => expect(currentStep()).toBe('Writing your study guide with AI'));
+    first.send({ type: 'result', status: 503, body: { error: 'The AI is busy right now. Please try again.' } });
+    first.end();
+    await screen.findByText('The AI is busy right now. Please try again.');
+
+    const second = serverYouControl();
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    await waitFor(() => expect(currentStep()).toBe('Uploading your file'));
+    second.send(RESULT);
+    second.end();
+    await screen.findByText('Fluid inside the chloroplast');
   });
 });

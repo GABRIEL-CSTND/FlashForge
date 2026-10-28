@@ -47,6 +47,13 @@ already applied there.
   showing (question and choices, the answer once flipped or answered, the clues in
   matching), and **Auto** reads each card as it appears. Uses the browser's built-in voice,
   so it's free and needs no AI; it's hidden where a browser can't speak.
+- **Progress while a study guide is being made:** the upload page now shows each step of
+  the wait: uploading, reading, then writing with the AI, with what's done, what's under
+  way and a seconds counter, so the wait feels shorter and it's clear the app hasn't
+  frozen. If the AI needs another try, or a slower backup takes over, it says so under the
+  writing step. The steps are real: the server reports each stage as it starts (as a
+  stream of one JSON event per line, only when the page asks for it), and answers exactly
+  as before otherwise, so the daily limits, errors and the usage log are unchanged.
 - **Web links** (#74): paste a link to an article or other public page, and the server
   fetches it and keeps its main text (no menus, ads or footers). Pages that need signing in
   get a clear message. With this, all of more file types (#20) is done.

@@ -9,6 +9,8 @@ import StudyViewer, { StudyItem } from '@/components/StudyViewer';
 import { useProfile } from '@/components/ProfileProvider';
 import { canUseTeacherTools } from '@/lib/role-types';
 import { generateErrorText } from '@/lib/generation-limits';
+import GenerationProgress from '@/components/GenerationProgress';
+import { nextProgress, PROGRESS_MIME, readGeneration, START_PROGRESS, type ProgressState } from '@/lib/generation-progress';
 import {
   DEFAULT_QUESTION_COUNT,
   QUESTION_COUNTS,
@@ -63,6 +65,7 @@ export default function UploadPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'needs-auth'>('idle');
   const [resumeAfterAuth, setResumeAfterAuth] = useState(false);
   const [slowGeneration, setSlowGeneration] = useState(false);
+  const [progress, setProgress] = useState<ProgressState>(START_PROGRESS);
 
   // Restore a generated-but-unsaved result after a Google sign-in redirect,
   // since the OAuth flow does a full page reload and would otherwise lose it.
@@ -132,6 +135,7 @@ export default function UploadPage() {
       return;
     }
     setStatus('generating');
+    setProgress(START_PROGRESS);
     setErrorMsg('');
 
     const formData = new FormData();
@@ -145,17 +149,20 @@ export default function UploadPage() {
     // backup model is answering, so tell the user it can take up to a minute.
     // Photos (#72) take longer to read anyway.
     const slowTimer = setTimeout(() => setSlowGeneration(true), slowNoticeMs(count) + (sendingPhoto ? 15_000 : 0));
-    let res: Response;
+    let outcome: { status: number; body: Record<string, unknown> };
     try {
       // When signed in, send the session token so the usage log (#62) knows who
       // generated it. Generating still works signed out.
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
-      res = await fetch('/api/generate', {
+      const res = await fetch('/api/generate', {
         method: 'POST',
         body: formData,
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        // Asking for progress: the server then reports each step as it starts.
+        headers: { Accept: PROGRESS_MIME, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
+      // The answer arrives step by step, so this keeps going until the guide is ready.
+      outcome = await readGeneration(res, (step) => setProgress((p) => nextProgress(p, step)));
     } catch {
       setErrorMsg('Could not reach the server. Check your connection and try again.');
       setStatus('error');
@@ -164,15 +171,14 @@ export default function UploadPage() {
       clearTimeout(slowTimer);
       setSlowGeneration(false);
     }
-    const body = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      setErrorMsg(generateErrorText(res.status, body));
+    if (outcome.status < 200 || outcome.status >= 300) {
+      setErrorMsg(generateErrorText(outcome.status, outcome.body));
       setStatus('error');
       return;
     }
 
-    setResult(body);
+    setResult(outcome.body as unknown as GeneratedResult);
     setStatus('idle');
   };
 
@@ -471,7 +477,9 @@ export default function UploadPage() {
           {(status === 'idle' || status === 'error') && 'Generate Study Guide'}
         </button>
 
-        {status === 'generating' && slowGeneration && (
+        {status === 'generating' && <GenerationProgress progress={progress} source={source} photo={sendingPhoto} />}
+
+        {status === 'generating' && slowGeneration && progress.attempt <= 1 && (
           <p className="text-sm text-gray-500 text-center">
             Our AI is extra busy right now, so we&apos;re using a slower backup. This can take up
             to a minute.
