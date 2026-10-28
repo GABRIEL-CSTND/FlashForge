@@ -1,6 +1,6 @@
 import { CARD_LIMITS, normalizeChoice, toTrueFalse, TRUE_FALSE_OPTIONS } from '@/lib/card-rules';
 import { MAX_SOURCE_CHARS } from '@/lib/sources';
-import { createSourceChecker, type SourceUnits } from '@/lib/source-quotes';
+import { createSourceChecker, sampleText, type SourceUnits } from '@/lib/source-quotes';
 import {
   DEFAULT_DIFFICULTY,
   DEFAULT_QUESTION_COUNT,
@@ -546,6 +546,10 @@ export async function generateStudyItems(
     .filter(Boolean)
     .map((line) => `\n${line}`)
     .join('');
+  // Text that comes with its pages or lines was sampled along with them (pageUnits,
+  // lineUnits), so the AI reads exactly what the quote check searches; other long
+  // text is sampled here (#38).
+  const sampledText = units ? sourceText.slice(0, MAX_SOURCE_CHARS) : sampleText(sourceText, MAX_SOURCE_CHARS);
   const prompt = attachment
     ? `You are creating a study guide from the attached ${
         material === 'document' ? 'document (scanned pages)' : 'photo (of notes, a whiteboard, or a page)'
@@ -556,11 +560,12 @@ If the ${material} has no readable study material, return an empty array [].`
     : `You are creating a study guide from the text below.
 Produce exactly ${requestedCount(studyType, count)} items. ${instructionsFor(studyType, count)}${extra}
 ${SOURCE_INSTRUCTION}
+Spread questions across the entire text, covering the beginning, middle, and end.
 Base everything strictly on the provided text. Avoid trivial or overly broad questions.
 
 TEXT:
 """
-${sourceText.slice(0, MAX_SOURCE_CHARS)}
+${sampledText}
 """`;
   const attachmentParts = attachment ? [{ inlineData: { mimeType: attachment.mimeType, data: attachment.data } }] : [];
   // Quotes are only asked for with text; a photo or scanned PDF has none to check.
@@ -616,7 +621,7 @@ ${sourceText.slice(0, MAX_SOURCE_CHARS)}
         // Each card's quote is checked against the real text, so one is only shown
         // when it is really in the document. A photo has no text to check against,
         // so its cards never carry one. The card itself always stays.
-        const checker = withSource ? createSourceChecker(sourceText, MAX_SOURCE_CHARS, units) : undefined;
+        const checker = withSource ? createSourceChecker(sampledText, MAX_SOURCE_CHARS, units) : undefined;
         const items = valid.map((item) =>
           checker ? checker.check(item) : { ...item, source: undefined, sourceLocation: undefined }
         );
