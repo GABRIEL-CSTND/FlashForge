@@ -316,6 +316,34 @@ screen instead of shortening with "…".
 - Fewer than **60%** of the chosen count (6 of 10) valid items counts as a failed
   attempt, so the next model is tried.
 
+### Quotes under cards (#21)
+
+- **Asked for with text:** for a text source, the prompt (`SOURCE_INSTRUCTION` in
+  `lib/gemini.ts`) and the response schema ask every item for a `source`: the one
+  sentence of the text it's based on, copied word for word. Photos and scanned PDFs
+  aren't asked, as there's no text to check a sentence against.
+- **Checked against the text** (`createSourceChecker()` in `lib/source-quotes.ts`),
+  ignoring case, punctuation, dashes, quote marks, line breaks and ligatures, and only
+  ever matching whole words. A quote found whole is kept. Otherwise the words the text
+  has must make up 80% of it, in at most 4 runs, and only the longest run is kept (20+
+  characters and at least half the quote): runs from different sentences are never
+  joined, because together they can say what the document doesn't ("The mitochondria
+  is the organelle that" + "stores" + "DNA"). Anything else is dropped; the card always
+  stays. The server log counts quotes kept whole, kept in part and dropped, never their
+  text.
+- **Where it is:** the PDF page, or the line of a text file or pasted notes, that the
+  quote starts on (`pageUnits()`, `lineUnits()`), with real page numbers when a long
+  document was sampled (#38). Word, PowerPoint, web pages and topics get no place.
+- **Shown after answering**, under the card, so it doesn't give the answer away, with a
+  label from the guide's source (`quoteSourceLabel()` in `lib/sources.ts`): *From the
+  document*, *From the notes*, *From the web page* or *From Wikipedia*. Never "your", as
+  whoever studies the set may not be the one who made it.
+- **Saved** in `flashcards.source_excerpt` (up to 600 characters) and `source_location`
+  (up to 40) by `/api/save-set`, which pairs each card with its item by position.
+  **When the owner edits cards**, `replace_set_cards()` clears the quote of a card whose
+  question or answer changes, as the sentence may no longer back it; a card that only
+  moves, or gets new wrong choices, keeps it.
+
 ### Editing a saved study set (#55)
 
 - The set's owner sees **✏️ Edit cards** on `/sets/[id]`. `components/CardEditor.tsx`
@@ -692,7 +720,7 @@ The plan for teacher and admin features is tracked in #50.
 | Table | Columns | Notes |
 |---|---|---|
 | `flashcard_sets` | `id`, `user_id` → `auth.users`, `title`, `source_filename`, `study_type`, `created_at` | `user_id` is null for legacy sets made before sign-in was required |
-| `flashcards` | `id`, `set_id` → `flashcard_sets` (cascade), `question`, `answer`, `options` (jsonb: 4 choices for multiple choice, `["True","False"]` for true or false, null for flashcards and identification; in a mixed quiz this is what tells the parts apart), `explanation` (1–300 chars, true or false only, #68), `position` | Indexed on `set_id`. Ids stay the same when a card is edited (#55) |
+| `flashcards` | `id`, `set_id` → `flashcard_sets` (cascade), `question`, `answer`, `options` (jsonb: 4 choices for multiple choice, `["True","False"]` for true or false, null for flashcards and identification; in a mixed quiz this is what tells the parts apart), `explanation` (1–300 chars, true or false only, #68), `source_excerpt` and `source_location` (the quote a card was made from and its page or line, #21), `position` | Indexed on `set_id`. Ids stay the same when a card is edited (#55); a card's quote is cleared when its question or answer changes |
 | `profiles` | `id` → `auth.users` (cascade), `display_name`, `role`, `role_chosen_at`, `created_at` | `role_chosen_at` is for the sign-up role choice (#52) |
 | `classes` | `id`, `teacher_id` → `auth.users` (cascade), `name` (1–80 chars), `join_code` (unique), `created_at` | Indexed on `teacher_id` |
 | `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
@@ -795,9 +823,10 @@ transaction. Run them after every database change.
   not private study, and stops seeing them when the student leaves or the set is
   unassigned; plus the score and mode constraints (only flashcard sets can be typed or
   matched) and the cascade when a set is deleted.
-- `supabase/tests/sets-editing-check.sql`: `replace_set_cards()` (12 cases), covering a
+- `supabase/tests/sets-editing-check.sql`: `replace_set_cards()` (13 cases), covering a
   real edit, kept ids, each kind of refused save, that a refused save changes nothing,
-  and that browsers can't call it.
+  that browsers can't call it, and that a rewritten card loses its quote while a moved
+  one keeps it (#21).
 - `supabase/tests/study-types-check.sql` (13 cases, #68, #69): `true_false` and `mixed`
   sets, attempts and generation logs are accepted and unknown study types refused; a true-or-false
   attempt can't have a flashcard mode; explanations must be 1–300 characters; and

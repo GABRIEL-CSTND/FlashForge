@@ -534,7 +534,7 @@ describe('read aloud (#77)', () => {
 });
 
 describe('where a card came from', () => {
-  const FROM = /From your document/;
+  const FROM = /From the document/;
   const SOURCED_FLASH = [
     { id: 'f1', question: 'Fluid inside the chloroplast', answer: 'Stroma', source: 'The stroma is the fluid inside the chloroplast.', sourceLocation: 'Page 4' },
     { id: 'f2', question: 'Enzyme that fixes CO2', answer: 'RuBisCO' },
@@ -551,8 +551,14 @@ describe('where a card came from', () => {
     expect(screen.queryByText(/The stroma is the fluid/)).toBeNull();
 
     flip();
-    expect(screen.getByText('From your document · Page 4')).toBeTruthy();
+    expect(screen.getByText('From the document · Page 4')).toBeTruthy();
     expect(screen.getByText(/The stroma is the fluid inside the chloroplast\./)).toBeTruthy();
+  });
+
+  it('says where the quote is from when the page knows, e.g. a Wikipedia article', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={SOURCED_FLASH} quoteLabel="From Wikipedia" />);
+    flip();
+    expect(screen.getByText('From Wikipedia · Page 4')).toBeTruthy();
   });
 
   it('shows nothing for a card that has no quote', () => {
@@ -573,7 +579,7 @@ describe('where a card came from', () => {
       />
     );
     flip();
-    expect(screen.getByText('From your document')).toBeTruthy();
+    expect(screen.getByText('From the document')).toBeTruthy();
     expect(screen.getByText(/Chlorophyll is the pigment that absorbs light\./)).toBeTruthy();
   });
 
@@ -581,7 +587,7 @@ describe('where a card came from', () => {
     render(<StudyViewer title="Networking" studyType="multiple_choice" cards={SOURCED_MC} />);
     expect(screen.queryByText(FROM)).toBeNull();
     click('Physical');
-    expect(screen.getByText('From your document · Page 2')).toBeTruthy();
+    expect(screen.getByText('From the document · Page 2')).toBeTruthy();
     expect(screen.getByText(/Layer 3 is the network layer\./)).toBeTruthy();
   });
 
@@ -591,7 +597,7 @@ describe('where a card came from', () => {
     expect(screen.queryByText(FROM)).toBeNull();
     fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: 'Stroma' } });
     click('Check');
-    expect(screen.getByText('From your document · Page 4')).toBeTruthy();
+    expect(screen.getByText('From the document · Page 4')).toBeTruthy();
   });
 
   it('shows the quote for each clue once a matching round is checked', () => {
@@ -617,7 +623,7 @@ describe('where a card came from', () => {
     expect(screen.queryByText(FROM)).toBeNull();
 
     click('Check answers');
-    expect(screen.getByText('From your document · Page 4')).toBeTruthy();
+    expect(screen.getByText('From the document · Page 4')).toBeTruthy();
     expect(screen.getByText(/The stroma is the fluid inside the chloroplast\./)).toBeTruthy();
     expect(screen.getByText(/Chlorophyll is the pigment that absorbs light\./)).toBeTruthy();
     // The clue with no quote adds nothing: two of the three have one.

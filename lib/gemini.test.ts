@@ -353,17 +353,17 @@ describe('where a card came from', () => {
     expect(items[0].sourceLocation).toBeUndefined();
   });
 
-  it('keeps the real pieces of a table row the PDF text keeps apart', async () => {
+  it('keeps the longest real part of a table row the PDF text keeps apart', async () => {
     const { text, units } = pageUnits([
       'down away from bad difficult painful de dys dehydrate to remove water dysphagia difficulty swallowing',
     ]);
     mockModel(() => reply(cardsWith([quoted(1, 'Down, away from de- Dehydrate (to remove water)')])));
     const { items } = await generateStudyItems(text, 'flashcard', { units });
-    expect(items[0].source).toBe('Down, away from … de- … Dehydrate (to remove water)');
+    expect(items[0].source).toBe('Dehydrate (to remove water)');
     expect(items[0].sourceLocation).toBe('Page 1');
   });
 
-  it('works for multiple choice and true or false too', async () => {
+  it('works for multiple choice too', async () => {
     const { text, units } = lineUnits(notes);
     const choice = (source: string) => ({
       question: 'Which organelle makes most of the cell energy?',
@@ -374,6 +374,41 @@ describe('where a card came from', () => {
     mockModel(() => reply(Array.from({ length: 12 }, (_, i) => ({ ...choice('The mitochondria is the organelle that produces most of the cell energy as ATP.'), question: `Which organelle makes energy, version ${i}?` }))));
     const { items } = await generateStudyItems(text, 'multiple_choice', { units });
     expect(items[0]).toMatchObject({ sourceLocation: 'Line 2' });
+  });
+
+  it('works for true or false, where the quote is the true fact', async () => {
+    const { text, units } = lineUnits(notes);
+    const statement = (i: number, answer: string, source: string) => ({ question: `Statement ${i} about cells.`, answer, explanation: answer === 'False' ? 'The corrected fact.' : '', source });
+    mockModel(() =>
+      reply([
+        statement(1, 'False', 'The mitochondria is the organelle that produces most of the cell energy as ATP.'),
+        statement(2, 'True', 'Ribosomes assemble proteins by translating messenger RNA.'),
+        ...Array.from({ length: 9 }, (_, i) => statement(i + 3, 'True', 'A sentence the notes never say anywhere.')),
+      ])
+    );
+    const { items } = await generateStudyItems(text, 'true_false', { units });
+    const byQuestion = Object.fromEntries(items.map((i) => [i.question, i]));
+    expect(byQuestion['Statement 1 about cells.']).toMatchObject({ answer: 'False', sourceLocation: 'Line 2' });
+    expect(byQuestion['Statement 2 about cells.']).toMatchObject({ answer: 'True', sourceLocation: 'Line 3' });
+    expect(byQuestion['Statement 3 about cells.'].source).toBeUndefined();
+  });
+
+  it('works for each part of a mixed quiz', async () => {
+    const { text, units } = lineUnits(notes);
+    const atp = 'The mitochondria is the organelle that produces most of the cell energy as ATP.';
+    const rna = 'Ribosomes assemble proteins by translating messenger RNA.';
+    mockModel(() =>
+      reply([
+        ...[1, 2, 3, 4, 5].map((i) => ({ type: 'multiple_choice', question: `Clue for choice ${i}`, options: [`Right ${i}`, 'Wrong A', 'Wrong B', 'Wrong C'], answer: `Right ${i}`, source: atp })),
+        ...[1, 2, 3, 4].map((i) => ({ type: 'true_false', question: `Statement ${i} about cells.`, answer: 'True', explanation: '', source: rna })),
+        ...[1, 2, 3, 4].map((i) => ({ type: 'identification', question: `Clue for term ${i}`, answer: `Term ${i}`, source: atp })),
+      ])
+    );
+    const { items } = await generateStudyItems(text, 'mixed', { units });
+    expect(items).toHaveLength(10);
+    for (const item of items) {
+      expect(item.sourceLocation).toBe(item.question.startsWith('Statement') ? 'Line 3' : 'Line 2');
+    }
   });
 
   it('does not ask for a quote from a photo, and never returns one', async () => {
@@ -415,6 +450,13 @@ describe('whole document coverage (#38)', () => {
     mockModel(() => reply(flashcards(11)));
     await generateStudyItems('Notes about biology.', 'flashcard');
     expect(sent[0].prompt).toContain('Spread questions across the entire text, covering the beginning, middle, and end.');
+  });
+
+  it('leaves that out for a typed topic, whose guide stays on the topic (#79)', async () => {
+    mockModel(() => reply(flashcards(11)));
+    await generateStudyItems('A Wikipedia article.', 'flashcard', { focus: 'photosynthesis' });
+    expect(sent[0].prompt).toContain('Focus on what the text says about “photosynthesis”.');
+    expect(sent[0].prompt).not.toContain('Spread questions');
   });
 
   it('samples a 40+ page PDF and preserves quotes from the beginning and end (#38)', async () => {

@@ -550,6 +550,9 @@ export async function generateStudyItems(
   // lineUnits), so the AI reads exactly what the quote check searches; other long
   // text is sampled here (#38).
   const sampledText = units ? sourceText.slice(0, MAX_SOURCE_CHARS) : sampleText(sourceText, MAX_SOURCE_CHARS);
+  // Questions from the whole text (#38), except for a typed topic, whose guide
+  // should stay on the topic rather than cover its whole article (#79).
+  const coverage = focusText ? '' : '\nSpread questions across the entire text, covering the beginning, middle, and end.';
   const prompt = attachment
     ? `You are creating a study guide from the attached ${
         material === 'document' ? 'document (scanned pages)' : 'photo (of notes, a whiteboard, or a page)'
@@ -559,8 +562,7 @@ Base everything strictly on what the ${material} shows. Avoid trivial or overly 
 If the ${material} has no readable study material, return an empty array [].`
     : `You are creating a study guide from the text below.
 Produce exactly ${requestedCount(studyType, count)} items. ${instructionsFor(studyType, count)}${extra}
-${SOURCE_INSTRUCTION}
-Spread questions across the entire text, covering the beginning, middle, and end.
+${SOURCE_INSTRUCTION}${coverage}
 Base everything strictly on the provided text. Avoid trivial or overly broad questions.
 
 TEXT:

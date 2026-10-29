@@ -6,6 +6,7 @@ import {
   linkProblem,
   MAX_SOURCE_CHARS,
   pastedTextProblem,
+  quoteSourceLabel,
   titleFromText,
   topicProblem,
 } from '@/lib/sources';
@@ -89,5 +90,14 @@ describe('topicProblem (#79)', () => {
     expect(topicProblem('AI')).toBeNull();
     expect(topicProblem(' x ')).toBe('Type a topic, like “Photosynthesis”.');
     expect(topicProblem('x'.repeat(101))).toBe('Keep the topic under 100 characters.');
+  });
+});
+
+describe('quoteSourceLabel (#80)', () => {
+  it("names where a quote is from, by the guide's source", () => {
+    expect(quoteSourceLabel('Chapter 2.pdf')).toBe('From the document');
+    expect(quoteSourceLabel('https://en.wikipedia.org/wiki/Photosynthesis')).toBe('From Wikipedia');
+    expect(quoteSourceLabel('https://example.org/notes')).toBe('From the web page');
+    expect(quoteSourceLabel(null)).toBe('From the notes');
   });
 });

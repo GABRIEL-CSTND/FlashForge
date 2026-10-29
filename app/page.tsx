@@ -35,6 +35,7 @@ import {
   MAX_SOURCE_CHARS,
   MAX_TOPIC_CHARS,
   pastedTextProblem,
+  quoteSourceLabel,
   SOURCE_KINDS,
   SOURCE_LABELS,
   topicProblem,
@@ -315,6 +316,7 @@ export default function UploadPage() {
         cards={result.items}
         onExit={handleExit}
         saveSlot={saveSlot}
+        quoteLabel={quoteSourceLabel(result.sourceFilename)}
       />
     );
   }

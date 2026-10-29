@@ -12,6 +12,7 @@ import AssignPanel from '@/components/AssignPanel';
 import { useProfile } from '@/components/ProfileProvider';
 import { canUseTeacherTools } from '@/lib/role-types';
 import type { FlashcardMode, StudyMode, StudyType } from '@/lib/study-types';
+import { quoteSourceLabel } from '@/lib/sources';
 
 interface FlashcardSet {
   id: string;
@@ -185,16 +186,17 @@ export default function SetPage() {
         const cardIndex = typeof res.data.cardIndex === 'number' ? res.data.cardIndex : null;
         return { ok: false, error: errorMessage(res.data), cardIndex };
       }
-      // The reply has the cards' text but not where each came from, and an edit
-      // doesn't change that, so carry it over by card id.
+      // The reply has the cards' text but not where each came from, so carry that
+      // over by card id, for cards whose question and answer are unchanged: the
+      // database drops the quote of a rewritten card (replace_set_cards).
       const saved = res.data.cards as Flashcard[];
       setCards((before) => {
         const old = new Map(before.map((c) => [c.id, c]));
-        return saved.map((c) => ({
-          ...c,
-          source: old.get(c.id)?.source ?? null,
-          sourceLocation: old.get(c.id)?.sourceLocation ?? null,
-        }));
+        return saved.map((c) => {
+          const was = old.get(c.id);
+          const same = was !== undefined && was.question === c.question && was.answer === c.answer;
+          return { ...c, source: same ? was.source ?? null : null, sourceLocation: same ? was.sourceLocation ?? null : null };
+        });
       });
       setEditingCards(false);
       setViewerVersion((v) => v + 1);
@@ -373,6 +375,7 @@ export default function SetPage() {
       saveSlot={deleteSlot}
       onComplete={recordAttempt}
       completionSlot={completionSlot}
+      quoteLabel={quoteSourceLabel(set.source_filename)}
     />
     {isOwner && assigning && (
       <AssignPanel setId={set.id} setTitle={set.title} onClose={() => setAssigning(false)} />

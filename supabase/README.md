@@ -34,6 +34,8 @@ soon as it's applied.
 | `20261024000200_matching_mode.sql` | #67 | 2026-10-24 |
 | `20261024000300_true_false.sql` | #68 | 2026-10-24 |
 | `20261024000400_mixed_quiz.sql` | #69 | 2026-10-24 |
+| `20261025000100_source_quotes.sql` | #21 | The columns were added by hand while PR #80 was tested; the file records them |
+| `20261029000100_clear_edited_quotes.sql` | #21 | Not yet. Until then a rewritten card keeps its old quote in the database |
 
 Add a row here whenever you apply a new migration.
 

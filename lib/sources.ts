@@ -35,7 +35,24 @@ export function linkProblem(input: string): string | null {
   return 'Paste a full link, starting with https://';
 }
 
-// How much of the material the AI reads (#38 tracks covering longer documents).
+// What the quote under a card (#80) says it's from, going by the guide's source:
+// `sourceFilename` is the file's name, the web page's or Wikipedia article's link,
+// or null for pasted notes. Never "your": the viewer may not be the one who made it.
+export function quoteSourceLabel(sourceFilename: string | null | undefined): string {
+  if (!sourceFilename) return 'From the notes';
+  try {
+    const url = new URL(sourceFilename);
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      return /(^|\.)wikipedia\.org$/.test(url.hostname) ? 'From Wikipedia' : 'From the web page';
+    }
+  } catch {
+    // a file name, not a link
+  }
+  return 'From the document';
+}
+
+// How much of the material the AI reads; longer documents are sampled to fit
+// (#38, lib/source-quotes.ts).
 export const MAX_SOURCE_CHARS = 30_000;
 // Less than this isn't enough to write questions from.
 export const MIN_SOURCE_CHARS = 20;

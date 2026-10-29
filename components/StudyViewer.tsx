@@ -66,6 +66,9 @@ interface StudyViewerProps {
   // Shown on the finish screen, e.g. "Saved to your scores" and past scores.
   completionSlot?: React.ReactNode;
   saveSlot?: React.ReactNode;
+  // What a card's quote says it's from, e.g. "From Wikipedia" (quoteSourceLabel()
+  // in lib/sources.ts).
+  quoteLabel?: string;
 }
 
 // How the student answers a card: flip and mark it, pick an option, type, or
@@ -184,6 +187,7 @@ export default function StudyViewer({
   onComplete,
   completionSlot,
   saveSlot,
+  quoteLabel = 'From the document',
 }: StudyViewerProps) {
   const [mode, setMode] = useState<FlashcardMode>('flip');
   const [index, setIndex] = useState(0);
@@ -490,7 +494,12 @@ export default function StudyViewer({
       {saveSlot}
 
       {interaction === 'choice' && (
-        <ChoiceCard card={card} picked={answer?.chosen} onPick={(opt) => answerCard({ chosen: opt })} />
+        <ChoiceCard
+          card={card}
+          picked={answer?.chosen}
+          onPick={(opt) => answerCard({ chosen: opt })}
+          quoteLabel={quoteLabel}
+        />
       )}
 
       {interaction === 'match' && (
@@ -502,6 +511,7 @@ export default function StudyViewer({
             focusNext.current = true;
             setAnswers((prev) => ({ ...prev, ...picked }));
           }}
+          quoteLabel={quoteLabel}
         />
       )}
 
@@ -514,6 +524,7 @@ export default function StudyViewer({
             focusNext.current = true;
             answerCard(a);
           }}
+          quoteLabel={quoteLabel}
         />
       )}
 
@@ -530,7 +541,7 @@ export default function StudyViewer({
             {!flipped && <p className="text-xs text-gray-400 mt-4">Tap to flip</p>}
           </button>
 
-          {flipped && <SourceNote card={card} />}
+          {flipped && <SourceNote card={card} label={quoteLabel} />}
 
           {flipped && (
             <div className="flex gap-4" role="group" aria-label="Did you know it?">
@@ -578,12 +589,13 @@ function PartLabel({ kind }: { kind: CardKind }) {
 // Where a card comes from in the uploaded file: the sentence it is based on and
 // where that sits, e.g. "Page 3". Only shown once the answer is, so it doesn't
 // give the answer away. A card with no source shows nothing.
-function SourceNote({ card }: { card: StudyItem }) {
+function SourceNote({ card, label }: { card: StudyItem; label: string }) {
   if (!card.source) return null;
   return (
     <div className="border-l-2 border-accent/40 pl-3 text-left">
       <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">
-        From your document{card.sourceLocation ? ` · ${card.sourceLocation}` : ''}
+        {label}
+        {card.sourceLocation ? ` · ${card.sourceLocation}` : ''}
       </p>
       <p className="text-sm text-gray-600 italic">&ldquo;{card.source}&rdquo;</p>
     </div>
@@ -596,10 +608,12 @@ function ChoiceCard({
   card,
   picked,
   onPick,
+  quoteLabel,
 }: {
   card: StudyItem;
   picked: string | undefined;
   onPick: (option: string) => void;
+  quoteLabel: string;
 }) {
   const trueFalse = isTrueFalseOptions(card.options);
   const answered = picked !== undefined;
@@ -633,7 +647,7 @@ function ChoiceCard({
         </p>
       )}
       {answered && card.explanation && <p className="text-center text-sm text-gray-500">{card.explanation}</p>}
-      {answered && <SourceNote card={card} />}
+      {answered && <SourceNote card={card} label={quoteLabel} />}
     </div>
   );
 }
@@ -659,10 +673,12 @@ function MatchingRound({
   cards,
   answers,
   onCheck,
+  quoteLabel,
 }: {
   cards: { card: StudyItem; index: number }[];
   answers: Record<number, CardAnswer>;
   onCheck: (picked: Record<number, CardAnswer>) => void;
+  quoteLabel: string;
 }) {
   const idBase = useId();
   const [terms] = useState(() => shuffledTerms(cards.map((c) => c.card.answer)));
@@ -743,7 +759,7 @@ function MatchingRound({
                       </>
                     )}
                   </p>
-                  <SourceNote card={card} />
+                  <SourceNote card={card} label={quoteLabel} />
                 </>
               )}
             </li>
@@ -765,10 +781,12 @@ function TypedCard({
   card,
   answer,
   onAnswer,
+  quoteLabel,
 }: {
   card: StudyItem;
   answer: CardAnswer | undefined;
   onAnswer: (a: CardAnswer) => void;
+  quoteLabel: string;
 }) {
   const [draft, setDraft] = useState('');
   const answered = answer !== undefined;
@@ -840,7 +858,7 @@ function TypedCard({
           )}
         </p>
       )}
-      {answered && <SourceNote card={card} />}
+      {answered && <SourceNote card={card} label={quoteLabel} />}
     </div>
   );
 }

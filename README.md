@@ -134,6 +134,7 @@ lib/
   card-rules.ts         Card rules shared by the editor and the server (validateCards)
   study-types.ts        Study types, their labels, ways to study flashcards, question count rules (shared)
   sources.ts            Where notes come from (file or pasted text), accepted file types and limits (shared)
+  source-quotes.ts      Checks each card's quote against the notes, finds its page or line, samples long documents
   office-text.ts        Text from Word (.docx) and PowerPoint (.pptx) files, with zip-bomb limits (server-only)
   shrink-image.ts       Shrinks photos to 1,600 pixels before upload (browser-only)
   speech.ts             Reading cards aloud with the browser's built-in speech, and the Auto setting (browser-only)

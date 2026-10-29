@@ -87,6 +87,12 @@ describe('createSourceChecker: whole quotes', () => {
     expect(check({ source: 'hydrated after the long walk' }).source).toBeUndefined();
   });
 
+  it('says the page of the whole-word match, not of a match inside a longer word', () => {
+    const { text, units } = pageUnits(['Depolarization channels open quickly in neurons.', 'Ion channels open quickly in neurons.']);
+    const { check } = createSourceChecker(text, MAX, units);
+    expect(check({ source: 'Ion channels open quickly in neurons.' }).sourceLocation).toBe('Page 2');
+  });
+
   it('only counts the part of the text the AI was given', () => {
     const { check } = createSourceChecker('Early facts about cells. Late facts about tissues.', 24);
     expect(check({ source: 'Early facts about cells.' }).source).toBeDefined();
@@ -126,16 +132,10 @@ describe('createSourceChecker: table rows kept in pieces', () => {
   const { text, units } = pageUnits([doc]);
 
   it.each([
-    ['Down, away from de- Dehydrate (to remove water)', 'Down, away from … de- … Dehydrate (to remove water)'],
-    [
-      'Bad, difficult, painful dys- Dysphagia (difficulty swallowing)',
-      'Bad, difficult, painful … dys- … Dysphagia (difficulty swallowing)',
-    ],
-    [
-      'dys- Bad, difficult, painful Dysphagia (difficulty swallowing)',
-      'dys- … Bad, difficult, painful … Dysphagia (difficulty swallowing)',
-    ],
-  ])('shows the real pieces of "%s"', (quote, expected) => {
+    ['Down, away from de- Dehydrate (to remove water)', 'Dehydrate (to remove water)'],
+    ['Bad, difficult, painful dys- Dysphagia (difficulty swallowing)', 'Dysphagia (difficulty swallowing)'],
+    ['dys- Bad, difficult, painful Dysphagia (difficulty swallowing)', 'Dysphagia (difficulty swallowing)'],
+  ])('keeps the longest real part of "%s"', (quote, expected) => {
     const { check, stats } = createSourceChecker(text, MAX, units);
     const out = check({ source: quote });
     expect(out.source).toBe(expected);
@@ -164,6 +164,19 @@ describe('createSourceChecker: table rows kept in pieces', () => {
     const { check } = createSourceChecker(text, MAX, units);
     // The same four prefixes in an order the document doesn't have them in.
     expect(check({ source: 'de- chlor- dys- cyano-' }).source).toBeUndefined();
+  });
+
+  it('never joins parts of different sentences into something the document does not say', () => {
+    const cells = pageUnits([
+      'The mitochondria is the organelle that produces most of the cell energy as ATP.',
+      'The nucleus stores the genetic material of the cell as DNA.',
+    ]);
+    const { check } = createSourceChecker(cells.text, MAX, cells.units);
+    // A false statement made of real words: only its real beginning is kept.
+    expect(check({ source: 'The mitochondria is the organelle that stores DNA.' })).toEqual({
+      source: 'The mitochondria is the organelle that',
+      sourceLocation: 'Page 1',
+    });
   });
 
   it('counts whole, rebuilt and removed quotes', () => {
@@ -332,5 +345,11 @@ describe('long text files and long pages (#38)', () => {
     expect(text.length).toBe(1_000);
     expect(units.texts).toEqual([text]);
     expect(units.numbers).toEqual([1]);
+  });
+
+  it('keeps as many pages as fit, even when a count in between does not', () => {
+    // Every third page is huge, so 3 evenly spread pages don't fit but 4 do.
+    const pages = [1_000, 1_000, 29_000, 1_000, 1_000].map((n, i) => `Page ${i + 1}. `.padEnd(n, '.'));
+    expect(samplePages(pages, 30_000).units.numbers).toEqual([1, 2, 4, 5]);
   });
 });

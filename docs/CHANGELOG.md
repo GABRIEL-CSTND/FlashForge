@@ -50,6 +50,11 @@ already applied there.
   something was left out, the AI sees a "part of the document left out" line, so a
   sentence cut off at the end of one page isn't read as going on in a later one, and no
   quote is accepted across that gap.
+- **Quotes under cards** (#21): once a card is answered, it shows the sentence of the notes it
+  was made from, and the page of a PDF or the line of a text file or pasted notes ("From
+  the document · Page 3"). The AI is asked for the sentence, and the app only shows it if
+  it's really in the notes. Saved with the set. Not for photos or scanned PDFs, which have
+  no text to check against.
 - **Topics and difficulty** (#79): with no notes, students can type a topic ("photosynthesis",
   "the OSI model"); the app looks it up on Wikipedia, makes the guide from the best
   article (skipping "may refer to" pages) and credits it with a link. While it works,
@@ -205,7 +210,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 709 tests):
+- **Automated tests** (`npm test`, 719 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),
@@ -249,6 +254,22 @@ already applied there.
 - New README, plus `docs/ARCHITECTURE.md` and this changelog (#47).
 
 ### Fixed
+- **Quotes under cards** (#21), from the review of PR #80:
+  - A quote that isn't in the notes word for word is cut down to its longest real part.
+    It used to be stitched together from pieces found anywhere in the notes, so a false
+    statement could show as a "quote" ("The mitochondria is the organelle that … stores
+    … DNA."). Pieces are never joined now.
+  - The page or line is found by whole words, so a sentence on page 2 isn't reported as
+    page 1 because a longer word there contains it.
+  - The label says where the guide came from (*From the document*, *From the notes*,
+    *From the web page* or *From Wikipedia*) instead of "From your document", which was
+    wrong for links, topics and other people's sets.
+  - Rewriting a card's question or answer drops its quote, which may no longer back it
+    (`replace_set_cards()`, migration `20261029000100_clear_edited_quotes.sql`).
+- **Whole long documents** (#38), from the review of PR #81: the pages kept were
+  sometimes fewer than would fit (a binary search that assumed more pages always take
+  more room); every count is tried now. A typed topic's guide is no longer told to cover
+  the whole article, so it stays on the topic.
 - On phones, a teacher's class page could be wider than the screen when a set had a
   long title, cutting off the Rename, Unassign and Remove buttons. Long titles now
   shorten with "…" instead.

@@ -131,7 +131,7 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
     let source: { name: string; url: string } | null = null;
     // A typed topic: what the guide should focus on in its article.
     let focus: string | undefined;
-    // Where each page or line of 	ext is, for saying where a card's quote is from.
+    // Where each page or line of text is, for saying where a card's quote is from.
     let units: SourceUnits | undefined;
     if (pasted !== null) {
       const problem = pastedTextProblem(pasted);

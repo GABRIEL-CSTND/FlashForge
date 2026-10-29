@@ -78,6 +78,19 @@ begin
   ));
   select jsonb_array_length(options) || ':' || answer into got from public.flashcards where set_id = sm;
   insert into results values (10, 'multiple choice keeps its 4 choices', '4:Network', got);
+
+  -- Quotes (#80): SA is now c3, c1 (edited above) and a new card. c1 only moves,
+  -- c3 gets a new question, and the new card is left out.
+  update public.flashcards set source_excerpt = 'The sentence for Q1.', source_location = 'Page 1' where id = c1;
+  update public.flashcards set source_excerpt = 'The sentence for Q3.', source_location = 'Page 3' where id = c3;
+  perform * from public.replace_set_cards(sa, a, jsonb_build_array(
+    jsonb_build_object('id', c1, 'question', 'Q1 edited', 'answer', 'A1 edited'),
+    jsonb_build_object('id', c3, 'question', 'Q3 rewritten', 'answer', 'A3')
+  ));
+  select string_agg(f.question || '=' || coalesce(f.source_excerpt, '-') || '/' || coalesce(f.source_location, '-'), ', ' order by f.position)
+    into got from public.flashcards f where f.set_id = sa;
+  insert into results values (13, 'quotes: a moved card keeps its quote, a rewritten one loses it',
+    'Q1 edited=The sentence for Q1./Page 1, Q3 rewritten=-/-', got);
   reset role;
 
   perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated')::text, true);

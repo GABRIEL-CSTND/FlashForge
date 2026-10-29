@@ -275,35 +275,63 @@ describe('where a saved card came from', () => {
     ];
     render(<SetPage />);
     await flipCard();
-    expect(screen.getByText('From your document · Page 6')).toBeTruthy();
+    expect(screen.getByText('From the document · Page 6')).toBeTruthy();
     expect(screen.getByText(new RegExp(QUOTE.replace('.', '\\.')))).toBeTruthy();
   });
 
   it('shows nothing for a card saved before quotes existed', async () => {
     render(<SetPage />);
     await flipCard();
-    expect(screen.queryByText(/From your document/)).toBeNull();
+    expect(screen.queryByText(/From the document/)).toBeNull();
   });
 
-  it('keeps the quote after the owner edits the cards', async () => {
+  it('says where a quote is from by the set\'s source, e.g. a Wikipedia article', async () => {
+    state.set = { ...state.set!, source_filename: 'https://en.wikipedia.org/wiki/Chlorophyll' };
+    state.cards = [
+      { id: CARD, question: 'Pigment that absorbs light', answer: 'Chlorophyll', options: null, position: 0, source_excerpt: QUOTE, source_location: null },
+    ];
+    render(<SetPage />);
+    await flipCard();
+    expect(screen.getByText('From Wikipedia')).toBeTruthy();
+  });
+
+  // The reply to an edit has the cards' text but not where they came from.
+  const OTHER = '00000000-0000-4000-8000-0000000000cd';
+  const twoCards = () => {
     state.cards = [
       { id: CARD, question: 'Pigment that absorbs light', answer: 'Chlorophyll', options: null, position: 0, source_excerpt: QUOTE, source_location: 'Page 6' },
+      { id: OTHER, question: 'Gas plants give off', answer: 'Oxygen', options: null, position: 1 },
     ];
-    // The reply to an edit has the card's text but not where it came from.
-    state.apiResult = {
-      ok: true,
-      status: 200,
-      data: { cards: [{ id: CARD, question: 'Green pigment that absorbs light', answer: 'Chlorophyll', options: null, position: 0 }] },
-    };
+  };
+  const saveEdit = async (card: string, question: string, reply: { id: string; question: string; answer: string }[]) => {
+    state.apiResult = { ok: true, status: 200, data: { cards: reply.map((c, i) => ({ ...c, options: null, position: i })) } };
     render(<SetPage />);
     fireEvent.click(await screen.findByRole('button', { name: /Edit cards/ }));
-    fireEvent.change(within(screen.getByRole('listitem', { name: 'Card 1' })).getByLabelText('Question'), {
-      target: { value: 'Green pigment that absorbs light' },
+    fireEvent.change(within(screen.getByRole('listitem', { name: card })).getByLabelText('Question'), {
+      target: { value: question },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-    expect(await screen.findByText('Green pigment that absorbs light')).toBeTruthy();
+  };
 
+  it('keeps the quote of a card the owner did not rewrite', async () => {
+    twoCards();
+    await saveEdit('Card 2', 'Gas that plants give off', [
+      { id: CARD, question: 'Pigment that absorbs light', answer: 'Chlorophyll' },
+      { id: OTHER, question: 'Gas that plants give off', answer: 'Oxygen' },
+    ]);
+    expect(await screen.findByText('Pigment that absorbs light')).toBeTruthy();
     await flipCard();
-    expect(screen.getByText('From your document · Page 6')).toBeTruthy();
+    expect(screen.getByText('From the document · Page 6')).toBeTruthy();
+  });
+
+  it('drops the quote of a card the owner rewrites, as the database does', async () => {
+    twoCards();
+    await saveEdit('Card 1', 'Green pigment that absorbs light', [
+      { id: CARD, question: 'Green pigment that absorbs light', answer: 'Chlorophyll' },
+      { id: OTHER, question: 'Gas plants give off', answer: 'Oxygen' },
+    ]);
+    expect(await screen.findByText('Green pigment that absorbs light')).toBeTruthy();
+    await flipCard();
+    expect(screen.queryByText(/From the document/)).toBeNull();
   });
 });

@@ -40,6 +40,9 @@ export function joinUnits(units: SourceUnits): string {
   return units.texts.map((text, i) => (i === 0 ? text : separatorBefore(units, i) + text)).join('');
 }
 
+// The most items pickEvenly tries, so a text of thousands of short lines stays quick.
+const MAX_PICKS = 2000;
+
 // Picks items spread evenly over the whole document, always with the first and the
 // last, as many as fit in maxChars: items next to each other are joined with
 // `separator` characters, others with a gap marker of `gap` characters. If fewer
@@ -62,17 +65,23 @@ function pickEvenly(
   const size = (picked: number[]) =>
     picked.reduce((n, idx, j) => n + lengths[idx] + (j === 0 ? 0 : idx === picked[j - 1] + 1 ? separator : gap), 0);
 
+  // The most items that could fit at all: the shortest ones, with the shorter join.
+  const shortest = [...lengths].sort((a, b) => a - b);
+  let bound = 0;
+  let used = 0;
+  while (bound < total && used + shortest[bound] + (bound > 0 ? separator : 0) <= maxChars) {
+    used += shortest[bound] + (bound > 0 ? separator : 0);
+    bound++;
+  }
+  // Each count spreads its picks over different items, so one count not fitting
+  // says nothing about the counts around it: try them from that bound down and
+  // take the first that fits.
   let best = spread(1);
-  let low = 1;
-  let high = total;
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    const picked = spread(mid);
+  for (let k = Math.min(bound, MAX_PICKS); k >= 1; k--) {
+    const picked = spread(k);
     if (size(picked) <= maxChars) {
       best = picked;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
+      break;
     }
   }
 
@@ -212,12 +221,15 @@ export const sourceKey = (s: string) =>
 // A quote shorter than this (after sourceKey) says too little to show, and an
 // empty one would "match" everywhere.
 const MIN_QUOTE_CHARS = 8;
-// When a quote is rebuilt from pieces, at least one piece must be this long...
-const MIN_ANCHOR_CHARS = 20;
-// ...the pieces must cover this much of the quote...
+// When only part of a quote is in the document, the words the document has must
+// cover this much of the quote...
 const MIN_COVERAGE = 0.8;
-// ...and there can't be more pieces than this.
+// ...in no more than this many runs...
 const MAX_PIECES = 4;
+// ...and the longest run, the part that is kept, must be this long and at least
+// this share of the quote.
+const MIN_ANCHOR_CHARS = 20;
+const MIN_ANCHOR_SHARE = 0.5;
 
 // A normalized copy of the text the AI read, plus a lookup for which unit a
 // quote starts in. Each unit is normalized on its own and joined with one space,
@@ -256,7 +268,9 @@ function buildLocator(
   return {
     key,
     locate(quote: string) {
-      const at = key.indexOf(sourceKey(quote));
+      // Whole words only, like the check itself, so "ion channels" isn't found
+      // inside an earlier "depolarization channels".
+      const at = ` ${key} `.indexOf(` ${sourceKey(quote)} `);
       if (at < 0 || starts.length === 0) return undefined;
       let found = starts[0];
       for (const s of starts) {
@@ -281,21 +295,22 @@ function tidyBrackets(text: string): string {
 // When a quote isn't in the document as one piece, the AI has usually rebuilt a
 // table row from cells that the PDF text keeps in separate places (a table read
 // column by column lists every meaning first, then every prefix, then every
-// example). Show the real pieces instead: words that appear nowhere in the
-// document are dropped, and what's left is split into runs that each really are in
-// the document, shown with "…" between them. It needs most of the quote and one
-// solid run, so a few common words can't stand in for a whole quote. In a sampled
-// document (#38) all the pieces must come from one part, never from both sides of
-// a gap.
-function verifiedPieces(quote: string, docKey: string): { text: string; anchor: string } | undefined {
+// example), or reworded a sentence. Words that appear nowhere in the document are
+// dropped, what's left is split into runs that each really are in the document,
+// and only the longest run is kept: the runs are never joined, because runs from
+// different sentences can say what the document doesn't ("The mitochondria is the
+// organelle that" + "stores" + "DNA"). It needs most of the quote and one solid
+// run, so a few common words can't stand in for a whole quote. In a sampled
+// document (#38) the runs must come from one part, never from both sides of a gap.
+function verifiedPart(quote: string, docKey: string): string | undefined {
   for (const part of docKey.split(GAP_KEY)) {
-    const found = piecesIn(quote, part);
+    const found = longestRunIn(quote, part);
     if (found) return found;
   }
   return undefined;
 }
 
-function piecesIn(quote: string, docKey: string): { text: string; anchor: string } | undefined {
+function longestRunIn(quote: string, docKey: string): string | undefined {
   // Whole-word matching, so "de" can't match from the middle of "dehydrate".
   const padded = ` ${docKey} `;
   const inDoc = (key: string) => padded.includes(` ${key} `);
@@ -331,12 +346,13 @@ function piecesIn(quote: string, docKey: string): { text: string; anchor: string
 
   if (pieces.length === 0 || pieces.length > MAX_PIECES || keptLength < totalLength * MIN_COVERAGE) return undefined;
   const anchor = pieces.reduce((a, b) => (b.length > a.length ? b : a));
-  if (anchor.length < MIN_ANCHOR_CHARS) return undefined;
-  return { text: pieces.map((p) => p.text).join(' … '), anchor: anchor.text };
+  if (anchor.length < MIN_ANCHOR_CHARS || anchor.length < totalLength * MIN_ANCHOR_SHARE) return undefined;
+  return anchor.text;
 }
 
-// How many quotes were kept whole, kept in pieces, or dropped. For the server log
-// only: the document's own text is never logged.
+// How many quotes were kept whole, cut down to the part that is in the document
+// (`pieces`), or dropped. For the server log only: the document's own text is
+// never logged.
 export interface SourceStats {
   whole: number;
   pieces: number;
@@ -345,8 +361,8 @@ export interface SourceStats {
 
 // Checks each card's quote against the text the AI read (the first `maxChars` of
 // it). A quote found whole is kept with its location. A quote that isn't there as
-// one piece is cut down to the pieces that are. Anything else is removed; the card
-// itself always stays.
+// one piece is cut down to its longest part that is. Anything else is removed; the
+// card itself always stays.
 export function createSourceChecker(sourceText: string, maxChars: number, units?: SourceUnits) {
   const locator = buildLocator(sourceText, maxChars, units);
   const paddedDoc = ` ${locator.key} `;
@@ -363,10 +379,10 @@ export function createSourceChecker(sourceText: string, maxChars: number, units?
         stats.whole += 1;
         return { ...item, sourceLocation: locator.locate(source) };
       }
-      const rebuilt = verifiedPieces(source, locator.key);
-      if (rebuilt) {
+      const part = verifiedPart(source, locator.key);
+      if (part) {
         stats.pieces += 1;
-        return { ...item, source: rebuilt.text, sourceLocation: locator.locate(rebuilt.anchor) };
+        return { ...item, source: part, sourceLocation: locator.locate(part) };
       }
     }
 
