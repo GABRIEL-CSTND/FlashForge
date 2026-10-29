@@ -10,6 +10,7 @@ flowchart LR
   subgraph Browser
     U[Upload page<br/>app/page.tsx] --> SV[StudyViewer]
     MS[My Sets] --> SP["Set page<br/>/sets/[id]"]
+    HI["History<br/>/history, /history/[id]"]
     RC[RoleChooser<br/>one-time screen]
     AP["Admin pages<br/>/admin, /admin/users,<br/>/admin/sets, /admin/usage"]
     T["Teacher pages<br/>/teacher, /teacher/classes/[id],<br/>/teacher/classes/[id]/results"]
@@ -38,6 +39,9 @@ flowchart LR
   end
   U -->|PDF/TXT| G
   G -.->|"usage log, after the response"| DB
+  G -->|"signed in: the guide, into History"| DB
+  HI -->|anon key + user session| DB
+  HI -->|Save| S
   SV -->|Save| S -->|service-role key| DB
   MS -->|anon key + user session| DB
   SP -->|anon key + user session| DB
@@ -64,8 +68,8 @@ writes with the service-role key. Browsers read only what RLS allows (section 4)
 
 | Method and path | Who | What it does |
 |---|---|---|
-| `POST /api/generate` | Anyone | Extract text from a PDF/TXT and generate 10 study items (section 1) |
-| `POST /api/save-set` | Signed in | Save a generated study guide to the user's account |
+| `POST /api/generate` | Anyone | Extract text from a PDF/TXT and generate 10 study items (section 1); a signed-in user's guide is also kept in History |
+| `POST /api/save-set` | Signed in | Save a generated study guide, or one from History, to the user's account; with `historyId`, that History entry is marked saved |
 | `PUT /api/sets/[id]/cards` | The set's owner | Save edited cards: `{ cards: [{ id?, question, answer, options? }] }` in display order (#55) |
 | `POST /api/profile/role` | Signed in, not chosen yet | One-time choice: `{ role: 'student' \| 'teacher' }` (#52) |
 | `GET /api/teacher/classes` | Teacher, admin | The caller's classes, newest first, with student counts |
@@ -204,7 +208,8 @@ screen instead of shortening with "…".
    writing step. The page's own timer (15 seconds, plus one per question over 10) only
    explains a possible slower backup when the server hasn't already said so.
    Then the page swaps to `StudyViewer` on the **same URL** (`/`), so
-   *Exit* clears the result instead of navigating (it asks first if the guide isn't saved).
+   *Exit* clears the result instead of navigating (it asks first if the guide isn't saved
+   and isn't in History either).
 4. **Usage log** (#62): every request to `/api/generate`, successful or not, gets a row in
    `generation_logs`. The row is reserved by the limit check and filled in with Next's
    `after()`, after the response has been sent, so logging never slows the user down.
@@ -218,7 +223,8 @@ screen instead of shortening with "…".
    400 otherwise, #68) and inserts the set and cards with the **service-role** key. If the
    cards can't be saved, the new set is removed again. If the user signs in
    mid-save, the unsaved result is kept in `sessionStorage` across the Google redirect
-   and saved automatically afterwards.
+   and saved automatically afterwards. The page sends the guide's `historyId` along, so
+   History shows it as saved (see "History" below).
 
 ### The AI pipeline (`lib/gemini.ts`)
 
@@ -370,6 +376,30 @@ screen instead of shortening with "…".
   route answers 409 "Reload the page"), then applies the update, insert and delete.
   **Edited cards keep their ids**, so study results (#57) and most-missed questions
   (#59) can refer to them. Only the service role may call it.
+
+### History
+
+- **Every guide a signed-in user makes** is kept in `guide_history`, saved or not, so
+  a guide they didn't save isn't lost. My Sets still lists only saved sets.
+- **Written by the server only:** after a successful generation, `/api/generate` adds
+  the guide (title, study type, source, credit and the cards with their quotes) with the
+  service-role key (`addToHistory()` in `lib/history.ts`) and returns its id as
+  `historyId`. Signed-out guides and failed ones are never kept. If the row can't be
+  written, the user still gets the guide, with `historyId: null`.
+- **Saved or not:** `/api/save-set` takes an optional `historyId` and sets that entry's
+  `set_id` to the new set (`markSaved()`, only for the caller's own entry). If the set
+  is deleted later, `set_id` goes back to null and the guide shows as not saved again.
+- **`/history`** lists the user's entries, newest first: title, study type, number of
+  questions, date and time, and a *Saved* badge. 🗑 removes one after asking; the warning
+  says whether it was saved (the set stays in My Sets) or will be gone for good.
+- **`/history/[id]`** opens one entry in `StudyViewer` to study again. An unsaved
+  guide has **💾 Save to My Sets**, which saves it with its `historyId` and opens the
+  new set; a saved one links to its set instead. Exit and Done go back to History.
+  Scores aren't recorded here, since attempts belong to saved sets (#57).
+- **Only the owner** can read or remove an entry (RLS); nobody else, teachers and admins
+  included, can see it, and nobody can add or change one from the browser. The cards
+  (with sentences quoted from the user's document) stay until the user removes them, or
+  their account is deleted.
 
 ## 2. Auth and roles
 
@@ -727,6 +757,7 @@ The plan for teacher and admin features is tracked in #50.
 | `class_join_failures` | `id`, `user_id` → `auth.users` (cascade), `attempted_at` | Wrong join codes for the rate limit; indexed on (`user_id`, `attempted_at`); old rows are deleted as new ones arrive |
 | `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `due_at` (nullable), `created_at` | Unique (`class_id`, `set_id`); indexed on `set_id` |
 | `generation_logs` | `id`, `user_id` → `auth.users` (set null), `role`, `ip_hash` (signed out only), `model`, `study_type`, `duration_ms`, `success` (null while running), `error_kind` (incl. `limit`), `requests` (jsonb), `created_at` | One row per `/api/generate` request (#62, #63). Indexed on `created_at`, (`user_id`, `created_at`) and (`ip_hash`, `created_at`) |
+| `guide_history` | `id`, `user_id` → `auth.users` (cascade), `title`, `study_type`, `source_filename`, `source_credit` (jsonb `{ name, url }` for a web page or Wikipedia article), `items` (jsonb: the cards as generated, quotes included), `item_count` (generated from `items`), `set_id` → `flashcard_sets` (set null), `created_at` | History: one row per guide a signed-in user generated. `items` must be a non-empty array. Indexed on (`user_id`, `created_at`) and `set_id` |
 | `app_settings` | `key` (primary key), `value` (jsonb), `updated_at`, `updated_by` → `auth.users` (set null) | App-wide settings changed by admins; today just `generation_limits` (#63) |
 | `audit_log` | `id`, `actor_id` → `auth.users` (set null), `action` (`role_change` \| `set_delete`), `target_id`, `details` (jsonb), `created_at` | Admin actions (#60). `target_id` has no foreign key, so entries survive the target being deleted. Indexed on `created_at` |
 | `attempts` | `id` (made by the browser), `user_id` → `auth.users` (cascade), `set_id` → `flashcard_sets` (cascade), `assignment_id` → `assignments` (set null), `study_type`, `mode` (null, or `type` / `match` for flashcards, #66, #67), `score`, `total`, `answers` (jsonb), `completed_at` | One row per finished study session (#57). `total > 0` and `0 ≤ score ≤ total`. Indexed on (`user_id`, `set_id`, `completed_at`) and on `assignment_id` |
@@ -775,6 +806,7 @@ The plan for teacher and admin features is tracked in #50.
 | `audit_log` | Nobody | Server-only: no grants or policies for anon or signed-in users (#60) |
 | `generation_logs` | Nobody | Server-only, like `audit_log` (#62) |
 | `app_settings` | Nobody | Server-only; admins change limits through `PUT /api/admin/limits` (#63) |
+| `guide_history` | Owner | Read and remove their own entries; no direct inserts or updates (the server adds them and marks them saved) |
 | `attempts` | Student / teacher | A student reads their own attempts; the class's teacher reads attempts made from their class's assignments while the student is in the class (never private study); no direct writes (#57) |
 
 The `classes` and `class_members` policies need to check each other, which would make RLS
@@ -796,7 +828,7 @@ transaction. Run them after every database change.
     attempt and class-results APIs, using `test-utils/fake-supabase.ts`. That's an
     in-memory client with unique keys (23505) and cascading deletes.
   - Component tests for `RoleChooser`, `StudyViewer`, `CardEditor`, `AssignPanel`, the
-    set page and the teacher and student pages, in jsdom with React Testing Library.
+    set page, the History pages and the teacher and student pages, in jsdom with React Testing Library.
     Component tests start with `// @vitest-environment jsdom`.
 - `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and
   classes. Each prints expected vs. actual (10, 10 and 21 cases).
@@ -827,6 +859,10 @@ transaction. Run them after every database change.
   real edit, kept ids, each kind of refused save, that a refused save changes nothing,
   that browsers can't call it, and that a rewritten card loses its quote while a moved
   one keeps it (#21).
+- `supabase/tests/history-rls-check.sql` (13 cases): the server adds entries; `item_count`
+  counts the cards; empty or non-list cards and unknown study types are refused; owners
+  read and remove only their own entries and can't add or edit any; anon can't read;
+  deleting the saved set keeps the entry, as not saved.
 - `supabase/tests/study-types-check.sql` (13 cases, #68, #69): `true_false` and `mixed`
   sets, attempts and generation logs are accepted and unknown study types refused; a true-or-false
   attempt can't have a flashcard mode; explanations must be 1–300 characters; and

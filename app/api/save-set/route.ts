@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { validateCards } from '@/lib/card-rules';
 import { isStudyType } from '@/lib/study-types';
+import { markSaved } from '@/lib/history';
 
 interface SaveItem {
   question: string;
@@ -22,17 +23,19 @@ function shortText(value: unknown, max: number): string | null {
   return value.trim().slice(0, max) || null;
 }
 
-// Save a freshly generated guide (signed-in users only). The cards are checked
-// with the same rules as the card editor (lib/card-rules.ts), so only sets the
-// study screen can show are saved (#68).
+// Save a freshly generated guide, or one from History (signed-in users only).
+// The cards are checked with the same rules as the card editor
+// (lib/card-rules.ts), so only sets the study screen can show are saved (#68).
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { title, studyType, sourceFilename, items } = body as {
+    const { title, studyType, sourceFilename, items, historyId } = body as {
       title: string;
       studyType: unknown;
       sourceFilename?: string;
       items: SaveItem[];
+      // The guide's entry in History (lib/history.ts), if it has one.
+      historyId?: unknown;
     };
 
     if (!title || !isStudyType(studyType) || !Array.isArray(items) || items.length === 0) {
@@ -97,6 +100,9 @@ export async function POST(req: NextRequest) {
       await supabaseAdmin.from('flashcard_sets').delete().eq('id', newSet.id);
       return NextResponse.json({ error: cardsError.message }, { status: 500 });
     }
+
+    // History shows the guide as saved, with a link to this set.
+    await markSaved(userId, historyId, newSet.id);
 
     return NextResponse.json({ id: newSet.id });
   } catch (err) {

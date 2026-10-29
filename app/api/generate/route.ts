@@ -25,6 +25,7 @@ import {
 } from '@/lib/generation-logs';
 import { limitMessage } from '@/lib/generation-limits';
 import { encodeEvent, PROGRESS_MIME, type ProgressEvent, type StepEvent } from '@/lib/generation-progress';
+import { addToHistory } from '@/lib/history';
 
 export const runtime = 'nodejs';
 // Model retries are capped at ~75s (see lib/gemini.ts); leave headroom for upload + PDF parsing.
@@ -52,9 +53,10 @@ async function extractText(file: File): Promise<{ text: string; units?: SourceUn
   }
 }
 
-// Pure generation endpoint: nothing is saved until the user explicitly saves
-// via /api/save-set. The only writes are the usage log (#62) and the daily
-// limit check (#63). `report` is told each step as it starts (see POST below).
+// Nothing becomes a set until the user explicitly saves it via /api/save-set.
+// The only writes are the usage log (#62), the daily limit check (#63) and, for
+// a signed-in user, the guide's entry in their History (lib/history.ts).
+// `report` is told each step as it starts (see POST below).
 async function generate(req: NextRequest, report: (event: StepEvent) => void = () => {}): Promise<NextResponse> {
   const startedAt = Date.now();
   const log: GenerationLog = {
@@ -243,6 +245,11 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
       },
     });
 
+    // A signed-in user keeps every guide they make in History, saved or not.
+    const historyId = state.caller?.userId
+      ? await addToHistory(state.caller.userId, { title, studyType, sourceFilename, source, items })
+      : null;
+
     return done(
       NextResponse.json({
         title,
@@ -253,6 +260,8 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
         items,
         // Which model produced this guide (Gemini, or the Gemma backup).
         model,
+        // The guide's entry in History; null when signed out, or if it couldn't be kept.
+        historyId,
       }),
       { success: true, errorKind: null, model }
     );

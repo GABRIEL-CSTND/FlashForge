@@ -50,6 +50,8 @@ interface GeneratedResult {
   source?: { name: string; url: string } | null;
   studyType: StudyType;
   items: StudyItem[];
+  // Its entry in History (/history); null or missing when made signed out.
+  historyId?: string | null;
 }
 
 const PENDING_RESULT_KEY = 'flashforge_pending_result';
@@ -227,6 +229,7 @@ export default function UploadPage() {
         sourceFilename: result.sourceFilename,
         studyType: result.studyType,
         items: result.items,
+        historyId: result.historyId ?? null,
       }),
     });
 
@@ -242,10 +245,11 @@ export default function UploadPage() {
   };
 
   // The study guide is rendered on this same page, so exiting means clearing it
-  // rather than navigating to "/".
+  // rather than navigating to "/". A guide in History isn't lost by leaving it.
   const handleExit = () => {
     if (
       saveStatus !== 'saved' &&
+      !result?.historyId &&
       !window.confirm("Leave this study guide? It hasn't been saved and will be lost.")
     ) {
       return;
@@ -326,7 +330,8 @@ export default function UploadPage() {
       <div className="w-full max-w-md space-y-6">
         <div className="flex justify-end">
           {user ? (
-            <div className="flex items-center gap-3 text-sm">
+            // Wraps on phones, where all the links don't fit on one line.
+            <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-sm">
               {profile?.role === 'admin' && (
                 <Link href="/admin" className="text-link hover:underline">
                   Admin
@@ -344,6 +349,9 @@ export default function UploadPage() {
               )}
               <Link href="/my-sets" className="text-link hover:underline">
                 My Sets
+              </Link>
+              <Link href="/history" className="text-link hover:underline">
+                History
               </Link>
               <span className="text-gray-400">{user.email}</span>
               <button onClick={() => signOut()} className="text-gray-500 hover:underline">

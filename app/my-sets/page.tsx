@@ -72,11 +72,20 @@ export default function MySetsPage() {
     // w-full: the body is a flex column, so without it a long set title would
     // widen the page past a phone screen instead of truncating.
     <main className="min-h-screen w-full p-6 max-w-md mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">My Sets</h1>
-        <Link href="/" className="text-sm text-link hover:underline">
-          + New set
-        </Link>
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-semibold">My Sets</h1>
+          <Link href="/" className="text-sm text-link hover:underline">
+            + New set
+          </Link>
+        </div>
+        <p className="text-sm text-gray-500">
+          The study guides you saved. Every guide you&apos;ve made, saved or not, is in{' '}
+          <Link href="/history" className="text-link hover:underline">
+            History
+          </Link>
+          .
+        </p>
       </div>
 
       {sets.length === 0 ? (

@@ -63,7 +63,11 @@ beforeEach(() => {
   pending.callbacks = [];
   limit = { refuse: false, fail: false, calls: [] };
   fake.current = createFakeSupabase({
-    tables: { profiles: { unique: [['id']] }, generation_logs: { unique: [['id']] } },
+    tables: {
+      profiles: { unique: [['id']] },
+      generation_logs: { unique: [['id']] },
+      guide_history: { unique: [['id']], defaults: { id: () => fakeUuid() } },
+    },
     users: { sam: STUDENT },
     rpc: {
       start_generation: (args, db) => {
@@ -192,6 +196,73 @@ describe('/api/generate usage log (#62) and daily limits (#63)', () => {
     await expect(runAfter()).resolves.toBeDefined();
     expect(errorLog).toHaveBeenCalledWith('[generation-logs] could not log a generation:', expect.anything());
     errorLog.mockRestore();
+  });
+});
+
+describe('/api/generate History', () => {
+  const history = () => fake.current!.db.rows.guide_history;
+
+  it("keeps a signed-in user's guide in their History, and says which entry it is", async () => {
+    const res = await generate(LONG_TEXT, asSam);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.historyId).toEqual(expect.any(String));
+    expect(history()).toEqual([
+      expect.objectContaining({
+        id: body.historyId,
+        user_id: STUDENT.id,
+        title: 'notes',
+        study_type: 'multiple_choice',
+        source_filename: 'notes.txt',
+        source_credit: null,
+        items: ITEMS,
+      }),
+    ]);
+  });
+
+  it('keeps the credit of a Wikipedia article', async () => {
+    wiki.find = async () => ({
+      title: 'Photosynthesis',
+      text: 'Photosynthesis turns light into chemical energy in the chloroplast.',
+      url: 'https://en.wikipedia.org/wiki/Photosynthesis',
+    });
+    expect((await generate(null, asSam, { topic: 'photosynthesis', studyType: 'flashcard' })).status).toBe(200);
+    expect(history()).toEqual([
+      expect.objectContaining({
+        title: 'Photosynthesis',
+        study_type: 'flashcard',
+        source_filename: 'https://en.wikipedia.org/wiki/Photosynthesis',
+        source_credit: { name: 'Wikipedia: Photosynthesis', url: 'https://en.wikipedia.org/wiki/Photosynthesis' },
+      }),
+    ]);
+  });
+
+  it('keeps nothing for a signed-out visitor', async () => {
+    const res = await generate(LONG_TEXT);
+    expect((await res.json()).historyId).toBeNull();
+    expect(history()).toEqual([]);
+  });
+
+  it('keeps nothing when the guide fails', async () => {
+    gemini.run = async (onRequest) => {
+      onRequest('gemini-3.5-flash');
+      throw new GeminiError('400', { retryable: false, status: 400 });
+    };
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect((await generate(LONG_TEXT, asSam)).status).toBe(502);
+    errorLog.mockRestore();
+    expect(history()).toEqual([]);
+  });
+
+  it("still gives the user the guide when History can't keep it", async () => {
+    fake.current!.db.failNext('guide_history', 'insert');
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await generate(LONG_TEXT, asSam);
+    expect(errorLog).toHaveBeenCalledWith('[history] could not add a guide:', expect.anything());
+    errorLog.mockRestore();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ items: ITEMS, historyId: null });
+    expect(history()).toEqual([]);
   });
 });
 

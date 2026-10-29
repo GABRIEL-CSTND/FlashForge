@@ -36,6 +36,7 @@ soon as it's applied.
 | `20261024000400_mixed_quiz.sql` | #69 | 2026-10-24 |
 | `20261025000100_source_quotes.sql` | #21 | The columns were added by hand while PR #80 was tested; the file records them |
 | `20261029000100_clear_edited_quotes.sql` | #21 | 2026-10-29 |
+| `20261029000200_guide_history.sql` | History | 2026-10-29 |
 
 Add a row here whenever you apply a new migration.
 

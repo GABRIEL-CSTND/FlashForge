@@ -12,6 +12,8 @@ by **typing the answer**, which the app checks and forgives one small typo, or b
 **matching** clues to terms in rounds of up to 5. Every guide can be **easy, medium or hard**. Any card can be **read aloud**, one at a time
 or automatically, with the browser's built-in voice. Sign in
 with Google to save study guides, then rename, revisit, or delete them from **My Sets**.
+Signed in, every guide you make is also kept in **History**, saved or not, so you can study one again
+or save it later.
 Signed in, every finished study session is saved with its score. Teachers can create classes, assign sets, and see each student's scores and
 the most-missed questions; students join with a code. Admins manage users' roles and can remove any study set.
 
@@ -90,6 +92,8 @@ app/
   icon.svg              FlashForge icon (favicon.ico and apple-icon.png are the same design)
   */layout.tsx          Section layouts that only set the browser title ("My Sets · FlashForge")
   my-sets/page.tsx      Signed-in user's saved sets
+  history/page.tsx      History: every guide the user made while signed in, saved or not; remove one
+  history/[id]/page.tsx One guide from History: study it again, or save it to My Sets
   sets/[id]/page.tsx    A saved set: study and save the score; the owner can edit cards, rename, delete
   teacher/page.tsx      Teacher dashboard: create classes, see join codes
   teacher/classes/[id]/ One class: join code, assigned sets, roster, rename, delete
@@ -100,8 +104,8 @@ app/
   admin/users/          Users and roles: search users, change roles
   admin/sets/           Study sets: open or delete any set
   admin/usage/          AI usage: guides per day, models used, today's quota, top users
-  api/generate/         POST: extract text from the file, generate items with AI
-  api/save-set/         POST: save a generated guide (signed-in users only)
+  api/generate/         POST: extract text from the file, generate items with AI, keep the guide in History
+  api/save-set/         POST: save a generated guide or one from History (signed-in users only)
   api/sets/[id]/cards/  PUT: save the owner's edited cards, all at once
   api/attempts/         POST: save a finished study session (scored on the server); GET: my recent scores
   api/profile/role/     POST: one-time student/teacher choice at sign-up
@@ -142,6 +146,7 @@ lib/
   topic.ts              Looks a typed topic up on Wikipedia and returns the best article's text (server-only)
   answer-check.ts       Checking typed answers (capitals, accents, one typo), shared by the study screen and server
   sets.ts               Study sets scoped to their owner; saving edited cards (server-only)
+  history.ts            History: adding each generated guide, marking one saved (server-only)
   ids.ts                isUuid() and newId(), shared by server and client
   classes.ts            Class logic, always scoped to the acting teacher (server-only)
   classes-shared.ts     Class name, join-code and student-name rules shared by server and client

@@ -43,6 +43,14 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **History (live)**: signed in, every study guide you make is kept on a new **History** page
+  (linked next to My Sets), saved or not: newest first, with its type, number of
+  questions, date and a *Saved* badge. Open one to study it again, or save it to My Sets
+  if you didn't; 🗑 removes it from History (a saved set stays in My Sets). Leaving a new
+  guide no longer warns that it will be lost when it's in History. New `guide_history`
+  table (migration `20261029000200_guide_history.sql`): only its owner can read or remove
+  an entry, and only the server adds them. Guides made before this, or while signed out,
+  aren't in History.
 - **Whole long documents** (#38): a PDF or text file longer than the 30,000 characters the
   AI takes is no longer cut off after roughly its first 10 pages. Pages, or paragraphs,
   from across the whole document are sent instead, always with the first and the last,
@@ -210,7 +218,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 719 tests):
+- **Automated tests** (`npm test`, 747 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),
@@ -254,6 +262,8 @@ already applied there.
 - New README, plus `docs/ARCHITECTURE.md` and this changelog (#47).
 
 ### Fixed
+- On phones, the links at the top of the upload page (My Classes, My Sets, History, the
+  email and Sign out) ran off the screen in one line. They now wrap onto a second line.
 - **Quotes under cards** (#21), from the review of PR #80:
   - A quote that isn't in the notes word for word is cut down to its longest real part.
     It used to be stitched together from pieces found anywhere in the notes, so a false

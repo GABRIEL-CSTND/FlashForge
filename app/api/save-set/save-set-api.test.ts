@@ -20,6 +20,7 @@ beforeEach(() => {
     tables: {
       flashcard_sets: { unique: [['id']], defaults: { id: () => fakeUuid() } },
       flashcards: { unique: [['id']], defaults: { id: () => fakeUuid() } },
+      guide_history: { unique: [['id']] },
     },
     users: { sam: SAM },
   });
@@ -164,4 +165,48 @@ describe('POST /api/save-set: where each card came from', () => {
     });
     expect(quotes()).toEqual([['Mitochondria make most of the ATP.', 'Page 2']]);
   });
+});
+
+describe('POST /api/save-set and History', () => {
+  const CARDS = [{ question: 'Fluid inside the chloroplast', answer: 'Stroma' }];
+  const entry = (userId: string) => {
+    const row = { id: fakeUuid(), user_id: userId, title: 'Cells', set_id: null };
+    db.rows.guide_history.push(row);
+    return row;
+  };
+
+  it('marks the guide it came from as saved, as this set', async () => {
+    const mine = entry(SAM.id);
+    const res = await save({ title: 'Cells', studyType: 'flashcard', items: CARDS, historyId: mine.id });
+    expect(res.status).toBe(200);
+    expect(db.rows.guide_history).toEqual([expect.objectContaining({ id: mine.id, set_id: res.body.id })]);
+  });
+
+  it("leaves someone else's History entry alone", async () => {
+    const theirs = entry(fakeUuid());
+    const res = await save({ title: 'Cells', studyType: 'flashcard', items: CARDS, historyId: theirs.id });
+    expect(res.status).toBe(200);
+    expect(db.rows.guide_history[0].set_id).toBeNull();
+  });
+
+  it("still saves the set when History can't be updated", async () => {
+    const mine = entry(SAM.id);
+    db.failNext('guide_history', 'update');
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await save({ title: 'Cells', studyType: 'flashcard', items: CARDS, historyId: mine.id });
+    expect(errorLog).toHaveBeenCalledWith('[history] could not mark a guide as saved:', expect.anything());
+    errorLog.mockRestore();
+    expect(res.status).toBe(200);
+    expect(db.rows.flashcard_sets).toEqual([expect.objectContaining({ id: res.body.id })]);
+  });
+
+  it.each([['no History id', undefined], ['a History id that is not an id', 'not-an-id']])(
+    'saves as before with %s',
+    async (_label, historyId) => {
+      const mine = entry(SAM.id);
+      const res = await save({ title: 'Cells', studyType: 'flashcard', items: CARDS, historyId });
+      expect(res.status).toBe(200);
+      expect(db.rows.guide_history).toEqual([mine]);
+    }
+  );
 });

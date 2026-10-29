@@ -97,6 +97,8 @@ describe('/api/generate progress', () => {
       studyType: 'flashcard',
       items: ITEMS,
       model: FIRST,
+      // Signed out, so it isn't kept in History.
+      historyId: null,
     });
   });
 
