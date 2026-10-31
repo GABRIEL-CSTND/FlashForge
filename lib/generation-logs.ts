@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getAuthedUser } from '@/lib/roles';
 import type { Role } from '@/lib/role-types';
 import type { StudyType } from '@/lib/study-types';
+import type { LimitReason } from '@/lib/generation-limits';
 
 // SERVER-ONLY. One row per generation in generation_logs (#62), and the daily
 // limits (#63). /api/generate reserves a row with startGeneration() before
@@ -49,10 +50,13 @@ export async function identifyCaller(req: Request, client: SupabaseClient = supa
   return { userId: null, role: null, ipHash: ip ? hashIp(ip) : null };
 }
 
-export type GenerationSlot = { allowed: true; id: number } | { allowed: false; limit: number; resetsAt: string };
+export type GenerationSlot =
+  | { allowed: true; id: number }
+  | { allowed: false; limit: number; resetsAt: string; reason: LimitReason };
 
 // public.start_generation() counts the caller's guides for the quota day (and
-// requests still running) and reserves a row, or refuses, in one locked step.
+// requests still running), and their failed guides that asked the AI (#41),
+// and reserves a row, or refuses, in one locked step.
 export async function startGeneration(
   caller: Caller,
   studyType: StudyType,
@@ -65,10 +69,15 @@ export async function startGeneration(
     p_study_type: studyType,
   });
   if (error) throw error;
-  const slot = data as { allowed: boolean; id?: number; limit?: number; resets_at?: string };
+  const slot = data as { allowed: boolean; id?: number; limit?: number; resets_at?: string; reason?: string };
   return slot.allowed
     ? { allowed: true, id: Number(slot.id) }
-    : { allowed: false, limit: Number(slot.limit), resetsAt: String(slot.resets_at) };
+    : {
+        allowed: false,
+        limit: Number(slot.limit),
+        resetsAt: String(slot.resets_at),
+        reason: slot.reason === 'failures' ? 'failures' : 'guides',
+      };
 }
 
 export interface GenerationState {

@@ -33,13 +33,13 @@ begin
   r := public.start_generation(b, 'student', null, 'flashcard');
   insert into results values (6, 'second request (first still running) is allowed', 'true', (r->>'allowed'));
   r := public.start_generation(b, 'student', null, 'flashcard');
-  insert into results values (7, 'third request while two are running is refused', 'false 2', (r->>'allowed') || ' ' || (r->>'limit'));
+  insert into results values (7, 'third request while two are running is refused', 'false 2 guides', (r->>'allowed') || ' ' || (r->>'limit') || ' ' || coalesce(r->>'reason', '-'));
   select count(*) into v from public.generation_logs where user_id = b and error_kind = 'limit';
   insert into results values (8, 'the refusal is logged as limit', '1', v::text);
   select ((r->>'resets_at')::timestamptz > now() and (r->>'resets_at')::timestamptz <= now() + interval '1 day')::text into t;
   insert into results values (9, 'resets_at is the next Pacific midnight (within a day)', 'true', t);
 
-  -- Failures don't count, and a crashed (stale) reservation stops counting
+  -- Failures don't use up guides, and a crashed (stale) reservation stops counting
   update public.generation_logs set success = false, error_kind = 'ai_busy' where user_id = b and success is null
     and id = (select min(id) from public.generation_logs where user_id = b and success is null);
   r := public.start_generation(b, 'student', null, 'flashcard');
@@ -60,6 +60,20 @@ begin
   insert into results values (14, 'signed out: another IP is allowed', 'true', (r->>'allowed'));
   r := public.start_generation(a, 'admin', null, 'flashcard');
   insert into results values (15, 'admin limit null means no limit', 'true', r->>'allowed');
+
+  -- Failed guides that asked the AI have their own cap, the size of the limit (#41)
+  r := public.start_generation(null, null, 'hash-3', 'flashcard');
+  update public.generation_logs set success = false, error_kind = 'unreadable', requests = '{"gemini-3.5-flash": 1}'
+    where id = (r->>'id')::bigint;
+  r := public.start_generation(null, null, 'hash-3', 'flashcard');
+  insert into results values (21, 'signed out: after 1 failed guide that asked the AI, refused', 'false 1 failures',
+    (r->>'allowed') || ' ' || (r->>'limit') || ' ' || coalesce(r->>'reason', '-'));
+  select count(*) into v from public.generation_logs where ip_hash = 'hash-3' and error_kind = 'limit';
+  insert into results values (22, 'that refusal is logged as limit', '1', v::text);
+  r := public.start_generation(null, null, 'hash-4', 'flashcard');
+  update public.generation_logs set success = false, error_kind = 'unreadable' where id = (r->>'id')::bigint;
+  r := public.start_generation(null, null, 'hash-4', 'flashcard');
+  insert into results values (23, 'a failure before the AI was asked doesn''t count', 'true', r->>'allowed');
 
   -- Changing the limits
   begin perform public.admin_set_generation_limits(b, '{"anonymous": 1, "student": 9, "teacher": 15, "admin": null}'); ok := true; code := null;
@@ -82,7 +96,7 @@ begin
   -- Dashboard leaves out running rows and refusals, and counts refusals
   select format('%s/%s', limited, generations) into t from public.admin_generation_daily(1);
   select count(*) into v from public.generation_logs where created_at >= private.quota_window_start(1) and success is not null and error_kind is distinct from 'limit';
-  insert into results values (20, 'today: limited / finished generations', format('3/%s', v), t);
+  insert into results values (20, 'today: limited / finished generations', format('4/%s', v), t);
 end $$;
 select n, check_name, expected, actual from results order by n;
 rollback;

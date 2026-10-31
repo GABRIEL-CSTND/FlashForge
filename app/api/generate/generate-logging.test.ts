@@ -57,7 +57,8 @@ const RESETS_AT = '2026-10-24T07:00:00+00:00';
 
 // What start_generation() was asked, and how it answers. Its real counting is
 // checked in supabase/tests/generation-limits-check.sql.
-let limit: { refuse: boolean; fail: boolean; calls: Record<string, unknown>[] };
+// `reason` is why it refuses (#41); an older version of the function sent none.
+let limit: { refuse: boolean; fail: boolean; calls: Record<string, unknown>[]; reason?: string };
 
 beforeEach(() => {
   pending.callbacks = [];
@@ -76,7 +77,7 @@ beforeEach(() => {
         const row = { user_id: args.p_user_id, role: args.p_role, ip_hash: args.p_ip_hash, study_type: args.p_study_type, duration_ms: 0 };
         if (limit.refuse) {
           db.rows.generation_logs.push({ ...row, id: db.rows.generation_logs.length + 1, success: false, error_kind: 'limit' });
-          return { allowed: false, limit: 5, resets_at: RESETS_AT };
+          return { allowed: false, limit: 5, resets_at: RESETS_AT, ...(limit.reason ? { reason: limit.reason } : {}) };
         }
         const id = db.rows.generation_logs.length + 1;
         db.rows.generation_logs.push({ ...row, id, success: null, error_kind: null, model: null, requests: {} });
@@ -137,6 +138,19 @@ describe('/api/generate usage log (#62) and daily limits (#63)', () => {
     await runAfter();
     // Only the refusal start_generation() logged; nothing is added after.
     expect(logged().map((r) => r.error_kind)).toEqual(['limit']);
+  });
+
+  it('says so when too many failed guides asked the AI today (#41), without calling the AI', async () => {
+    limit.refuse = true;
+    limit.reason = 'failures';
+    const res = await generate(LONG_TEXT, asSam);
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({
+      error: "Too many of your study guides couldn't be made today, so new ones are paused to save the AI's daily quota.",
+      limit: 5,
+      resetsAt: RESETS_AT,
+    });
+    expect(generateStudyItems).not.toHaveBeenCalled();
   });
 
   it('counts signed-out visitors by a hash of their IP, never the IP itself', async () => {

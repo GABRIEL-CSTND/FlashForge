@@ -10,6 +10,13 @@ into `main`. There is only one Supabase database, so changes marked **(live)** a
 already applied there.
 
 ### Security
+- **Failed guides can't be repeated all day** (#41): a guide that failed after the AI was
+  asked didn't count toward the daily limit, so someone could keep sending, say, a photo
+  with nothing to study in it, and about 20 tries used up the AI quota everyone shares.
+  Failed guides that asked the AI now have their own daily cap, the same size as the
+  limit; past it, new guides are paused until the quota resets, with a message saying
+  why. Failures before the AI is asked still don't count. (Migration
+  `20261031000100_limit_failed_guides.sql`.)
 - Web links (#74) are fetched with protections against server-side request forgery:
   only http/https on ports 80 and 443, every resolved address must be public (checked
   as the connection is made, and again after each redirect), and pages are capped at
@@ -218,7 +225,7 @@ already applied there.
   out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
   Gemini automatically once its quota resets. After 15 seconds the page tells users a
   slower backup may be in use.
-- **Automated tests** (`npm test`, 747 tests):
+- **Automated tests** (`npm test`, 748 tests):
   - Vitest (#51).
   - React Testing Library and jsdom for component tests (#52).
   - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),

@@ -111,7 +111,7 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
         state.refused = true;
         return done(
           NextResponse.json(
-            { error: limitMessage(slot.limit), limit: slot.limit, resetsAt: slot.resetsAt },
+            { error: limitMessage(slot.limit, slot.reason), limit: slot.limit, resetsAt: slot.resetsAt },
             { status: 429 }
           ),
           { success: false, errorKind: 'limit' }

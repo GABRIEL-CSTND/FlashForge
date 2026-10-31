@@ -735,8 +735,17 @@ screen instead of shortening with "…".
   for that caller, counts today's finished guides plus requests still running, and then
   either reserves a "running" log row (`success` null) or refuses. A refusal is logged as
   `limit`, and the next Pacific midnight comes back as `resets_at`. Failed generations
-  don't count, and a running row older than 2 minutes (a crashed request) stops counting.
-- **Over the limit:** 429 with *"You've reached today's limit of N study guides."* The
+  don't use up guides, and a running row older than 2 minutes (a crashed request) stops
+  counting.
+- **Failed guides that asked the AI have their own cap** (#41), the same size as the
+  role's limit. Otherwise a guide that keeps failing (a photo with nothing to study in
+  it, say) could be repeated all day on the shared AI quota. A failure counts when its
+  log row has `requests`, so failures before the AI is asked (a file that's too big, a
+  page that can't be read) and refusals don't. `start_generation()` says which limit
+  refused (`reason`: `guides` or `failures`).
+- **Over the limit:** 429 with *"You've reached today's limit of N study guides."*, or
+  for failures *"Too many of your study guides couldn't be made today, so new ones are
+  paused to save the AI's daily quota."* The
   upload page adds when more can be made, in the user's own time zone. If the check
   itself fails (database trouble), the guide is generated anyway: the limits are about
   sharing the quota fairly, not security.
@@ -835,10 +844,12 @@ transaction. Run them after every database change.
 - `supabase/tests/assignments-rls-check.sql` (16 cases): an assigned student can open the
   set and its cards, a student outside the class can't, access ends on unassign, and
   only the owner can edit.
-- `supabase/tests/generation-limits-check.sql` (20 cases): parallel requests count while
-  running and a third is refused; refusals are logged; failures and crashed requests
-  don't count; signed-out visitors are counted per IP hash; "no limit" for admins; bad
-  limits are rejected; a change takes effect on the next request and is logged.
+- `supabase/tests/generation-limits-check.sql` (23 cases): parallel requests count while
+  running and a third is refused, saying why; refusals are logged; failures and crashed
+  requests don't use up guides; a failed guide that asked the AI counts toward its own
+  cap (#41) and one that didn't doesn't; signed-out visitors are counted per IP hash;
+  "no limit" for admins; bad limits are rejected; a change takes effect on the next
+  request and is logged.
 - `supabase/tests/generation-logs-check.sql` (12 cases): browsers can't read or write the
   log; rows at 00:30 and 23:30 Pacific time land on the right quota day; requests add up
   across retries and backups; the top-users list leaves out signed-out generations.
@@ -880,7 +891,8 @@ transaction. Run them after every database change.
 - **Free-tier AI quota:** about 20 requests a day on `gemini-3.5-flash`, shared by
   everyone. The backups help, but a paid tier is being discussed in #45.
 - **The daily limits (#63) count signed-out visitors per IP**, so someone switching
-  networks or using many IPs gets more. Wider abuse protection is #41. `/admin/usage`
+  networks or using many IPs gets more, and so does someone with many Google accounts.
+  Failed guides that asked the AI have their own cap (#41). `/admin/usage`
   shows how close today is to the quota. Logging started on 2026-10-23, so there's no
   usage history before that.
 - **Legacy sets with no owner (28 of them) are publicly readable**, and nobody can edit

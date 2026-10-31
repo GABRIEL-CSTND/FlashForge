@@ -31,7 +31,14 @@ export function parseGenerationLimits(raw: unknown): GenerationLimits | null {
   return limits;
 }
 
-export function limitMessage(limit: number): string {
+// Why public.start_generation() refused: the caller made their guides for the
+// day, or as many of their guides failed after asking the AI (#41).
+export type LimitReason = 'guides' | 'failures';
+
+export function limitMessage(limit: number, reason: LimitReason = 'guides'): string {
+  if (reason === 'failures') {
+    return "Too many of your study guides couldn't be made today, so new ones are paused to save the AI's daily quota.";
+  }
   return `You've reached today's limit of ${limit} study guide${limit === 1 ? '' : 's'}.`;
 }
 
