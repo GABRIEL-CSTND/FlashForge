@@ -79,6 +79,20 @@ export function progressLabels(source: SourceKind, photo: boolean): Record<Progr
   return { ...labels, writing: 'Writing your study guide with AI' };
 }
 
+// A PDF is read in the browser first (#44), so its first step isn't an upload. total
+// is 0 until the PDF has been opened and its pages counted.
+export interface PdfReadState {
+  done: number;
+  total: number;
+}
+
+export function pdfSendingLabel(read: PdfReadState): string {
+  if (read.total === 0) return 'Reading your PDF on this device';
+  return read.done < read.total
+    ? `Reading your PDF on this device (${read.done} of ${read.total} pages)`
+    : 'Sending the text of your PDF';
+}
+
 // The note under the "writing" step once the AI has needed more than one try.
 export function retryNote(state: ProgressState): string | null {
   if (state.attempt <= 1) return null;

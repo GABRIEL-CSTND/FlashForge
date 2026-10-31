@@ -3,6 +3,8 @@
 // web page (#74) or a topic to look up (#79). Shared by the upload page and
 // /api/generate.
 
+import { MAX_PDF_BYTES } from '@/lib/pdf-pages';
+
 export const SOURCE_KINDS = ['file', 'text', 'link', 'topic'] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 
@@ -92,8 +94,9 @@ export function isPhoto(kind: FileKind | null): kind is 'jpeg' | 'png' | 'webp' 
 // pages (#73), so the PDF itself goes to the AI, which reads the pictures.
 export const SCANNED_PDF_TEXT_CHARS = 100;
 
-// Vercel refuses requests over about 4.5 MB, so bigger files are stopped
-// before upload with a clear message (#44 tracks large PDFs).
+// Vercel refuses requests over about 4.5 MB, so a file sent to the server is
+// limited to this. A PDF is the exception: the browser reads it and sends only
+// its text (#44), so see pickedFileProblem for what a student may pick.
 export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024;
 
 const extensionOf = (name: string) => (name.includes('.') ? name.slice(name.lastIndexOf('.')).toLowerCase() : '');
@@ -119,6 +122,18 @@ export function fileProblem(name: string, type: string, size: number): string | 
     return `This file is ${(size / 1024 / 1024).toFixed(1)} MB. Files can be up to ${MAX_UPLOAD_BYTES / 1024 / 1024} MB; try a smaller file or paste the text instead.`;
   }
   return null;
+}
+
+// What's wrong with a file the student picked, before anything is sent. The same
+// as fileProblem, except that a PDF may be big (#44): the browser reads it and
+// sends only its text, so only an enormous one is turned away. /api/generate still
+// uses fileProblem for a file that is actually sent to it.
+export function pickedFileProblem(name: string, type: string, size: number): string | null {
+  if (fileKind(name, type) === 'pdf' && size > MAX_UPLOAD_BYTES) {
+    if (size <= MAX_PDF_BYTES) return null;
+    return `This PDF is ${(size / 1024 / 1024).toFixed(0)} MB. PDFs can be up to ${MAX_PDF_BYTES / 1024 / 1024} MB; try splitting it, or paste the text instead.`;
+  }
+  return fileProblem(name, type, size);
 }
 
 // A title for pasted notes: their first line if it's short (often a heading),

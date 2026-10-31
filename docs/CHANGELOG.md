@@ -58,6 +58,14 @@ already applied there.
   table (migration `20261029000200_guide_history.sql`): only its owner can read or remove
   an entry, and only the server adds them. Guides made before this, or while signed out,
   aren't in History.
+- **Large PDFs** (#44): a big lecture PDF no longer fails or takes ages to send. The
+  browser now reads the PDF itself and sends only its text, so a 12 MB, 300-page PDF goes
+  up as about 32 KB and gets past the 4 MB request limit; PDFs can now be up to 100 MB and
+  2,000 pages. While it reads, the upload page shows how far it has got (*Reading your PDF
+  on this device (12 of 140 pages)*). The guide and its page numbers come out exactly as
+  they do for a PDF sent whole. A scanned PDF (pictures of pages) is still sent as a file,
+  so a scan over 4 MB gets a plain message saying why; a password-protected PDF and one with
+  too many pages get their own. Other files keep the 4 MB limit.
 - **Whole long documents** (#38): a PDF or text file longer than the 30,000 characters the
   AI takes is no longer cut off after roughly its first 10 pages. Pages, or paragraphs,
   from across the whole document are sent instead, always with the first and the last,

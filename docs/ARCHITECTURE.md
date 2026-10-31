@@ -138,7 +138,8 @@ screen instead of shortening with "…".
 
 1. **Upload** (`app/page.tsx`): the user picks *Flashcards*, *Multiple choice*, *True or
    false* (#68) or *Mixed quiz* (#69), with a line under the choice saying what it is, how many questions (5,
-   10, 15, 20 or 30; 10 by default, #65), and drops a PDF, Word (`.docx`), PowerPoint
+   10, 15, 20 or 30; 10 by default, #65), and drops a PDF (up to 100 MB, and read in
+   the browser, #44), Word (`.docx`), PowerPoint
    (`.pptx`, #71) or TXT file of up to 4 MB, or switches to
    **Paste text** (#70) and pastes their notes. Pasted text must be 20 to 30,000 characters
    (`pastedTextProblem()` in `lib/sources.ts`), checked before anything is sent, with a
@@ -149,6 +150,23 @@ screen instead of shortening with "…".
    - Checks the file again with the page's rules (`fileProblem()` in `lib/sources.ts`):
      a known type, at most 4 MB (Vercel refuses requests over about 4.5 MB), and a clear
      "save it as .docx/.pptx or PDF first" for old `.doc` and `.ppt` files.
+   - **Large PDFs** (#44): a PDF over 4 MB can't be sent (the request limit), and a big
+     upload is slow on mobile data, so the browser reads every PDF itself
+     (`lib/read-pdf.ts`, the same PDF.js through `unpdf`, building each page's text the
+     way the server does) and sends only the text: a `pages` field, the pages as a JSON
+     list of strings, and a `fileName`. A 12 MB, 300-page lecture went up as 32 KB. The
+     upload page shows *Reading your PDF on this device (12 of 140 pages)* while it
+     works, a few pages at a time so the tab doesn't freeze. The server checks `pages`
+     like any other input (`parsePages()` in `lib/pdf-pages.ts`: a list of strings, 1 to
+     2,000 pages, at most 3.5 MB) and then does exactly what it does for a PDF it read
+     itself (`pageUnits()`, so long documents are sampled and quotes name the right
+     page). Only a PDF with more text than a request can hold (thousands of dense pages)
+     has its pages trimmed to one length, never dropped (`fitPages()`). When the browser
+     can't read a PDF, or it is pictures of pages (a scan, #73), the file itself is sent
+     as before, which only works up to 4 MB: a bigger scan gets a plain message instead.
+     A password-protected PDF and one with more than 2,000 pages get their own messages.
+     The browser accepts PDFs up to 100 MB (`pickedFileProblem()`); `fileProblem()`, which
+     the server uses for a file actually sent to it, is still 4 MB.
    - Extracts text: PDFs with `unpdf`, TXT as UTF-8, and Word and PowerPoint with
      `lib/office-text.ts` (#71). Those are zip files of XML: it unzips only the parts with
      text (`word/document.xml`; each slide and each speaker-notes page) and reads the text
@@ -898,8 +916,10 @@ transaction. Run them after every database change.
 - **Legacy sets with no owner (28 of them) are publicly readable**, and nobody can edit
   their cards.
 - **Text extraction:** a long document is sampled down to 30,000 characters, so the AI
-  only sees part of it (#38); PDFs are
-  uploaded to the server whole (#44), files are limited to 4 MB, and only PDF, Word,
+  only sees part of it (#38); PDFs are read in the browser and only their text is sent
+  (#44), so they can be up to 100 MB and 2,000 pages, but a scanned PDF over 4 MB can't be
+  read (the AI needs the pictures themselves, and they don't fit in a request), other files
+  are limited to 4 MB, and only PDF, Word,
   PowerPoint and TXT files and JPG, PNG or WebP photos work so far, plus links to public
   web pages; pages that need signing in, or that build their text with JavaScript, have
   little text to read (HEIC photos from a

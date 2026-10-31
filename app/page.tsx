@@ -25,16 +25,17 @@ import {
   type StudyType,
 } from '@/lib/study-types';
 import { shrinkImage } from '@/lib/shrink-image';
+import { planPdfUpload } from '@/lib/prepare-pdf';
 import {
   FILE_ACCEPT,
   FILE_TYPES_TEXT,
   fileKind,
-  fileProblem,
   isPhoto,
   linkProblem,
   MAX_SOURCE_CHARS,
   MAX_TOPIC_CHARS,
   pastedTextProblem,
+  pickedFileProblem,
   quoteSourceLabel,
   SOURCE_KINDS,
   SOURCE_LABELS,
@@ -80,6 +81,8 @@ export default function UploadPage() {
   const [resumeAfterAuth, setResumeAfterAuth] = useState(false);
   const [slowGeneration, setSlowGeneration] = useState(false);
   const [progress, setProgress] = useState<ProgressState>(START_PROGRESS);
+  // How far the browser has got reading a PDF (#44); null when it isn't.
+  const [pdfRead, setPdfRead] = useState<{ done: number; total: number } | null>(null);
 
   // Restore a generated-but-unsaved result after a Google sign-in redirect,
   // since the OAuth flow does a full page reload and would otherwise lose it.
@@ -108,7 +111,8 @@ export default function UploadPage() {
         return;
       }
     }
-    const problem = fileProblem(f.name, f.type, f.size);
+    // A big PDF is fine (#44): it is read here and only its text is sent.
+    const problem = pickedFileProblem(f.name, f.type, f.size);
     if (problem) {
       setErrorMsg(problem);
       setStatus('error');
@@ -157,10 +161,31 @@ export default function UploadPage() {
     }
     setStatus('generating');
     setProgress(START_PROGRESS);
+    setPdfRead(null);
     setErrorMsg('');
 
     const formData = new FormData();
-    if (source === 'file') formData.append('file', file!);
+    if (source === 'file' && file && fileKind(file.name, file.type) === 'pdf') {
+      // A PDF is read here, in the browser, and only its text is sent (#44): a big
+      // lecture file can't fail the request-size limit or take long to upload.
+      // Opening a big PDF takes a moment before the first page is counted.
+      setPdfRead({ done: 0, total: 0 });
+      const plan = await planPdfUpload(file, (done, total) => setPdfRead({ done, total }));
+      if (plan.kind === 'problem') {
+        setPdfRead(null);
+        setErrorMsg(plan.message);
+        setStatus('error');
+        return;
+      }
+      if (plan.kind === 'pages') {
+        formData.append('pages', JSON.stringify(plan.pages));
+        formData.append('fileName', file.name);
+      } else {
+        // Scanned, or not readable here: the server reads the file itself.
+        setPdfRead(null);
+        formData.append('file', file);
+      }
+    } else if (source === 'file') formData.append('file', file!);
     else if (source === 'text') formData.append('text', pasted);
     else if (source === 'link') formData.append('url', link.trim());
     else formData.append('topic', topic.trim());
@@ -193,6 +218,7 @@ export default function UploadPage() {
     } finally {
       clearTimeout(slowTimer);
       setSlowGeneration(false);
+      setPdfRead(null);
     }
 
     if (outcome.status < 200 || outcome.status >= 300) {
@@ -564,7 +590,7 @@ export default function UploadPage() {
           {(status === 'idle' || status === 'error') && 'Generate Study Guide'}
         </button>
 
-        {status === 'generating' && <GenerationProgress progress={progress} source={source} photo={sendingPhoto} />}
+        {status === 'generating' && <GenerationProgress progress={progress} source={source} photo={sendingPhoto} pdfRead={pdfRead} />}
 
         {status === 'generating' && slowGeneration && progress.attempt <= 1 && (
           <p className="text-sm text-gray-500 text-center">

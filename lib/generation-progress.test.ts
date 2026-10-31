@@ -4,6 +4,7 @@ import {
   INTERRUPTED,
   nextProgress,
   parseEvent,
+  pdfSendingLabel,
   PROGRESS_MIME,
   progressLabels,
   readGeneration,
@@ -140,5 +141,14 @@ describe('readGeneration', () => {
     expect(await readGeneration(res, onStep)).toEqual({ status: 400, body: { error: 'Missing file' } });
     expect(onStep).not.toHaveBeenCalled();
     expect(await readGeneration(new Response('<html>', { status: 500 }), onStep)).toEqual({ status: 500, body: {} });
+  });
+});
+
+describe('pdfSendingLabel (#44)', () => {
+  it('says the PDF is being opened, then how many pages are read, then that its text is sent', () => {
+    expect(pdfSendingLabel({ done: 0, total: 0 })).toBe('Reading your PDF on this device');
+    expect(pdfSendingLabel({ done: 0, total: 140 })).toBe('Reading your PDF on this device (0 of 140 pages)');
+    expect(pdfSendingLabel({ done: 57, total: 140 })).toBe('Reading your PDF on this device (57 of 140 pages)');
+    expect(pdfSendingLabel({ done: 140, total: 140 })).toBe('Sending the text of your PDF');
   });
 });

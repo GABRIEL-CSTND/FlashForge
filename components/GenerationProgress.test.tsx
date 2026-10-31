@@ -82,3 +82,32 @@ describe('GenerationProgress', () => {
     expect(clear).toHaveBeenCalled();
   });
 });
+
+describe('GenerationProgress while a PDF is read in the browser (#44)', () => {
+  it('shows the reading instead of an upload, then says the text is being sent', () => {
+    const { rerender } = render(<GenerationProgress progress={START_PROGRESS} source="file" photo={false} pdfRead={{ done: 12, total: 140 }} />);
+    expect(current()).toBe('Reading your PDF on this device (12 of 140 pages)');
+    expect(steps()).toEqual([
+      'Reading your PDF on this device (12 of 140 pages)',
+      'Reading your file',
+      'Writing your study guide with AI',
+    ]);
+
+    rerender(<GenerationProgress progress={START_PROGRESS} source="file" photo={false} pdfRead={{ done: 140, total: 140 }} />);
+    expect(current()).toBe('Sending the text of your PDF');
+  });
+
+  it('keeps that wording once the server has taken over, with the step marked done', () => {
+    render(<GenerationProgress progress={at('reading')} source="file" photo={false} pdfRead={{ done: 140, total: 140 }} />);
+    expect(steps()[0]).toBe('Sending the text of your PDF (done)');
+    expect(current()).toBe('Reading your file');
+  });
+
+  it('is unchanged for everything that is not a PDF read in the browser', () => {
+    render(<GenerationProgress progress={START_PROGRESS} source="file" photo={false} />);
+    expect(current()).toBe('Uploading your file');
+    cleanup();
+    render(<GenerationProgress progress={START_PROGRESS} source="file" photo={false} pdfRead={null} />);
+    expect(current()).toBe('Uploading your file');
+  });
+});
