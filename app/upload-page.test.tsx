@@ -15,8 +15,20 @@ vi.mock('@/components/ProfileProvider', () => ({ useProfile: () => ({ profile: n
 // jsdom can't decode images; the real shrinking is checked in the browser.
 const shrink = vi.hoisted(() => ({ to: null as null | File }));
 vi.mock('@/lib/shrink-image', () => ({ shrinkImage: vi.fn(async (file: File) => shrink.to ?? file) }));
+// Reading a PDF needs PDF.js and a real PDF; that is tested in lib/read-pdf.test.ts.
+// Here the page is given the outcome, and sends the file itself unless told otherwise.
+type PdfPlan = { kind: 'pages'; pages: string[] } | { kind: 'file' } | { kind: 'problem'; message: string };
+const pdf = vi.hoisted(() => ({
+  plan: null as null | ((file: File, onProgress?: (done: number, total: number) => void) => Promise<PdfPlan>),
+}));
+vi.mock('@/lib/prepare-pdf', () => ({
+  planPdfUpload: vi.fn((file: File, onProgress?: (done: number, total: number) => void) =>
+    pdf.plan ? pdf.plan(file, onProgress) : Promise.resolve({ kind: 'file' })
+  ),
+}));
 
 import UploadPage from '@/app/page';
+import { planPdfUpload } from '@/lib/prepare-pdf';
 import { encodeEvent, PROGRESS_MIME, type ProgressEvent } from '@/lib/generation-progress';
 
 // What the page sent to /api/generate, as plain fields.
@@ -24,6 +36,8 @@ let sentForms: Record<string, string>[];
 
 beforeEach(() => {
   sentForms = [];
+  pdf.plan = null;
+  vi.mocked(planPdfUpload).mockClear();
   vi.stubGlobal(
     'fetch',
     vi.fn(async (_url: string, init: RequestInit) => {
@@ -86,7 +100,8 @@ describe('upload page options', () => {
 
     choose(new File(['x'], 'lecture.ppt'));
     expect(screen.getByText("Older PowerPoint (.ppt) files can't be read. Save it as .pptx or PDF first.")).toBeTruthy();
-    choose(new File([new Uint8Array(5 * 1024 * 1024)], 'scan.pdf', { type: 'application/pdf' }));
+    // Only a PDF may be big (#44); every other file keeps the 4 MB limit.
+    choose(new File([new Uint8Array(5 * 1024 * 1024)], 'big deck.pptx'));
     expect(screen.getByText(/This file is 5.0 MB/)).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Generate Study Guide' }) as HTMLButtonElement).disabled).toBe(true);
 
@@ -309,5 +324,109 @@ describe('progress while generating', () => {
     second.send(RESULT);
     second.end();
     await screen.findByText('Fluid inside the chloroplast');
+  });
+});
+
+describe('big PDFs (#44)', () => {
+  const MB = 1024 * 1024;
+  const choosePdf = (name = 'lecture.pdf', megabytes = 12) => {
+    const input = document.getElementById('file-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File([new Uint8Array(megabytes * MB)], name, { type: 'application/pdf' })] } });
+  };
+  const generate = () => fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+  const currentStep = () => document.querySelector('[aria-current="step"]')?.textContent ?? null;
+  const PAGES = ['The Calvin cycle takes place in the stroma.', 'Mitochondria make most of the cell’s ATP.'];
+
+  it('accepts a PDF far over 4 MB, and sends only its text, not the file', async () => {
+    pdf.plan = async () => ({ kind: 'pages', pages: PAGES });
+    render(<UploadPage />);
+    choosePdf('Week 4 lecture.pdf', 12);
+    // Picked without complaint, so the button is ready.
+    expect(screen.getByText('Week 4 lecture.pdf')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Generate Study Guide' }) as HTMLButtonElement).disabled).toBe(false);
+
+    generate();
+    expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
+
+    expect(sentForms).toHaveLength(1);
+    expect(sentForms[0]).not.toHaveProperty('file');
+    expect(JSON.parse(sentForms[0].pages)).toEqual(PAGES);
+    expect(sentForms[0].fileName).toBe('Week 4 lecture.pdf');
+    expect(sentForms[0].studyType).toBe('flashcard');
+    // Twelve megabytes became a few dozen bytes.
+    expect(sentForms[0].pages.length).toBeLessThan(200);
+  });
+
+  it('reads even a small PDF in the browser', async () => {
+    pdf.plan = async () => ({ kind: 'pages', pages: PAGES });
+    render(<UploadPage />);
+    choosePdf('short.pdf', 1);
+    generate();
+    await screen.findByText('Fluid inside the chloroplast');
+    expect(planPdfUpload).toHaveBeenCalledTimes(1);
+    expect(sentForms[0]).toHaveProperty('pages');
+  });
+
+  it('shows how far the reading has got, then moves on to sending', async () => {
+    let finish!: () => void;
+    pdf.plan = (_file, onProgress) =>
+      new Promise((resolve) => {
+        onProgress?.(0, 0);
+        onProgress?.(12, 140);
+        finish = () => resolve({ kind: 'pages', pages: PAGES });
+      });
+    render(<UploadPage />);
+    choosePdf();
+    generate();
+
+    // Reading on this device is the step under way: it is not an upload.
+    await waitFor(() => expect(currentStep()).toBe('Reading your PDF on this device (12 of 140 pages)'));
+    expect(screen.queryByText('Uploading your file')).toBeNull();
+    expect(sentForms).toHaveLength(0);
+
+    finish();
+    expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
+    expect(sentForms).toHaveLength(1);
+  });
+
+  it('sends the file itself when it is scanned pictures and small enough', async () => {
+    pdf.plan = async () => ({ kind: 'file' });
+    render(<UploadPage />);
+    choosePdf('scan.pdf', 3);
+    generate();
+    await screen.findByText('Fluid inside the chloroplast');
+    expect(sentForms[0]).toEqual(expect.objectContaining({ file: 'file:scan.pdf' }));
+    expect(sentForms[0]).not.toHaveProperty('pages');
+  });
+
+  it('explains why a PDF cannot be used, sends nothing, and lets the student try again', async () => {
+    const message = "This PDF is mostly scanned pictures, and it's over 4 MB, which is too big to send.";
+    pdf.plan = async () => ({ kind: 'problem', message });
+    render(<UploadPage />);
+    choosePdf('scan.pdf', 30);
+    generate();
+    expect(await screen.findByText(message)).toBeTruthy();
+    expect(sentForms).toHaveLength(0);
+    expect(screen.queryByRole('list', { name: 'Progress' })).toBeNull();
+    expect((screen.getByRole('button', { name: 'Generate Study Guide' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('turns away an enormous PDF as soon as it is picked', () => {
+    render(<UploadPage />);
+    const input = document.getElementById('file-input') as HTMLInputElement;
+    const huge = new File(['x'], 'book.pdf', { type: 'application/pdf' });
+    Object.defineProperty(huge, 'size', { value: 150 * MB });
+    fireEvent.change(input, { target: { files: [huge] } });
+    expect(screen.getByText(/This PDF is 150 MB. PDFs can be up to 100 MB/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Generate Study Guide' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('does not read anything that is not a PDF', async () => {
+    render(<UploadPage />);
+    chooseFile();
+    generate();
+    await screen.findByText('Fluid inside the chloroplast');
+    expect(planPdfUpload).not.toHaveBeenCalled();
+    expect(sentForms[0]).toEqual(expect.objectContaining({ file: 'file:notes.txt' }));
   });
 });

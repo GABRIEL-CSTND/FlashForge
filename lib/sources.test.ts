@@ -6,6 +6,7 @@ import {
   linkProblem,
   MAX_SOURCE_CHARS,
   pastedTextProblem,
+  pickedFileProblem,
   quoteSourceLabel,
   titleFromText,
   topicProblem,
@@ -99,5 +100,41 @@ describe('quoteSourceLabel (#80)', () => {
     expect(quoteSourceLabel('https://en.wikipedia.org/wiki/Photosynthesis')).toBe('From Wikipedia');
     expect(quoteSourceLabel('https://example.org/notes')).toBe('From the web page');
     expect(quoteSourceLabel(null)).toBe('From the notes');
+  });
+});
+
+describe('pickedFileProblem (#44)', () => {
+  const MB = 1024 * 1024;
+
+  it('lets a PDF be big, because the browser sends only its text', () => {
+    for (const size of [2 * MB, 4 * MB, 5.5 * MB, 12 * MB, 100 * MB]) {
+      expect(pickedFileProblem('lecture.pdf', 'application/pdf', size)).toBeNull();
+    }
+    // Recognised by its name when the browser gives no type.
+    expect(pickedFileProblem('LECTURE.PDF', '', 30 * MB)).toBeNull();
+  });
+
+  it('turns away only an enormous PDF, with a message that says how to go on', () => {
+    const message = pickedFileProblem('book.pdf', 'application/pdf', 150 * MB);
+    expect(message).toContain('150 MB');
+    expect(message).toContain('up to 100 MB');
+    expect(message).toMatch(/splitting it|paste/);
+  });
+
+  it('keeps the 4 MB limit for every other kind of file', () => {
+    expect(pickedFileProblem('essay.docx', '', 5 * MB)).toBe(fileProblem('essay.docx', '', 5 * MB));
+    expect(pickedFileProblem('deck.pptx', '', 12 * MB)).toBe(fileProblem('deck.pptx', '', 12 * MB));
+    expect(pickedFileProblem('deck.pptx', '', 12 * MB)).toContain('Files can be up to 4 MB');
+    expect(pickedFileProblem('notes.txt', 'text/plain', 5 * MB)).toContain('4 MB');
+  });
+
+  it('still refuses what is not a supported file, and accepts what is', () => {
+    expect(pickedFileProblem('song.mp3', 'audio/mpeg', 1000)).toBe(fileProblem('song.mp3', 'audio/mpeg', 1000));
+    expect(pickedFileProblem('essay.doc', 'application/msword', 1000)).toBe(fileProblem('essay.doc', 'application/msword', 1000));
+    expect(pickedFileProblem('small.pdf', 'application/pdf', 1000)).toBeNull();
+  });
+
+  it('does not change what the server accepts: a PDF sent to it is still limited to 4 MB', () => {
+    expect(fileProblem('big.pdf', 'application/pdf', 5.5 * MB)).toContain('4 MB');
   });
 });

@@ -14,6 +14,7 @@ import {
 } from '@/lib/sources';
 import { docxText, pptxText } from '@/lib/office-text';
 import { lineUnits, pageUnits, type SourceUnits } from '@/lib/source-quotes';
+import { cleanFileName, parsePages } from '@/lib/pdf-pages';
 import { fetchWebPage, WebPageError } from '@/lib/web-page';
 import { findTopic, TopicError } from '@/lib/topic';
 import {
@@ -94,6 +95,8 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
     const pasted = typeof pastedRaw === 'string' ? pastedRaw.replace(/\r\n?/g, '\n') : null;
     // A link to a web page (#74) or a topic to look up (#79) also come instead of a file.
     const link = formData.get('url');
+    // The text of a PDF's pages, read in the browser (#44), instead of the file.
+    const pagesRaw = formData.get('pages');
     const topic = formData.get('topic');
     const studyTypeRaw = formData.get('studyType');
     const studyType = isStudyType(studyTypeRaw) ? studyTypeRaw : 'flashcard';
@@ -183,6 +186,18 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
         console.error('[generate] topic lookup failed:', err.message);
         return done(NextResponse.json({ error: err.userMessage }, { status: 422 }), { success: false, errorKind: 'unreadable' });
       }
+    } else if (typeof pagesRaw === 'string') {
+      // A PDF the browser read itself (#44): only the text of its pages was sent, in
+      // the same form the server's own PDF reading produces, so it goes on from here
+      // exactly as a PDF sent whole does. Checked like any other input.
+      const parsed = parsePages(pagesRaw);
+      if ('error' in parsed) {
+        return done(NextResponse.json({ error: parsed.error }, { status: 422 }), { success: false, errorKind: 'unreadable' });
+      }
+      const name = cleanFileName(formData.get('fileName'));
+      ({ text, units } = pageUnits(parsed.pages));
+      title = name.replace(/\.[^/.]+$/, '') || name;
+      sourceFilename = name;
     } else {
       if (!file) {
         return done(NextResponse.json({ error: 'Missing file' }, { status: 400 }), { success: false, errorKind: 'no_file' });
