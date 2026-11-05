@@ -304,9 +304,10 @@ of `StudyViewer.tsx` unchanged).
    server looks the topic up during that step. When the server reports a retry or the backup model, that is explained under the
    writing step. The page's own timer (15 seconds, plus one per question over 10) only
    explains a possible slower backup when the server hasn't already said so.
-   Then the page swaps to `StudyViewer` on the **same URL** (`/`), so
-   *Exit* clears the result instead of navigating (it asks first if the guide isn't saved
-   and isn't in History either).
+   Then the page shows the new cards in the spread (`DeckSpread`) and, after **Start
+   studying**, `StudyViewer`, both on the **same URL** (`/`), so *Exit* on either clears the
+   result instead of navigating (it asks first if the guide isn't saved and isn't in
+   History either).
 4. **Usage log** (#62): every request to `/api/generate`, successful or not, gets a row in
    `generation_logs`. The row is reserved by the limit check and filled in with Next's
    `after()`, after the response has been sent, so logging never slows the user down.
