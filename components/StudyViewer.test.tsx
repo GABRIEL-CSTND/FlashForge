@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import StudyViewer, { type StudyResult } from '@/components/StudyViewer';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 const MC_CARDS = [
   { id: 'c1', question: 'Layer 3?', answer: 'Network', options: ['Physical', 'Network', 'Transport'] },
@@ -14,11 +18,26 @@ const FLASH_CARDS = [
   { id: 'f2', question: 'Enzyme that fixes CO2', answer: 'RuBisCO' },
   { id: 'f3', question: 'Pigment that absorbs light', answer: 'Chlorophyll' },
 ];
+const SIX = [
+  ...FLASH_CARDS,
+  { id: 'f4', question: 'Stage that makes glucose', answer: 'Calvin cycle' },
+  { id: 'f5', question: 'Gas given off', answer: 'Oxygen' },
+  { id: 'f6', question: 'Organelle where it happens', answer: 'Chloroplast' },
+];
 
 const click = (name: string | RegExp) => fireEvent.click(screen.getByRole('button', { name }));
-const flip = () => fireEvent.click(screen.getByRole('button', { name: /Tap to flip/ }));
-const mark = (name: '✓ Got it' | '✗ Missed it') =>
-  fireEvent.click(within(screen.getByRole('group', { name: 'Did you know it?' })).getByRole('button', { name }));
+// The card in the middle of the desk: the button that turns it over.
+const flip = () => fireEvent.click(screen.getByRole('button', { name: /^Flip (the card|back)$/ }));
+const piles = () => screen.getByRole('group', { name: 'Did you know it?' });
+const sortTo = (name: 'Got it' | 'Missed it') => fireEvent.click(within(piles()).getByRole('button', { name }));
+const pressKey = (button: string, key: 'ArrowLeft' | 'ArrowRight') => fireEvent.keyDown(screen.getByRole('button', { name: button }), { key });
+// Match: clue and term slips, found by their words.
+const clue = (text: string) => within(screen.getByRole('list', { name: 'Clues' })).getByRole('button', { name: new RegExp(`^${text}`) });
+const term = (text: string) => within(screen.getByRole('list', { name: 'Terms' })).getByRole('button', { name: text });
+const pair = (clueText: string, termText: string) => {
+  fireEvent.click(clue(clueText));
+  fireEvent.click(term(termText));
+};
 
 describe('multiple choice', () => {
   it('reports each pick once when the student finishes', () => {
@@ -75,264 +94,251 @@ describe('multiple choice', () => {
   });
 });
 
-describe('flashcards', () => {
-  it('only offers "Got it / Missed it" once the card is flipped', () => {
+describe('flashcards on the desk', () => {
+  it('shows the clue, and the term once the card is turned over', () => {
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
-    expect(screen.queryByRole('group', { name: 'Did you know it?' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Photosynthesis' })).toBeTruthy();
+    expect(screen.getByText('Card 1 of 3')).toBeTruthy();
+    expect(screen.getByText('Fluid inside the chloroplast')).toBeTruthy();
+    expect(screen.queryByText('Stroma')).toBeNull();
     flip();
     expect(screen.getByText('Stroma')).toBeTruthy();
-    expect(screen.getByRole('group', { name: 'Did you know it?' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Flip back' })).toBeTruthy();
   });
 
-  it('moves on after each mark and reports the marks when the last one is marked', () => {
-    const onComplete = vi.fn<(r: StudyResult) => void>();
-    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} onComplete={onComplete} />);
+  it('only lets screen readers reach the card in the middle', () => {
+    const { container } = render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    const cards = [...container.querySelectorAll('.desk-card')];
+    expect(cards).toHaveLength(3);
+    expect(cards.filter((c) => c.getAttribute('aria-hidden') !== 'true')).toHaveLength(1);
+  });
+
+  it('sorts each card onto a pile, by clicking it or with ← and →, and reports the marks at the end', () => {
+    const results: StudyResult[] = [];
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} onComplete={(r) => results.push(r)} />);
     flip();
-    mark('✓ Got it');
+    sortTo('Got it');
     expect(screen.getByText('Card 2 of 3')).toBeTruthy();
-    // The next card starts face down.
     expect(screen.getByText('Enzyme that fixes CO2')).toBeTruthy();
-    flip();
-    mark('✗ Missed it');
-    flip();
-    mark('✓ Got it');
+    // A card can be sorted without turning it over, and from the keyboard.
+    pressKey('Flip the card', 'ArrowLeft');
+    expect(screen.getByText('Card 3 of 3')).toBeTruthy();
+    expect(results).toEqual([]);
+    pressKey('Got it', 'ArrowRight');
 
-    expect(onComplete).toHaveBeenCalledTimes(1);
-    expect(onComplete).toHaveBeenCalledWith({
-      answers: [
-        { cardId: 'f1', result: 'got' },
-        { cardId: 'f2', result: 'missed' },
-        { cardId: 'f3', result: 'got' },
-      ],
-      correct: 2,
-      total: 3,
-    });
-    expect(screen.getByText('2 / 3')).toBeTruthy();
-    expect(screen.getByText('1 missed')).toBeTruthy();
-  });
-
-  it('counts cards skipped with Next as not marked', () => {
-    const onComplete = vi.fn<(r: StudyResult) => void>();
-    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} onComplete={onComplete} />);
-    flip();
-    mark('✗ Missed it');
-    click('Next →');
-    click('Finish');
-
-    expect(onComplete.mock.calls[0][0].answers).toEqual([
-      { cardId: 'f1', result: 'missed' },
-      { cardId: 'f2', result: null },
-      { cardId: 'f3', result: null },
+    expect(results).toEqual([
+      {
+        answers: [
+          { cardId: 'f1', result: 'got' },
+          { cardId: 'f2', result: 'missed' },
+          { cardId: 'f3', result: 'got' },
+        ],
+        correct: 2,
+        total: 3,
+      },
     ]);
-    expect(screen.getByText('0 / 3')).toBeTruthy();
-    expect(screen.getByText('1 missed · 2 not marked')).toBeTruthy();
+    expect(screen.getByText('Session done')).toBeTruthy();
+    expect(screen.getByText('2 / 3')).toBeTruthy();
+    expect(screen.getByText('in Got it')).toBeTruthy();
+    expect(screen.getByText('Click the Missed it pile to go through that card again.')).toBeTruthy();
   });
 
-  it('keeps the old "reviewed all" message when nothing was marked', () => {
-    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
-    click('Next →');
-    click('Next →');
-    click('Finish');
-    expect(screen.getByText(/reviewed all 3 cards/)).toBeTruthy();
-  });
-
-  it('shows an earlier mark when going back, and starts fresh after Review Again', () => {
-    const onComplete = vi.fn<(r: StudyResult) => void>();
+  it('deals the Missed it pile again for practice, without reporting it again', () => {
+    const onComplete = vi.fn();
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} onComplete={onComplete} />);
-    flip();
-    mark('✓ Got it');
-    click('← Prev');
-    flip();
-    expect(screen.getByRole('button', { name: '✓ Got it' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: '✗ Missed it' }).getAttribute('aria-pressed')).toBe('false');
+    sortTo('Got it');
+    sortTo('Missed it');
+    sortTo('Missed it');
+    expect(onComplete).toHaveBeenCalledOnce();
+    expect((within(piles()).getByRole('button', { name: 'Got it pile, 1 card' }) as HTMLButtonElement).disabled).toBe(true);
 
-    // Changing the mark replaces it.
-    mark('✗ Missed it');
-    click('Next →');
-    click('Finish');
-    expect(onComplete.mock.calls[0][0].answers.map((a) => a.result)).toEqual(['missed', null, null]);
+    click('Study the 2 missed cards again');
+    expect(screen.getByText('Card 1 of 2')).toBeTruthy();
+    expect(screen.getByText('Enzyme that fixes CO2')).toBeTruthy();
+    sortTo('Got it');
+    sortTo('Got it');
+    expect(screen.getByText('Practice round done')).toBeTruthy();
+    expect(screen.getByText('3 / 3')).toBeTruthy();
+    expect(screen.getByText('Every card ended up in Got it.')).toBeTruthy();
+    expect(screen.getByText('Your saved score is from the first time through.')).toBeTruthy();
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
 
+  it('starts the whole deck over with Review Again, and reports that run too', () => {
+    const onComplete = vi.fn();
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} onComplete={onComplete} />);
+    for (let i = 0; i < 3; i++) sortTo('Got it');
     click('Review Again');
     expect(screen.getByText('Card 1 of 3')).toBeTruthy();
-    flip();
-    expect(screen.getByRole('button', { name: '✗ Missed it' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByText('Fluid inside the chloroplast')).toBeTruthy();
+    for (let i = 0; i < 3; i++) sortTo('Missed it');
+    expect(onComplete).toHaveBeenCalledTimes(2);
+    expect(onComplete.mock.calls[1][0]).toMatchObject({ correct: 0, total: 3 });
+  });
+
+  it('shows the pencil only when the cards can be edited', () => {
+    const onEdit = vi.fn();
+    const first = render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} onEdit={onEdit} />);
+    click('Edit cards');
+    expect(onEdit).toHaveBeenCalledOnce();
+    first.unmount();
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    expect(screen.queryByRole('button', { name: 'Edit cards' })).toBeNull();
+  });
+
+  it('says so when the set has no cards', () => {
+    render(<StudyViewer title="Empty" studyType="flashcard" cards={[]} />);
+    expect(screen.getByText('No items in this set.')).toBeTruthy();
   });
 });
 
 describe('type the answer (#66)', () => {
-  const typeIn = (text: string) =>
-    fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: text } });
+  const type = (text: string) => fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: text } });
   const modes = () =>
     within(screen.getByRole('group', { name: 'How do you want to study?' }))
       .getAllByRole('button')
-      .map((b) => `${b.textContent}${b.getAttribute('aria-pressed') === 'true' ? ' (on)' : ''}`);
+      .map((b) => [b.textContent, b.getAttribute('aria-pressed')]);
 
   it('lets flashcard sets be flipped, typed or matched, starting with Flip', () => {
-    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
-    expect(modes()).toEqual(['Flip (on)', 'Type', 'Match']);
-    cleanup();
+    const first = render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    expect(modes()).toEqual([
+      ['Flip', 'true'],
+      ['Type', 'false'],
+      ['Match', 'false'],
+    ]);
+    first.unmount();
     render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
     expect(screen.queryByRole('group', { name: 'How do you want to study?' })).toBeNull();
   });
 
-  it('checks each typed answer, then reports what was typed', () => {
-    const onComplete = vi.fn<(r: StudyResult) => void>();
-    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} onComplete={onComplete} />);
+  it('writes the answer on the card, checks it, then reports what was typed', () => {
+    const results: StudyResult[] = [];
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} onComplete={(r) => results.push(r)} />);
     click('Type');
-    expect(modes()).toEqual(['Flip', 'Type (on)', 'Match']);
     expect(screen.getByText('Fluid inside the chloroplast')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Next →' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: 'Check' }) as HTMLButtonElement).disabled).toBe(true);
 
-    typeIn('stroma');
+    type('stroma');
     click('Check');
     expect(screen.getByRole('status').textContent).toBe('✓ Correct');
-    click('Next →');
+    click('Next card →');
 
-    typeIn('Rubisko');
+    type('rubisko');
     click('Check');
-    expect(screen.getByRole('status').textContent).toBe('✓ Almost. It\'s spelled RuBisCO.');
-    click('Next →');
+    expect(screen.getByRole('status').textContent).toBe("✓ Almost. It's spelled RuBisCO.");
+    click('Next card →');
 
     click("I don't know");
     expect(screen.getByRole('status').textContent).toBe('The answer is Chlorophyll.');
     click('Finish');
 
-    expect(onComplete).toHaveBeenCalledTimes(1);
-    expect(onComplete).toHaveBeenCalledWith({
-      mode: 'type',
-      answers: [
-        { cardId: 'f1', typed: 'stroma' },
-        { cardId: 'f2', typed: 'Rubisko' },
-        { cardId: 'f3', typed: null },
-      ],
-      correct: 2,
-      total: 3,
-    });
+    expect(results).toEqual([
+      {
+        mode: 'type',
+        answers: [
+          { cardId: 'f1', typed: 'stroma' },
+          { cardId: 'f2', typed: 'rubisko' },
+          { cardId: 'f3', typed: null },
+        ],
+        correct: 2,
+        total: 3,
+      },
+    ]);
     expect(screen.getByText('2 / 3')).toBeTruthy();
     expect(screen.getByText('67% correct')).toBeTruthy();
     expect(screen.getByText('1 with a small typo')).toBeTruthy();
   });
 
-  it('shows the right answer after a wrong one, and keeps it when going back', () => {
+  it('puts a wrong answer on the Missed it pile', () => {
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
     click('Type');
-    typeIn('Thylakoid');
+    type('xylem');
     fireEvent.submit(screen.getByRole('textbox', { name: 'Your answer' }));
     expect(screen.getByRole('status').textContent).toBe('✗ Not quite. The answer is Stroma.');
-    click('Next →');
-    click('← Prev');
-    const box = screen.getByRole('textbox', { name: 'Your answer' }) as HTMLInputElement;
-    expect([box.value, box.disabled]).toEqual(['Thylakoid', true]);
-    expect(screen.getByRole('status').textContent).toBe('✗ Not quite. The answer is Stroma.');
-    expect(screen.queryByRole('button', { name: 'Check' })).toBeNull();
+    click('Next card →');
+    expect(screen.getByText('Card 2 of 3')).toBeTruthy();
+    expect(within(piles()).getByRole('button', { name: 'Missed it pile, 1 card' })).toBeTruthy();
   });
 
   it('starts over when switching how to study', () => {
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
-    flip();
-    mark('✓ Got it');
+    sortTo('Got it');
     expect(screen.getByText('Card 2 of 3')).toBeTruthy();
     click('Type');
     expect(screen.getByText('Card 1 of 3')).toBeTruthy();
     expect(screen.getByRole('textbox', { name: 'Your answer' })).toBeTruthy();
+    expect(within(piles()).getByRole('button', { name: 'Got it pile, 0 cards' })).toBeTruthy();
     click('Flip');
-    flip();
-    expect(screen.getByRole('button', { name: '✓ Got it' }).getAttribute('aria-pressed')).toBe('false');
+    expect(within(piles()).getByRole('button', { name: 'Got it' })).toBeTruthy();
   });
 });
 
 describe('matching (#67)', () => {
-  const SIX_CARDS = [
-    ...FLASH_CARDS,
-    { id: 'f4', question: 'Stage that makes glucose', answer: 'Calvin cycle' },
-    { id: 'f5', question: 'Gas given off', answer: 'Oxygen' },
-    { id: 'f6', question: 'Organelle where it happens', answer: 'Chloroplast' },
-  ];
-  const termSelect = (clue: string) => screen.getByRole('combobox', { name: clue }) as HTMLSelectElement;
-  // Terms are shuffled, so pick by name.
-  const matchTerm = (clue: string, term: string) => {
-    const option = within(termSelect(clue))
-      .getAllByRole('option')
-      .find((o) => o.textContent?.endsWith(`. ${term}`)) as HTMLOptionElement;
-    fireEvent.change(termSelect(clue), { target: { value: option.value } });
-  };
-  const rows = () =>
-    within(screen.getByRole('list', { name: 'Clues' }))
-      .getAllByRole('listitem')
-      .map((li) => li.textContent);
-  const disabled = (name: string) => (screen.getByRole('button', { name }) as HTMLButtonElement).disabled;
-
-  it('plays round by round and reports the term picked for each clue', () => {
-    const onComplete = vi.fn<(r: StudyResult) => void>();
-    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={SIX_CARDS} onComplete={onComplete} />);
+  it('plays round by round, and reports the first term picked for each clue', () => {
+    vi.useFakeTimers();
+    const results: StudyResult[] = [];
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={SIX} onComplete={(r) => results.push(r)} />);
     click('Match');
     expect(screen.getByText('Round 1 of 2')).toBeTruthy();
-    expect(
-      within(screen.getByRole('list', { name: 'Terms' }))
-        .getAllByRole('listitem')
-        .map((li) => li.textContent?.slice(3))
-        .sort()
-    ).toEqual(['Chlorophyll', 'RuBisCO', 'Stroma']);
-    expect([disabled('Check answers'), disabled('Next round →')]).toEqual([true, true]);
+    expect(within(screen.getByRole('list', { name: 'Clues' })).getAllByRole('button')).toHaveLength(3);
 
-    matchTerm('Fluid inside the chloroplast', 'Stroma');
-    matchTerm('Enzyme that fixes CO2', 'Chlorophyll');
-    expect(disabled('Check answers')).toBe(true);
-    matchTerm('Pigment that absorbs light', 'RuBisCO');
-    click('Check answers');
-    expect(rows()).toEqual([
-      'Fluid inside the chloroplast✓ Stroma',
-      'Enzyme that fixes CO2✗ Chlorophyll · Answer: RuBisCO',
-      'Pigment that absorbs light✗ RuBisCO · Answer: Chlorophyll',
-    ]);
-    expect(screen.queryByRole('combobox')).toBeNull();
-
+    pair('Fluid inside the chloroplast', 'Stroma');
+    expect((clue('Fluid inside the chloroplast') as HTMLButtonElement).disabled).toBe(true);
+    expect((term('Stroma') as HTMLButtonElement).disabled).toBe(true);
+    // A wrong pick flashes, and that clue counts as missed even once it's matched.
+    pair('Enzyme that fixes CO2', 'Chlorophyll');
+    expect(screen.getByText('Not that one. Try another term.')).toBeTruthy();
+    act(() => vi.advanceTimersByTime(800));
+    pair('Enzyme that fixes CO2', 'RuBisCO');
+    pair('Pigment that absorbs light', 'Chlorophyll');
     click('Next round →');
-    expect(screen.getByText('Round 2 of 2')).toBeTruthy();
-    matchTerm('Stage that makes glucose', 'Calvin cycle');
-    matchTerm('Gas given off', 'Oxygen');
-    matchTerm('Organelle where it happens', 'Chloroplast');
-    click('Check answers');
-    click('Finish');
 
-    expect(onComplete).toHaveBeenCalledWith({
-      mode: 'match',
-      answers: [
-        { cardId: 'f1', chosen: 'Stroma' },
-        { cardId: 'f2', chosen: 'Chlorophyll' },
-        { cardId: 'f3', chosen: 'RuBisCO' },
-        { cardId: 'f4', chosen: 'Calvin cycle' },
-        { cardId: 'f5', chosen: 'Oxygen' },
-        { cardId: 'f6', chosen: 'Chloroplast' },
-      ],
-      correct: 4,
-      total: 6,
-    });
-    expect(screen.getByText('4 / 6')).toBeTruthy();
-    expect(screen.getByText('67% correct')).toBeTruthy();
+    expect(screen.getByText('Round 2 of 2')).toBeTruthy();
+    pair('Stage that makes glucose', 'Calvin cycle');
+    pair('Gas given off', 'Oxygen');
+    pair('Organelle where it happens', 'Chloroplast');
+    click('See results →');
+
+    expect(results).toEqual([
+      {
+        mode: 'match',
+        answers: [
+          { cardId: 'f1', chosen: 'Stroma' },
+          { cardId: 'f2', chosen: 'Chlorophyll' },
+          { cardId: 'f3', chosen: 'Chlorophyll' },
+          { cardId: 'f4', chosen: 'Calvin cycle' },
+          { cardId: 'f5', chosen: 'Oxygen' },
+          { cardId: 'f6', chosen: 'Chloroplast' },
+        ],
+        correct: 5,
+        total: 6,
+      },
+    ]);
+    expect(screen.getByText('5 / 6')).toBeTruthy();
+    expect(screen.getByText('83% correct')).toBeTruthy();
+    expect(within(piles()).getByRole('button', { name: 'Study the 1 missed card again' })).toBeTruthy();
   });
 
-  it('moves a term to the clue that picks it last', () => {
-    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+  it('takes a term first, then its clue', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={SIX} />);
     click('Match');
-    matchTerm('Fluid inside the chloroplast', 'Stroma');
-    matchTerm('Enzyme that fixes CO2', 'Stroma');
-    expect(termSelect('Fluid inside the chloroplast').value).toBe('');
-    expect(termSelect('Enzyme that fixes CO2').selectedOptions[0].textContent).toMatch(/Stroma$/);
+    fireEvent.click(term('RuBisCO'));
+    expect(term('RuBisCO').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(clue('Enzyme that fixes CO2'));
+    expect((term('RuBisCO') as HTMLButtonElement).disabled).toBe(true);
+    expect(clue('Enzyme that fixes CO2').textContent).toContain('RuBisCO');
   });
 
   it('never lists the terms in the same order as the clues', () => {
-    // With this, the shuffle swaps nothing, so the order is rotated instead.
+    // A shuffle that would keep the order is turned by one place.
     vi.spyOn(Math, 'random').mockReturnValue(0.999);
-    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={SIX} />);
     click('Match');
-    expect(within(screen.getByRole('list', { name: 'Terms' })).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      'A. RuBisCO',
-      'B. Chlorophyll',
-      'C. Stroma',
-    ]);
-    vi.restoreAllMocks();
+    expect(
+      within(screen.getByRole('list', { name: 'Terms' }))
+        .getAllByRole('button')
+        .map((b) => b.textContent)
+    ).toEqual(['RuBisCO', 'Chlorophyll', 'Stroma']);
   });
 });
 
@@ -371,7 +377,7 @@ describe('true or false (#68)', () => {
 
   it('shows a set with an old study type as flashcards', () => {
     render(<StudyViewer title="Old" studyType={'identification' as 'flashcard'} cards={FLASH_CARDS} />);
-    expect(screen.getByRole('button', { name: /Tap to flip/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Flip the card$/ })).toBeTruthy();
     expect(screen.getByRole('group', { name: 'How do you want to study?' })).toBeTruthy();
   });
 });
@@ -447,7 +453,8 @@ describe('read aloud (#77)', () => {
     localStorage.clear();
   });
 
-  const readAloud = () => click('🔊 Read aloud');
+  // "🔊 Read aloud" on the quiz screen, "Read aloud" among the desk's tools.
+  const readAloud = () => click(/Read aloud/);
   const TF = [
     { id: 't1', question: 'Chloroplasts make most of the ATP', answer: 'False', options: ['True', 'False'], explanation: 'Mitochondria do.' },
   ];
@@ -455,7 +462,7 @@ describe('read aloud (#77)', () => {
   it('shows no read-aloud controls where the browser cannot speak', () => {
     vi.unstubAllGlobals();
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
-    expect(screen.queryByRole('button', { name: '🔊 Read aloud' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Read aloud/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Auto' })).toBeNull();
   });
 
@@ -503,7 +510,7 @@ describe('read aloud (#77)', () => {
     expect(spoken).toEqual(['Fluid inside the chloroplast']);
     flip();
     expect(spoken.at(-1)).toBe('Stroma');
-    mark('✓ Got it');
+    sortTo('Got it');
     expect(spoken.at(-1)).toBe('Enzyme that fixes CO2');
     expect(localStorage.getItem('flashforge_read_aloud')).toBe('1');
 
@@ -528,6 +535,18 @@ describe('read aloud (#77)', () => {
     const spokenBefore = spoken.length;
     const cancelsBefore = cancels;
     click('Finish');
+    expect(cancels).toBeGreaterThan(cancelsBefore);
+    expect(spoken).toHaveLength(spokenBefore);
+  });
+
+  it('stops reading when the flashcard deck is finished', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    click('Auto');
+    sortTo('Got it');
+    sortTo('Got it');
+    const spokenBefore = spoken.length;
+    const cancelsBefore = cancels;
+    sortTo('Got it');
     expect(cancels).toBeGreaterThan(cancelsBefore);
     expect(spoken).toHaveLength(spokenBefore);
   });
@@ -564,7 +583,7 @@ describe('where a card came from', () => {
   it('shows nothing for a card that has no quote', () => {
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={SOURCED_FLASH} />);
     flip();
-    fireEvent.click(screen.getByRole('button', { name: /Got it/ }));
+    sortTo('Got it');
     expect(screen.getByText('Enzyme that fixes CO2')).toBeTruthy();
     flip();
     expect(screen.queryByText(FROM)).toBeNull();
@@ -600,31 +619,15 @@ describe('where a card came from', () => {
     expect(screen.getByText('From the document · Page 4')).toBeTruthy();
   });
 
-  it('shows the quote for each clue once a matching round is checked', () => {
-    const SIX = [
-      ...SOURCED_FLASH,
-      { id: 'f4', question: 'Stage that makes glucose', answer: 'Calvin cycle' },
-      { id: 'f5', question: 'Gas given off', answer: 'Oxygen' },
-      { id: 'f6', question: 'Organelle where it happens', answer: 'Chloroplast' },
-    ];
-    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={SIX} />);
+  it('shows the quote under each clue once it is matched', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={[...SOURCED_FLASH, ...SIX.slice(3)]} />);
     click('Match');
-    // Terms are shuffled, so pick each by name.
-    const matchTerm = (clue: string, term: string) => {
-      const select = screen.getByRole('combobox', { name: clue }) as HTMLSelectElement;
-      const option = within(select)
-        .getAllByRole('option')
-        .find((o) => o.textContent?.endsWith(`. ${term}`)) as HTMLOptionElement;
-      fireEvent.change(select, { target: { value: option.value } });
-    };
-    matchTerm('Fluid inside the chloroplast', 'Stroma');
-    matchTerm('Enzyme that fixes CO2', 'RuBisCO');
-    matchTerm('Pigment that absorbs light', 'Chlorophyll');
     expect(screen.queryByText(FROM)).toBeNull();
-
-    click('Check answers');
+    pair('Fluid inside the chloroplast', 'Stroma');
     expect(screen.getByText('From the document · Page 4')).toBeTruthy();
     expect(screen.getByText(/The stroma is the fluid inside the chloroplast\./)).toBeTruthy();
+    pair('Enzyme that fixes CO2', 'RuBisCO');
+    pair('Pigment that absorbs light', 'Chlorophyll');
     expect(screen.getByText(/Chlorophyll is the pigment that absorbs light\./)).toBeTruthy();
     // The clue with no quote adds nothing: two of the three have one.
     expect(screen.getAllByText(FROM)).toHaveLength(2);

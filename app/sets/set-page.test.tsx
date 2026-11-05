@@ -77,7 +77,7 @@ describe('study set page', () => {
       data: { cards: [{ id: CARD, question: 'Green pigment that absorbs light', answer: 'Chlorophyll', options: null, position: 0 }] },
     };
     render(<SetPage />);
-    fireEvent.click(await screen.findByRole('button', { name: '✏️ Edit cards' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit cards' }));
     expect(screen.getByRole('heading', { name: 'Edit cards' })).toBeTruthy();
 
     fireEvent.change(within(screen.getByRole('listitem', { name: 'Card 1' })).getByLabelText('Question'), {
@@ -98,7 +98,7 @@ describe('study set page', () => {
   it('stays in the editor and shows the error when saving fails', async () => {
     state.apiResult = { ok: false, status: 400, data: { error: 'Card 1: write an answer.', cardIndex: 0 } };
     render(<SetPage />);
-    fireEvent.click(await screen.findByRole('button', { name: '✏️ Edit cards' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit cards' }));
     fireEvent.change(within(screen.getByRole('listitem', { name: 'Card 1' })).getByLabelText('Question'), { target: { value: 'Changed' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Card 1: write an answer.');
@@ -114,7 +114,7 @@ describe('study set page', () => {
 
   it('does not offer "Assign to class" to a student who owns the set', async () => {
     render(<SetPage />);
-    await screen.findByRole('button', { name: '✏️ Edit cards' });
+    await screen.findByRole('button', { name: 'Edit cards' });
     expect(screen.queryByRole('button', { name: '📌 Assign to class' })).toBeNull();
   });
 
@@ -126,7 +126,7 @@ describe('study set page', () => {
     setup();
     render(<SetPage />);
     await screen.findByText('Pigment that absorbs light');
-    await waitFor(() => expect(screen.queryByRole('button', { name: '✏️ Edit cards' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Edit cards' })).toBeNull());
     expect(screen.queryByRole('button', { name: 'Rename this set' })).toBeNull();
     expect(screen.queryByRole('button', { name: '📌 Assign to class' })).toBeNull();
   });
@@ -150,8 +150,8 @@ describe('saving study results (#57)', () => {
   });
 
   const finishByMarkingGotIt = async () => {
-    fireEvent.click(await screen.findByRole('button', { name: /Tap to flip/ }));
-    fireEvent.click(screen.getByRole('button', { name: '✓ Got it' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Flip the card$/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
   };
 
   it('saves the run to the assignment it was opened from, then lists recent scores', async () => {
@@ -267,7 +267,7 @@ describe('saving study results (#57)', () => {
 
 describe('where a saved card came from', () => {
   const QUOTE = 'Chlorophyll is the pigment that absorbs light.';
-  const flipCard = async () => fireEvent.click(await screen.findByRole('button', { name: /Tap to flip/ }));
+  const flipCard = async () => fireEvent.click(await screen.findByRole('button', { name: /^Flip the card$/ }));
 
   it('shows the saved quote and its page once the card is flipped', async () => {
     state.cards = [

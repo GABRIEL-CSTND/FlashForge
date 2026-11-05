@@ -291,13 +291,8 @@ export default function SetPage() {
           </div>
         </div>
       ) : (
-        <div className="flex justify-center gap-4">
-          <button
-            onClick={() => setEditingCards(true)}
-            className="text-sm text-gray-500 hover:underline"
-          >
-            ✏️ Edit cards
-          </button>
+        <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+          {/* Edit cards is the pencil on the study screen (onEdit below). */}
           <button
             onClick={startEditingTitle}
             className="text-sm text-gray-500 hover:underline"
@@ -372,6 +367,7 @@ export default function SetPage() {
       studyType={set.study_type}
       cards={cards}
       onFinish={() => router.push('/')}
+      onEdit={isOwner ? () => setEditingCards(true) : undefined}
       saveSlot={deleteSlot}
       onComplete={recordAttempt}
       completionSlot={completionSlot}

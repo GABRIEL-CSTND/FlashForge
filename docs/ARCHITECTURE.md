@@ -128,8 +128,8 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
   long (`truncate`) add `w-full` to it, or a long title makes the page wider than a phone
   screen instead of shortening with "…". Pages built to fill the window (`min-h-screen`)
   only fill the sheet (`.desk-sheet .min-h-screen` in `globals.css`).
-- Later phases take pages off the sheet and onto the desk itself: the study screen, making
-  a deck, quizzes, the library, the teacher pages, then admin and cleanup.
+- Flashcards are studied on the desk itself (phase 2, below). Later phases do the same for
+  making a deck, quizzes, the library, the teacher pages, then admin and cleanup.
 
 **Look and feel:**
 - **Fonts:** Instrument Sans for the app (`--font-sans`, set on the body), Fraunces for
@@ -164,6 +164,47 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
   `bg-accent text-ink`, because white text on brass is too faint to read. `.brass` gives
   the same brass look to things that aren't buttons, like the FlashForge plate.
 - Still to do: consistent loading, empty and error states, and icons instead of the emoji.
+
+### Studying flashcards on the desk (desk redesign, phase 2)
+
+`components/StudyViewer.tsx` picks the screen. Flashcard sets (and unknown legacy study
+types) go to the desk, `components/study/FlashcardDesk.tsx`. Multiple choice, true or
+false and mixed quizzes keep their card-by-card screen, `components/study/QuizViewer.tsx`,
+until phase 4. Both score and report the same way (`components/study/logic.ts`, moved out
+of `StudyViewer.tsx` unchanged).
+
+- **The layout.** On a laptop (a desk at least 960 px wide): the deck on the left with
+  the set's name on a paper label (the page's `h1`), the save or rename controls and the
+  pencil; the card in the middle; the Got it and Missed it piles on the right; the brass
+  tools (Flip, Type, Match, Read aloud, Auto) under the card. On a phone: the deck peeks
+  out above the card, the piles are two trays under it (Missed it on the left, Got it on
+  the right), then the tools. The paper sheet steps aside for it
+  (`.desk-sheet:has(.study-desk)` in `globals.css`).
+- **Studying.** Click the card (or press Enter or Space) to turn it over, then click a
+  pile, or press → for Got it and ← for Missed it while the card or a pile has focus. A
+  card can be sorted without turning it over. When the deck is done, a paper note in the
+  middle shows the score. The Missed it pile then deals its cards again (practice, not
+  saved), and *Review Again* or *Try Again* starts the whole deck over.
+- **The pencil** opens the card editor. The set page passes `onEdit` only to the set's
+  owner; the quiz screen shows an *Edit cards* link instead.
+- **Placing the cards** (`components/desk/useDeskLayout.ts`). The page lays the desk out
+  with ordinary CSS and marks empty slots for the deck, the middle card and the piles.
+  The hook measures the slots (with a `ResizeObserver`, and again when the mode or the
+  finish note moves them), and each card moves between them with a CSS `transform`
+  (translate, rotate, scale). Only `transform` and `opacity` animate, and only after the
+  cards first lie in place, so they never fly in from a corner. A stack shows at most 8
+  layers. Until the desk is measured, the window's width picks the layout
+  (`useSyncExternalStore`, so the server's HTML always matches the first render).
+- **The card** (`components/desk/PaperCard.tsx`) has two faces, and turning it over is a
+  `rotateY` on an inner layer. The face turned away is `aria-hidden` and `inert`. Only the
+  card in the middle is there for screen readers: the deck and the piles are
+  `aria-hidden` paper with no words on it. Long clues and terms get smaller type, and the
+  card scrolls if they still don't fit.
+- **Accessibility.** The flip button is the slot under the middle card, so it stays in
+  place from card to card and focus is never lost. Progress (*Card 3 of 10*) and the pile
+  counts are in a live region. Focus moves to *Next card* after a typed answer is
+  checked, and to the finish note at the end. Controls are at least 44 px. With
+  `prefers-reduced-motion`, cards jump to their place and only fade.
 
 ## 1. Generating a study guide
 
@@ -549,9 +590,11 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
   the student did (`onComplete`) and the set page sends it to `POST /api/attempts`.
   Signed-out visitors can still study; the finish screen asks them to sign in to save
   scores. A freshly generated guide that isn't saved yet records nothing.
-- **Flipped flashcards are self-marked.** After flipping a card the student taps **✓ Got
-  it** or **✗ Missed it**, which moves on to the next card. Cards skipped with *Next*
-  count as not marked (and not correct). The finish screen shows "*n* / *total* got it".
+- **Flipped flashcards are self-marked.** On the desk (see "Studying flashcards on the
+  desk" below) the student puts each card on the **Got it** or **Missed it** pile, which
+  deals the next one. Every card gets sorted, so none is left unmarked. The finish note
+  shows "*n* / *total* in Got it". Going through the Missed it pile again afterwards is
+  practice and isn't saved; *Review Again* starts the whole deck over and is saved again.
   Multiple choice is scored as before. Flashcards can also be typed (#66, below).
 - **The server does the scoring** (`lib/attempts.ts`). The browser sends only card ids
   and what was picked, typed or marked, plus how a flashcard set was studied (`mode`). The server checks that the caller can open the set
@@ -614,14 +657,16 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
 
 ### Typing the answer (#66)
 
-- Flashcard sets have a **Flip / Type / Match** switch at the top of the study screen
-  (Match is #67, below). Switching starts the set over. Any flashcard set works,
-  including ones saved before; no AI is used.
-- **Type:** the student sees the clue, types the term and presses **Check** (or Enter):
-  *✓ Correct*, *✓ Almost. It's spelled …* or *✗ Not quite. The answer is …*. **I don't
-  know** shows the answer and counts as wrong. *Next* needs an answer first, and going
-  back shows the earlier answer instead of asking again. The finish screen shows the
-  score, the % correct and how many had a small typo.
+- Flashcard sets have brass **Flip / Type / Match** buttons under the card (Match is #67,
+  below). Switching starts the set over. Any flashcard set works, including ones saved
+  before; no AI is used.
+- **Type:** the student types the term on the line under the clue, on the card itself,
+  and presses **Check** (or Enter). The card turns over to the term with *✓ Correct*,
+  *✓ Almost. It's spelled …* or *✗ Not quite. The answer is …*. **I don't know** shows
+  the answer and counts as wrong. **Next card** (focused, so Enter works) puts the card
+  on the pile its verdict says, so a small typo still goes to Got it. The finish note
+  shows the score, the % correct and how many had a small typo. Part III of a mixed quiz
+  (#69) is typed the same way on the quiz screen, where *Next* needs an answer first.
 - **One check on both sides:** `checkTypedAnswer()` in `lib/answer-check.ts` runs on the
   study screen for instant feedback and again on the server for the saved score. It
   ignores capitals, accents, spaces, punctuation and a leading "the", "a" or "an", and
@@ -642,11 +687,14 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
 
 - **Match** splits the set into rounds of up to 5 cards, as evenly as possible
   (`matchRounds()` in `lib/study-types.ts`): 12 cards are 4 + 4 + 4, never 5 + 5 + 2.
-- Each round shows its terms (lettered, shuffled, and never in the clues' order) and one
-  dropdown per clue. A term can only be used once: picking a term another clue has moves
-  it. **Check answers** needs every clue filled in, then marks each row right or wrong
-  and shows the right term for wrong ones. *Next round* needs the round checked.
-- Each card's answer is the term picked for its clue (`chosen`). It counts if it reads
+- Each round lays its clues out as paper slips with its terms beside them (shuffled, and
+  never in the clues' order); on a phone the terms sit in two columns above the clues
+  (`components/study/MatchBoard.tsx`). The student picks a clue and then its term, or a
+  term and then its clue. A right pair stays together with a brass edge, and the clue
+  shows its term and, if it has one, its quote. A wrong pick flashes red pencil and the
+  student tries again, but that clue counts as missed. **Next round** (or **See
+  results**) appears once every clue is matched, and the round's cards go to the piles.
+- Each card's answer is the **first** term picked for its clue (`chosen`). It counts if it reads
   the same as the card's own answer (`normalizeChoice`), so two cards with the same
   answer can't be "wrong" for swapping. `POST /api/attempts` gets `mode: "match"` and the
   server scores it the same way. Teachers see *Matched* on these attempts, and wrong
@@ -654,7 +702,8 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
 
 ### Reading cards aloud (#77)
 
-- Under the title, next to *Card 3 of 10*, **🔊 Read aloud** reads what's on screen: the
+- **Read aloud** (a brass button under the flashcard on the desk; **🔊 Read aloud** next
+  to *Card 3 of 10* on the quiz screen) reads what's on screen: the
   question (with the choices, or "True or false?" before a statement), the answer once a
   flashcard is flipped, the right answer and any explanation once a question is answered,
   and in matching the round's clues. **Auto** reads each card as it appears and the answer
@@ -885,8 +934,10 @@ transaction. Run them after every database change.
   - Unit and route tests for roles, `/api/profile/role`, the class, assignment,
     attempt and class-results APIs, using `test-utils/fake-supabase.ts`. That's an
     in-memory client with unique keys (23505) and cascading deletes.
-  - Component tests for `RoleChooser`, `StudyViewer`, `CardEditor`, `AssignPanel`, the
-    desk's card box and library card (the tabs each role gets, signing in and out), the
+  - Component tests for `RoleChooser`, `StudyViewer` (the flashcard desk: piles, ← / →,
+    the Missed it pile dealt again, Type and Match; and the quiz screen), `CardEditor`,
+    `AssignPanel`, the desk's card box and library card (the tabs each role gets, signing
+    in and out), `PaperCard`, the desk layout at four widths, the
     set page, the History pages and the teacher and student pages, in jsdom with React Testing Library.
     Component tests start with `// @vitest-environment jsdom`.
 - `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and

@@ -120,7 +120,14 @@ app/
   api/teacher/sets/[id]/assignments/  Assign a set to the teacher's classes
   api/student/classes/  Student class API (list with assignments and my progress, join with a code, leave)
 components/
-  StudyViewer.tsx       Study UI: flip (Got it / Missed it), type or match flashcards, multiple choice, true or false, mixed quiz parts, read aloud; reports each finish
+  StudyViewer.tsx       Study screen: flashcards go on the desk, quizzes on the quiz screen; reports each finish
+  study/FlashcardDesk.tsx  Flashcards on the desk: deck, card, Got it / Missed it piles, Flip / Type / Match, read aloud
+  study/MatchBoard.tsx  One Match round: clue and term slips, a brass edge when right, red pencil when wrong
+  study/QuizViewer.tsx  Multiple choice, true or false and mixed quizzes, card by card (until desk phase 4)
+  study/StudyTools.tsx  The brass Flip / Type / Match / Read aloud buttons and the Auto switch
+  study/logic.ts        Card and result types, scoring and reporting, what Read aloud says (both screens)
+  study/SourceNote.tsx  Where a card came from: its quote and page
+  study/parts.tsx       The Exit button and the typed-answer verdict
   CardEditor.tsx        Edit mode for a set: change, add, delete and reorder cards (of any kind in a mixed quiz)
   AssignPanel.tsx       "Assign to class" dialog on a set the teacher owns
   StudentResultsPanel.tsx  One student's attempts, opened from the results table
@@ -132,6 +139,8 @@ components/
   desk/Desk.tsx         The desk around every page: card box and library card on top, the page on a sheet of paper
   desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, and a tab for each section the role can open
   desk/LibraryCard.tsx  Library card (top right): name, role and Sign out, or Sign in with Google
+  desk/PaperCard.tsx    A card with two faces that turns over
+  desk/useDeskLayout.ts Where the deck, the card and the piles lie (laptop and phone), for the card motion
 lib/
   gemini.ts             AI model chain, prompts, retries, output validation
   roles.ts              getAuthedUser / requireRole / chooseOwnRole (server-only)

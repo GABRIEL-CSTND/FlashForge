@@ -9,6 +9,27 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
 it's ready. It changes how the app looks, not how it works.
 
 ### Changed
+- **Flashcards are studied on the desk** (phase 2, 2026-11-05): the deck on the left, the
+  card in the middle and the Got it / Missed it piles on the right. On a phone the deck
+  peeks out above the card and the piles are trays under it.
+  - Click the card to turn it over, then click a pile or press → (Got it) or ← (Missed
+    it). Every card gets sorted, so *← Prev*, *Next →* and "not marked" are gone.
+  - When the deck is done, a note shows the score, and clicking the Missed it pile deals
+    those cards again for practice (not saved). *Review Again* starts the whole deck
+    over and is saved as before.
+  - **Type** writes the answer on the card. *Check* turns it over with the verdict, and
+    *Next card* puts it on the pile the verdict says.
+  - **Match** lays out rounds of up to 5 as paper slips: pick a clue and then its term,
+    or the other way round. A right pair gets a brass edge and shows its quote; a wrong
+    pick flashes red and that clue counts as missed. The first term picked for each clue
+    is what's saved, so scores work as before. The dropdowns and *Check answers* are gone.
+  - Brass buttons for Flip, Type, Match and Read aloud. The pencil on the desk opens the
+    card editor, in place of the *✏️ Edit cards* link (quizzes show an *Edit cards* link).
+  - Multiple choice, true or false and mixed quizzes look as they did until phase 4.
+  - `components/StudyViewer.tsx` was split into `components/study/*`, keeping its
+    scoring and Read aloud code; new `PaperCard` and `useDeskLayout` in `components/desk/`.
+  - Tests: the flashcard tests were rewritten for the desk, plus tests for the card and
+    the desk layout at four widths: 815 tests in all.
 - **Every page sits on a desk** (phase 1, 2026-11-05): a green leather desk with the page
   on a sheet of cream paper, Instrument Sans for text, Fraunces for titles, and brass as
   the one accent color.
