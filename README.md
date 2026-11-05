@@ -120,14 +120,17 @@ app/
   api/teacher/sets/[id]/assignments/  Assign a set to the teacher's classes
   api/student/classes/  Student class API (list with assignments and my progress, join with a code, leave)
 components/
-  StudyViewer.tsx       Study screen: flashcards go on the desk, quizzes on the quiz screen; reports each finish
+  StudyViewer.tsx       Study screen: flashcards and quizzes, each on its own desk; reports each finish
   study/FlashcardDesk.tsx  Flashcards on the desk: deck, card, Got it / Missed it piles, Flip / Type / Match, read aloud
   study/MatchBoard.tsx  One Match round: clue and term slips, a brass edge when right, red pencil when wrong
-  study/QuizViewer.tsx  Multiple choice, true or false and mixed quizzes, card by card (until desk phase 4)
-  study/StudyTools.tsx  The brass Flip / Type / Match / Read aloud buttons and the Auto switch
-  study/logic.ts        Card and result types, scoring and reporting, what Read aloud says (both screens)
+  study/QuizDesk.tsx    Quizzes on the desk: question card, Right / Wrong piles, a card for each part, score by part
+  study/AnswerSlips.tsx A quiz question's answers as paper slips (A–D, or True and False)
+  study/TypedForm.tsx   The line to type an answer on (Type mode, and Part III of a mixed quiz)
+  study/StudyTools.tsx  The brass Flip / Type / Match / Read aloud buttons and the Auto switch (quizzes: Read aloud only)
+  study/logic.ts        Card and result types, scoring and reporting, what Read aloud says (both desks)
+  study/sizes.ts        Text sizes that keep a clue, a question or a term on its card
   study/SourceNote.tsx  Where a card came from: its quote and page
-  study/parts.tsx       The Exit button and the typed-answer verdict
+  study/parts.tsx       Exit, the line above the desk, and the verdicts for typed and picked answers
   CardEditor.tsx        Edit mode for a set: change, add, delete and reorder cards (of any kind in a mixed quiz)
   AssignPanel.tsx       "Assign to class" dialog on a set the teacher owns
   StudentResultsPanel.tsx  One student's attempts, opened from the results table
@@ -140,6 +143,7 @@ components/
   desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, and a tab for each section the role can open
   desk/LibraryCard.tsx  Library card (top right): name, role and Sign out, or Sign in with Google
   desk/PaperCard.tsx    A card with two faces that turns over
+  desk/Pencil.tsx       The pencil on the desk that opens the card editor
   desk/SlipMenu.tsx     A word that fans out paper slips to choose from ("Make me [10] [medium] [flashcards]")
   make/NotesSheet.tsx   One sheet for a file, notes, a link or a topic; says what it found
   make/MakeCard.tsx     The "Make me 10 medium flashcards" card and Make my deck

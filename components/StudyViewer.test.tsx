@@ -44,9 +44,9 @@ describe('multiple choice', () => {
     const onComplete = vi.fn<(r: StudyResult) => void>();
     render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} onComplete={onComplete} />);
     click('Network');
-    click('Next →');
+    click('Next question →');
     click('UDP');
-    click('Finish');
+    click('See your score →');
 
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(onComplete).toHaveBeenCalledWith({
@@ -57,10 +57,12 @@ describe('multiple choice', () => {
       correct: 1,
       total: 2,
     });
+    expect(screen.getByText('Multiple choice · done')).toBeTruthy();
     expect(screen.getByText('1 / 2')).toBeTruthy();
+    expect(screen.getByText('50% correct')).toBeTruthy();
   });
 
-  it('shows the completion slot on the summary, and reports again after Try Again', () => {
+  it('shows the completion slot on the finish note, and reports again after Start over', () => {
     const onComplete = vi.fn<(r: StudyResult) => void>();
     render(
       <StudyViewer
@@ -73,16 +75,18 @@ describe('multiple choice', () => {
     );
     expect(screen.queryByText('Saved!')).toBeNull();
     click('Network');
-    click('Next →');
+    click('Next question →');
     click('TCP');
-    click('Finish');
+    click('See your score →');
     expect(screen.getByText('Saved!')).toBeTruthy();
+    expect(screen.getByText('Every answer was right.')).toBeTruthy();
 
-    click('Try Again');
+    click('Start over');
+    expect(screen.getByText('Question 1 of 2')).toBeTruthy();
     click('Physical');
-    click('Next →');
+    click('Next question →');
     click('TCP');
-    click('Finish');
+    click('See your score →');
     expect(onComplete).toHaveBeenCalledTimes(2);
     expect(onComplete.mock.calls[1][0]).toMatchObject({
       answers: [
@@ -91,6 +95,92 @@ describe('multiple choice', () => {
       ],
       correct: 1,
     });
+  });
+});
+
+describe('quizzes on the desk', () => {
+  const slips = () => within(screen.getByRole('group', { name: 'Answers' })).getAllByRole('button');
+
+  it('lays the answers out as lettered slips, and shows the verdict once one is picked', () => {
+    render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
+    expect(screen.getByRole('heading', { name: 'Networking' })).toBeTruthy();
+    expect(screen.getByText('Multiple choice · 2 questions')).toBeTruthy();
+    expect(screen.getByText('Question 1 of 2')).toBeTruthy();
+    expect(slips().map((b) => b.textContent)).toEqual(['APhysical', 'BNetwork', 'CTransport']);
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Next/ })).toBeNull();
+
+    click('Physical');
+    expect(screen.getByRole('status').textContent).toBe('✗ Not quite. The answer is Network.');
+    expect(slips().every((b) => (b as HTMLButtonElement).disabled)).toBe(true);
+    // The right slip lifts, the wrong pick is struck through, the rest fade.
+    expect(slips().map((b) => b.className.match(/is-(right|wrong|faded)/)?.[0])).toEqual(['is-wrong', 'is-right', 'is-faded']);
+  });
+
+  it('puts each answered question on the Right or Wrong pile', () => {
+    render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
+    expect(screen.getByText('. Right 0, Wrong 0.')).toBeTruthy();
+    click('Physical');
+    click('Next question →');
+    expect(screen.getByText('Question 2 of 2')).toBeTruthy();
+    expect(screen.getByText('. Right 0, Wrong 1.')).toBeTruthy();
+    click('TCP');
+    expect(screen.getByRole('status').textContent).toBe('✓ Correct');
+    click('See your score →');
+    expect(screen.getByText('All done')).toBeTruthy();
+    expect(screen.getByText('. Right 1, Wrong 1.')).toBeTruthy();
+    expect(screen.getByText('The Wrong pile has one question to go over.')).toBeTruthy();
+  });
+
+  it('goes over the Wrong pile again for practice, without reporting it again', () => {
+    const onComplete = vi.fn();
+    render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} onComplete={onComplete} />);
+    click('Physical');
+    click('Next question →');
+    click('TCP');
+    click('See your score →');
+    expect(onComplete).toHaveBeenCalledOnce();
+
+    click('Try the wrong ones again');
+    expect(screen.getByText('Question 1 of 1')).toBeTruthy();
+    expect(screen.getByText('Layer 3?')).toBeTruthy();
+    click('Network');
+    click('See your score →');
+    expect(screen.getByText('Practice round done')).toBeTruthy();
+    expect(screen.getByText('2 / 2')).toBeTruthy();
+    expect(screen.getByText('on the Right pile')).toBeTruthy();
+    expect(screen.getByText('Every question is on the Right pile now.')).toBeTruthy();
+    expect(screen.getByText('Your saved score is from the first time through.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Try the wrong ones again' })).toBeNull();
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  it('moves focus to Next once answered, then to the next question, then to the score', () => {
+    render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
+    click('Network');
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Next question →' }));
+    click('Next question →');
+    expect(document.activeElement?.textContent).toBe('Reliable transport?');
+    click('TCP');
+    click('See your score →');
+    expect(document.activeElement).toBe(screen.getByRole('region', { name: '2 / 2' }));
+  });
+
+  it('only lets screen readers reach the card in the middle', () => {
+    const { container } = render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
+    const cards = [...container.querySelectorAll('.desk-card')];
+    expect(cards).toHaveLength(2);
+    expect(cards.filter((c) => c.getAttribute('aria-hidden') !== 'true')).toHaveLength(1);
+  });
+
+  it('shows the pencil only when the cards can be edited', () => {
+    const onEdit = vi.fn();
+    const first = render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} onEdit={onEdit} />);
+    click('Edit cards');
+    expect(onEdit).toHaveBeenCalledOnce();
+    first.unmount();
+    render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
+    expect(screen.queryByRole('button', { name: 'Edit cards' })).toBeNull();
   });
 });
 
@@ -352,18 +442,23 @@ describe('true or false (#68)', () => {
     const onComplete = vi.fn<(r: StudyResult) => void>();
     render(<StudyViewer title="Cells" studyType="true_false" cards={TF_CARDS} onComplete={onComplete} />);
     expect(screen.queryByRole('group', { name: 'How do you want to study?' })).toBeNull();
-    expect(screen.getByText('True or false?')).toBeTruthy();
+    expect(screen.getByText('True or false')).toBeTruthy();
+    expect(
+      within(screen.getByRole('group', { name: 'Answers' }))
+        .getAllByRole('button')
+        .map((b) => b.textContent)
+    ).toEqual(['TTrue', 'FFalse']);
     expect(screen.queryByText('Mitochondria make most of the ATP.')).toBeNull();
 
     click('True');
     expect(screen.getByRole('status').textContent).toBe("✗ Not quite. It's false.");
     expect(screen.getByText('Mitochondria make most of the ATP.')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'False' }) as HTMLButtonElement).disabled).toBe(true);
-    click('Next →');
+    click('Next statement →');
 
     click('True');
     expect(screen.getByRole('status').textContent).toBe('✓ Correct');
-    click('Finish');
+    click('See your score →');
     expect(onComplete).toHaveBeenCalledWith({
       answers: [
         { cardId: 't1', chosen: 'True' },
@@ -390,20 +485,26 @@ describe('mixed quiz (#69)', () => {
     { id: 'm1', question: 'Layer 3?', answer: 'Network', options: ['Physical', 'Network', 'Transport', 'Session'] },
   ];
 
-  it('goes part by part, with a typed Part III, and scores each part', () => {
+  it('opens each part with its own card, types Part III, and scores each part', () => {
     const onComplete = vi.fn<(r: StudyResult) => void>();
     render(<StudyViewer title="Exam" studyType="mixed" cards={MIXED} onComplete={onComplete} />);
     expect(screen.queryByRole('group', { name: 'How do you want to study?' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Part I' })).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Answers' })).toBeNull();
+    click('Begin Part I →');
     expect(screen.getByText('Part I · Multiple choice')).toBeTruthy();
     click('Physical');
-    click('Next →');
+    click('On to Part II →');
+    expect(screen.getByRole('heading', { name: 'Part II' })).toBeTruthy();
+    click('Begin Part II →');
     expect(screen.getByText('Part II · True or false')).toBeTruthy();
     click('True');
-    click('Next →');
+    click('On to Part III →');
+    click('Begin Part III →');
     expect(screen.getByText('Part III · Identification')).toBeTruthy();
     fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: 'mitochondria' } });
     click('Check');
-    click('Finish');
+    click('See your score →');
 
     expect(onComplete).toHaveBeenCalledWith({
       answers: [
@@ -525,16 +626,22 @@ describe('read aloud (#77)', () => {
     expect(localStorage.getItem('flashforge_read_aloud')).toBe('0');
   });
 
+  it("reads the card that opens each part of a mixed quiz", () => {
+    render(<StudyViewer title="Exam" studyType="mixed" cards={[{ id: 'm1', question: 'Layer 3?', answer: 'Network', options: ['Physical', 'Network', 'Transport', 'Session'] }]} />);
+    readAloud();
+    expect(spoken).toEqual(['Part 1. Multiple choice. 1 question.']);
+  });
+
   it('stops reading when the set is finished', () => {
     render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
     click('Auto');
     click('Network');
-    click('Next →');
+    click('Next question →');
     expect(spoken.at(-1)).toBe('Reliable transport? Choices: UDP. TCP. ARP.');
     click('TCP');
     const spokenBefore = spoken.length;
     const cancelsBefore = cancels;
-    click('Finish');
+    click('See your score →');
     expect(cancels).toBeGreaterThan(cancelsBefore);
     expect(spoken).toHaveLength(spokenBefore);
   });

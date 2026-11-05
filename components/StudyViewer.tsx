@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import { isStudyType, type StudyType } from '@/lib/study-types';
 import FlashcardDesk from './study/FlashcardDesk';
-import QuizViewer from './study/QuizViewer';
+import QuizDesk from './study/QuizDesk';
 import { ExitButton } from './study/parts';
 import type { StudyItem, StudyResult } from './study/logic';
 
@@ -30,9 +30,9 @@ interface StudyViewerProps {
   quoteLabel?: string;
 }
 
-// The study screen. Flashcards are studied on the desk (components/study/
-// FlashcardDesk.tsx, desk redesign phase 2); quizzes keep their card-by-card
-// screen (components/study/QuizViewer.tsx) until phase 4.
+// The study screen, on the desk: flashcards in components/study/
+// FlashcardDesk.tsx (desk redesign phase 2), and multiple choice, true or false
+// and mixed quizzes in components/study/QuizDesk.tsx (phase 4).
 export default function StudyViewer(props: StudyViewerProps) {
   if (props.cards.length === 0) {
     return (
@@ -47,5 +47,5 @@ export default function StudyViewer(props: StudyViewerProps) {
   // A set saved with an old study type (one legacy set says "identification")
   // has always been shown as flashcards.
   const isFlashcards = props.studyType === 'flashcard' || !isStudyType(props.studyType);
-  return isFlashcards ? <FlashcardDesk {...props} /> : <QuizViewer {...props} />;
+  return isFlashcards ? <FlashcardDesk {...props} /> : <QuizDesk {...props} />;
 }

@@ -2,16 +2,18 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import PaperCard from '@/components/desk/PaperCard';
-import { deckSpot, MAX_LAYERS, middleSpot, pileSpot, spotTransform, useDeskLayout, type DeskKind, type Spot } from '@/components/desk/useDeskLayout';
+import Pencil from '@/components/desk/Pencil';
+import { deckSpot, MAX_LAYERS, middleSpot, pileSpot, spotTransform, useDeskLayout, type Spot } from '@/components/desk/useDeskLayout';
 import { checkTypedAnswer } from '@/lib/answer-check';
-import { CARD_LIMITS } from '@/lib/card-rules';
 import { speak, stopSpeaking, useAutoRead, useCanSpeak } from '@/lib/speech';
 import { matchRounds, type FlashcardMode, type StudyMode } from '@/lib/study-types';
 import { cardSpeech, isCorrect, reportAnswer, sameTerm, type CardAnswer, type FlashcardMark, type Interaction, type StudyItem, type StudyResult } from './logic';
 import MatchBoard from './MatchBoard';
 import SourceNote from './SourceNote';
 import StudyTools from './StudyTools';
-import { ExitButton, TypedVerdictLine } from './parts';
+import TypedForm from './TypedForm';
+import { DeskHeader, TypedVerdictLine } from './parts';
+import { clueSize, termSize } from './sizes';
 
 type Pile = FlashcardMark;
 
@@ -36,19 +38,6 @@ const freshDeck = (count: number): DeckState => ({
   landed: [],
   practice: false,
 });
-
-// Text sizes that keep a clue or a term on the card: the longer the text, the
-// smaller the type (and the card scrolls if it still doesn't fit).
-const CLUE_SIZES: Record<DeskKind, number[]> = { laptop: [29, 25, 21, 18, 16], phone: [22, 20, 18, 16, 15] };
-const TERM_SIZES: Record<DeskKind, number[]> = { laptop: [60, 46, 36, 28, 22], phone: [42, 34, 28, 22, 18] };
-function fitted(text: string, steps: number[], sizes: number[]): number {
-  const i = steps.findIndex((s) => text.length <= s);
-  return sizes[i === -1 ? sizes.length - 1 : i];
-}
-const clueSize = (text: string, kind: DeskKind) => fitted(text, [50, 90, 140, 220], CLUE_SIZES[kind]);
-// Smaller when the card also shows a verdict or a quote.
-const termSize = (text: string, kind: DeskKind, crowded: boolean) =>
-  Math.min(fitted(text, [10, 18, 28, 44], TERM_SIZES[kind]), crowded ? (kind === 'phone' ? 30 : 44) : Infinity);
 
 export interface FlashcardDeskProps {
   title: string;
@@ -492,15 +481,7 @@ export default function FlashcardDesk({
     : roundIndex >= 0
       ? `Round ${roundIndex + 1} of ${rounds.length}`
       : `Card ${deck.pos + 1} of ${deck.order.length}`;
-  const header = (
-    <div className="flex items-center justify-between gap-4">
-      <ExitButton onExit={onExit} className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-on-desk/80 hover:text-on-desk" />
-      <p aria-live="polite" className="text-sm font-medium text-on-desk/85">
-        <span>{progress}</span>
-        <span className="sr-only">{`. Got it ${got}, Missed it ${missed}.`}</span>
-      </p>
-    </div>
-  );
+  const header = <DeskHeader onExit={onExit} progress={progress} tally={`. Got it ${got}, Missed it ${missed}.`} />;
 
   const toGo = deck.order.length - deck.pos;
   const label = (
@@ -562,58 +543,5 @@ export default function FlashcardDesk({
         </div>
       </div>
     </main>
-  );
-}
-
-// Type mode: the answer is written on the card, on the line under the clue.
-function TypedForm({ onCheck }: { onCheck: (typed: string | null) => void }) {
-  const [draft, setDraft] = useState('');
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (draft.trim()) onCheck(draft.trim());
-      }}
-      className="flex flex-wrap items-end gap-x-2.5 gap-y-2"
-    >
-      <label className="flex min-w-0 flex-1 basis-40 flex-col gap-0.5 text-[11.5px] font-semibold uppercase tracking-[0.14em] text-brass-ink">
-        <span aria-hidden="true">Your answer</span>
-        <input
-          aria-label="Your answer"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          maxLength={CARD_LIMITS.answer}
-          autoFocus
-          autoComplete="off"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          className="min-h-10 w-full border-0 border-b-[1.5px] border-[#8c8270] bg-transparent px-0.5 pb-1 pt-0.5 font-serif text-2xl font-normal normal-case italic tracking-normal text-[#1f2a44]"
-        />
-      </label>
-      <button type="button" onClick={() => onCheck(null)} className="min-h-11 px-1.5 text-[13.5px] font-semibold text-muted hover:underline">
-        I don&apos;t know
-      </button>
-      <button type="submit" disabled={!draft.trim()} className="btn btn-primary min-h-11 rounded-full px-[18px]">
-        Check
-      </button>
-    </form>
-  );
-}
-
-// The pencil lying on the desk: opens the card editor.
-function Pencil({ onClick }: { onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className="desk-pencil flex min-h-11 flex-col items-start gap-1.5 text-xs font-medium text-on-desk/80 hover:text-on-desk">
-      <svg width="132" height="22" viewBox="0 0 132 22" aria-hidden="true" className="-rotate-6 drop-shadow-[0_4px_4px_rgb(0_0_0/0.45)]">
-        <path d="M1 11 L17 4 L17 18 Z" fill="#e8cfa6" />
-        <path d="M1 11 L7 8.4 L7 13.6 Z" fill="#3a332a" />
-        <rect x="17" y="4" width="87" height="14" fill="#d9a23f" />
-        <rect x="17" y="9.5" width="87" height="3" fill="#c38c2c" />
-        <rect x="104" y="3.5" width="12" height="15" rx="1" fill="#c9a45c" />
-        <rect x="116" y="3.5" width="14" height="15" rx="3" fill="#c9786a" />
-      </svg>
-      Edit cards
-    </button>
   );
 }

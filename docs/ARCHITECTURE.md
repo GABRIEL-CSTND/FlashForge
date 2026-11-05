@@ -128,8 +128,9 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
   long (`truncate`) add `w-full` to it, or a long title makes the page wider than a phone
   screen instead of shortening with "…". Pages built to fill the window (`min-h-screen`)
   only fill the sheet (`.desk-sheet .min-h-screen` in `globals.css`).
-- Flashcards are studied on the desk itself (phase 2, below). Later phases do the same for
-  making a deck, quizzes, the library, the teacher pages, then admin and cleanup.
+- Studying flashcards (phase 2), making a deck (phase 3) and taking quizzes (phase 4)
+  happen on the desk itself (below). Later phases do the same for the library, the
+  teacher pages, then admin and cleanup.
 
 **Look and feel:**
 - **Fonts:** Instrument Sans for the app (`--font-sans`, set on the body), Fraunces for
@@ -167,11 +168,11 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
 
 ### Studying flashcards on the desk (desk redesign, phase 2)
 
-`components/StudyViewer.tsx` picks the screen. Flashcard sets (and unknown legacy study
-types) go to the desk, `components/study/FlashcardDesk.tsx`. Multiple choice, true or
-false and mixed quizzes keep their card-by-card screen, `components/study/QuizViewer.tsx`,
-until phase 4. Both score and report the same way (`components/study/logic.ts`, moved out
-of `StudyViewer.tsx` unchanged).
+`components/StudyViewer.tsx` picks the desk. Flashcard sets (and unknown legacy study
+types) go to `components/study/FlashcardDesk.tsx`. Multiple choice, true or false and
+mixed quizzes go to the quiz desk, `components/study/QuizDesk.tsx` (phase 4, below). Both
+score and report the same way (`components/study/logic.ts`, moved out of
+`StudyViewer.tsx` unchanged).
 
 - **The layout.** On a laptop (a desk at least 960 px wide): the deck on the left with
   the set's name on a paper label (the page's `h1`), the save or rename controls and the
@@ -185,8 +186,8 @@ of `StudyViewer.tsx` unchanged).
   card can be sorted without turning it over. When the deck is done, a paper note in the
   middle shows the score. The Missed it pile then deals its cards again (practice, not
   saved), and *Review Again* or *Try Again* starts the whole deck over.
-- **The pencil** opens the card editor. The set page passes `onEdit` only to the set's
-  owner; the quiz screen shows an *Edit cards* link instead.
+- **The pencil** (`components/desk/Pencil.tsx`) opens the card editor. The set page
+  passes `onEdit` only to the set's owner. The quiz desk has the same pencil.
 - **Placing the cards** (`components/desk/useDeskLayout.ts`). The page lays the desk out
   with ordinary CSS and marks empty slots for the deck, the middle card and the piles.
   The hook measures the slots (with a `ResizeObserver`, and again when the mode or the
@@ -205,6 +206,49 @@ of `StudyViewer.tsx` unchanged).
   counts are in a live region. Focus moves to *Next card* after a typed answer is
   checked, and to the finish note at the end. Controls are at least 44 px. With
   `prefers-reduced-motion`, cards jump to their place and only fade.
+
+### Quizzes on the desk (desk redesign, phase 4)
+
+Multiple choice, true or false (#68) and mixed quizzes (#69) are taken on the same desk as
+flashcards, in `components/study/QuizDesk.tsx`. It uses the same deck, card spots and
+layout hook (`useDeskLayout`), so it reads the same way on a laptop and a phone.
+
+- **The layout.** The deck on the left, the question card in the middle with its
+  answers underneath, and the **Right** and **Wrong** piles on the right (on a phone:
+  the deck peeks out above the card, the answers stack one under another, and the piles
+  are trays at the bottom). The question card is lower than a flashcard on a laptop
+  (about 560 × 290), so the answers and *Next* fit under it on a 768-pixel-high screen,
+  and taller on a phone, where the narrow card also holds the verdict, the correction and
+  the quote. When a card holds more than fits, the whole card scrolls, so the question
+  never gets cut off.
+- **The answers** (`components/study/AnswerSlips.tsx`) are paper slips: four lettered
+  slips (A–D) for multiple choice, *True* and *False* for a statement. They come in one
+  after another. Picking one shows the verdict on the card (*✓ Correct*, *✗ Not quite.
+  The answer is …*, or *✗ Not quite. It's false.*), then the explanation (the correction
+  of a false statement) and the quote. The right slip lifts with a brass edge and a check,
+  a wrong pick is struck through in red pencil, and the rest fade back. Each slip's
+  accessible name is just its answer; the letter is decoration.
+- **Moving on.** *Next question* (*Next statement* in true or false, *See your score* on
+  the last one) puts the card on the Right or Wrong pile. The piles are only paper
+  (`aria-hidden`): answers are given on the slips, and the counts are read out with the
+  progress above the desk (*Question 3 of 10*). There's no going back, as in the
+  flashcard desk.
+- **A mixed quiz** goes part by part (`byPart()`), and each part opens with its own card:
+  *Part II*, *True or false*, *3 questions*, with **Begin Part II**. The last question of a
+  part says *On to Part III*. Part III is typed on the card with the same line to type on
+  as the flashcards' Type mode (`components/study/TypedForm.tsx`) and the same check. The
+  finish note lists each part's score (*Score by part*).
+- **The finish note** shows the score and the % correct, how many had a small typo, and
+  how many are on the Wrong pile. **Try the wrong ones again** deals the Wrong pile again
+  for practice (not saved, like the flashcards' Missed it pile), and **Start over** starts
+  the quiz over and is saved again.
+- **Focus.** Picking an answer (or checking a typed one) moves focus to *Next*; *Next*
+  moves it to the new card's words (a typed card puts it on the line to type on), and the
+  last one to the finish note. The card's words show no focus ring, as they aren't a
+  control. Read aloud and Auto are under the card, as for flashcards; Auto also reads a
+  part's card (*Part 2. True or false. 3 questions.*).
+- **Scoring is unchanged:** the first time through, each answer is reported in the
+  quiz's order (`reportAnswer()`), and the server scores it in `lib/attempts.ts`.
 
 ## 1. Generating a study guide
 
@@ -635,9 +679,11 @@ of `StudyViewer.tsx` unchanged).
   options (`cardKind()` in `lib/card-rules.ts`): 4 choices, True and False, or none. So
   the cards table needs nothing new, and each card is checked with its own kind's rules
   in `validateCards()`, on save and in the editor.
-- **Studying:** the cards are shown part by part (in saved order within a part), with
-  *Part II · True or false* above each one. Parts I and II are picks; Part III is typed
-  and checked like #66. The finish screen shows the total and each part's score.
+- **Studying:** the cards are shown part by part (in saved order within a part), each
+  part opened by its own card (*Part II*, *True or false*, **Begin Part II**), with
+  *Part II · True or false* on each question. Parts I and II are picks; Part III is typed
+  and checked like #66. The finish note shows the total and each part's score (see
+  "Quizzes on the desk" above).
 - **Scoring on the server:** `POST /api/attempts` gets a pick (`chosen`) or typed text
   (`typed`) per card, and `scoreAnswers()` scores each card by its kind, keeping only
   what that kind uses. Teachers' results and the most-missed page work as for any set.
@@ -651,9 +697,10 @@ of `StudyViewer.tsx` unchanged).
   card: the statement as `question`, `options` `["True", "False"]`, `answer` *True* or
   *False*, plus an optional `explanation` (a new `flashcards` column) shown after
   answering. The upload page offers it; generation is one AI request like the others.
-- **Studying:** *True or false?* above the statement and two big buttons. Answering shows
-  *✓ Correct* or *✗ Not quite. It's false.*, colors the buttons and shows the
-  explanation. The score is worked out like multiple choice, on the server too.
+- **Studying:** the statement on the card and two slips under it, *True* and *False*.
+  Answering shows *✓ Correct* or *✗ Not quite. It's false.* on the card with the
+  explanation under it, lifts the right slip and strikes through a wrong pick. The score
+  is worked out like multiple choice, on the server too.
 - **Editing:** a *Statement* box, a *True / False* choice and an *Explanation (optional)*
   box. `replace_set_cards()` saves and returns the explanation (an empty one clears it).
 - **Teachers:** results work as for any set. The most-missed page leaves out "most common
@@ -674,7 +721,7 @@ of `StudyViewer.tsx` unchanged).
   the answer and counts as wrong. **Next card** (focused, so Enter works) puts the card
   on the pile its verdict says, so a small typo still goes to Got it. The finish note
   shows the score, the % correct and how many had a small typo. Part III of a mixed quiz
-  (#69) is typed the same way on the quiz screen, where *Next* needs an answer first.
+  (#69) is typed the same way on the quiz desk, where *Next* appears once it's checked.
 - **One check on both sides:** `checkTypedAnswer()` in `lib/answer-check.ts` runs on the
   study screen for instant feedback and again on the server for the saved score. It
   ignores capitals, accents, spaces, punctuation and a leading "the", "a" or "an", and
@@ -710,12 +757,13 @@ of `StudyViewer.tsx` unchanged).
 
 ### Reading cards aloud (#77)
 
-- **Read aloud** (a brass button under the flashcard on the desk; **🔊 Read aloud** next
-  to *Card 3 of 10* on the quiz screen) reads what's on screen: the
+- **Read aloud** (a brass button under the card, on the flashcard and the quiz desk)
+  reads what's on screen: the
   question (with the choices, or "True or false?" before a statement), the answer once a
   flashcard is flipped, the right answer and any explanation once a question is answered,
-  and in matching the round's clues. **Auto** reads each card as it appears and the answer
-  when a card is flipped; moving on, finishing or leaving stops the reading.
+  in matching the round's clues, and a mixed quiz's part card (*Part 2. True or false. 3
+  questions.*). **Auto** reads each card as it appears and the answer when a card is
+  flipped; moving on, finishing or leaving stops the reading.
 - It uses the browser's built-in speech (`speechSynthesis` in `lib/speech.ts`): free, no AI
   requests, and on most phones it works offline. Where a browser can't speak, the
   controls aren't shown. The voice is the device's default, at 0.95 speed.
@@ -943,7 +991,8 @@ transaction. Run them after every database change.
     attempt and class-results APIs, using `test-utils/fake-supabase.ts`. That's an
     in-memory client with unique keys (23505) and cascading deletes.
   - Component tests for `RoleChooser`, `StudyViewer` (the flashcard desk: piles, ← / →,
-    the Missed it pile dealt again, Type and Match; and the quiz screen), `CardEditor`,
+    the Missed it pile dealt again, Type and Match; and the quiz desk: answer slips, the
+    Right / Wrong piles, the Wrong pile again, part cards and focus), `CardEditor`,
     `AssignPanel`, the desk's card box and library card (the tabs each role gets, signing
     in and out), `PaperCard`, the desk layout at four widths, the
     set page, the History pages and the teacher and student pages, in jsdom with React Testing Library.

@@ -9,6 +9,29 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
 it's ready. It changes how the app looks, not how it works.
 
 ### Changed
+- **Quizzes are taken on the desk** (phase 4, 2026-11-05): multiple choice, true or
+  false and mixed quizzes use the same desk as flashcards: the deck on the left, the
+  question card in the middle, and **Right** and **Wrong** piles on the right (trays on a
+  phone).
+  - The answers are paper slips under the card: four lettered slips (A–D) for multiple
+    choice, True and False for a statement. Picking one shows the verdict on the card
+    (multiple choice now gets *✓ Correct* or *✗ Not quite. The answer is …* too), the
+    correction of a false statement and the quote. The right slip lifts with a brass
+    edge and a wrong pick is struck through.
+  - **Next question** (*Next statement* in true or false) puts the card on its pile, and
+    the last one says **See your score**. *← Prev* is gone, as in the flashcard desk.
+  - A mixed quiz opens each part with its own card (*Part II*, **Begin Part II**), and
+    Part III is typed on the card like the flashcards' Type mode.
+  - At the end, **Try the wrong ones again** deals the Wrong pile again for practice (not
+    saved), and **Start over** (was *Try Again*) starts the quiz over and is saved as
+    before.
+  - Quizzes get the pencil (*Edit cards*) and the brass Read aloud and Auto buttons; Auto
+    reads a part's card too.
+  - `components/study/QuizViewer.tsx` is replaced by `QuizDesk.tsx` and `AnswerSlips.tsx`.
+    The line to type on (`TypedForm.tsx`), the pencil (`components/desk/Pencil.tsx`), the
+    line above the desk and the text sizes are shared with the flashcard desk now.
+  - Tests: the quiz tests use the new button names, plus tests for the slips, the piles,
+    the practice round, focus and reading a part's card: 832 in all.
 - **Making a deck happens on the desk** (phase 3, 2026-11-05): one notes sheet takes a
   file (dropped or chosen), notes, a link or a topic, and says what it found ("Looks like a
   topic"), with *Use it as notes* when the guess is wrong. A web address works without

@@ -62,7 +62,8 @@ function Tool({ label, icon, pressed, onClick }: { label: string; icon: ReactNod
 }
 
 // Flip, Type and Match (changing one starts the deck over), then Read aloud
-// and its Auto switch (#77) where the browser can speak.
+// and its Auto switch (#77) where the browser can speak. Quizzes have one way
+// to answer, so they leave out `mode` and get only Read aloud.
 export default function StudyTools({
   mode,
   onMode,
@@ -71,8 +72,8 @@ export default function StudyTools({
   autoRead,
   onAutoRead,
 }: {
-  mode: FlashcardMode;
-  onMode: (mode: FlashcardMode) => void;
+  mode?: FlashcardMode;
+  onMode?: (mode: FlashcardMode) => void;
   speechAvailable: boolean;
   onSpeak: () => void;
   autoRead: boolean;
@@ -80,11 +81,13 @@ export default function StudyTools({
 }) {
   return (
     <div className="flex flex-wrap items-start justify-center gap-x-2 gap-y-3 sm:gap-x-4">
-      <div role="group" aria-label="How do you want to study?" className="flex gap-1 sm:gap-2">
-        {FLASHCARD_MODES.map((m) => (
-          <Tool key={m} label={FLASHCARD_MODE_LABELS[m]} icon={ICONS[m]} pressed={mode === m} onClick={() => onMode(m)} />
-        ))}
-      </div>
+      {mode && onMode && (
+        <div role="group" aria-label="How do you want to study?" className="flex gap-1 sm:gap-2">
+          {FLASHCARD_MODES.map((m) => (
+            <Tool key={m} label={FLASHCARD_MODE_LABELS[m]} icon={ICONS[m]} pressed={mode === m} onClick={() => onMode(m)} />
+          ))}
+        </div>
+      )}
       {speechAvailable && (
         <div className="flex items-start gap-1">
           <Tool label="Read aloud" icon={ICONS.speak} onClick={onSpeak} />

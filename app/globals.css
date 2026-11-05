@@ -202,18 +202,19 @@ a.brass:hover,
   background-color: var(--brass-hover);
 }
 
-/* Where a pile goes: a dashed outline on the leather. */
+/* Where a pile goes: a dashed outline on the leather. The flashcard piles are
+   buttons (click one to sort the card); the quiz piles are only paper. */
 .desk-spot {
   border: 1.5px dashed rgb(237 230 214 / 0.32);
   border-radius: 14px;
   background-color: rgb(0 0 0 / 0.08);
   transition: border-color 0.15s, background-color 0.15s;
 }
-.desk-spot:not(:disabled):hover {
+button.desk-spot:not(:disabled):hover {
   border-color: rgb(231 201 126 / 0.8);
   background-color: rgb(0 0 0 / 0.16);
 }
-.desk-spot:not(:disabled) {
+button.desk-spot:not(:disabled) {
   cursor: pointer;
 }
 
@@ -361,4 +362,57 @@ a.brass:hover,
   .spread-card {
     animation: card-fade 0.3s ease both;
   }
+}
+
+/* ---- Quizzes (desk redesign, phase 4) ------------------------------------ */
+
+/* Answer slips under a quiz question (components/study/AnswerSlips.tsx). They
+   come in one after another; once one is picked, the right one lifts with a
+   brass edge, a wrong pick is struck through in red pencil, and the rest fade
+   back. The entrance only fills backwards, so hover and the lift still move
+   the slip once it has landed. */
+@keyframes slip-in {
+  from {
+    opacity: 0;
+    translate: 0 16px;
+  }
+}
+.answer-slip {
+  rotate: var(--tilt);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2), 0 8px 16px -8px rgb(0 0 0 / 0.6);
+  transition: translate 0.35s ease, rotate 0.35s ease, opacity 0.3s ease, box-shadow 0.3s ease;
+  animation: slip-in 0.5s cubic-bezier(0.34, 1.25, 0.64, 1) backwards;
+  animation-delay: calc(var(--k) * 70ms + 150ms);
+}
+.answer-slip:not(:disabled):hover {
+  translate: 0 -5px;
+  rotate: 0deg;
+}
+.answer-slip.is-right {
+  translate: 0 -7px;
+  box-shadow: inset 0 0 0 2px var(--brass), 0 16px 26px -12px rgb(0 0 0 / 0.65);
+}
+.answer-slip.is-wrong .answer-slip-text {
+  color: var(--pencil);
+  text-decoration: line-through 2px var(--pencil);
+}
+/* The paper stays cream (a see-through slip looks muddy on the leather); only
+   its words fade. */
+.answer-slip.is-faded {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18), 0 4px 10px -6px rgb(0 0 0 / 0.5);
+}
+.answer-slip.is-faded > * {
+  opacity: 0.5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .answer-slip {
+    animation: card-fade 0.3s ease backwards;
+    transition: opacity 0.3s ease, box-shadow 0.3s ease;
+  }
+}
+
+/* After Next, focus lands on the new card's words, so a screen reader reads
+   them. They aren't a control, so they show no ring. */
+.on-desk .desk-card [tabindex="-1"]:focus-visible {
+  outline: none;
 }
