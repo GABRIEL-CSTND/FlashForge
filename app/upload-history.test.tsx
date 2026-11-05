@@ -57,7 +57,7 @@ async function generateGuide() {
   render(<UploadPage />);
   const input = document.getElementById('file-input') as HTMLInputElement;
   fireEvent.change(input, { target: { files: [new File(['Photosynthesis notes'], 'notes.txt', { type: 'text/plain' })] } });
-  fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
   expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
 }
 
@@ -73,7 +73,7 @@ describe('a new guide and History', () => {
     await generateGuide();
     fireEvent.click(screen.getByRole('button', { name: '← Exit' }));
     expect(window.confirm).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Generate Study Guide' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Make my deck' })).toBeTruthy();
   });
 
   it("still warns when the guide couldn't be kept in History", async () => {

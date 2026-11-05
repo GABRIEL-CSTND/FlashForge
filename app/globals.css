@@ -167,21 +167,21 @@ body {
 
 /* ---- The study desk (desk redesign, phase 2) ---------------------------- */
 
-/* Flashcards are studied on the leather itself (components/study/
-   FlashcardDesk.tsx), so the paper sheet steps aside and the desk widens. */
-.desk-sheet:has(.study-desk) {
+/* Pages that lie on the leather itself (.on-desk: making a deck on the home
+   page, studying flashcards), so the paper sheet steps aside and the desk widens. */
+.desk-sheet:has(.on-desk) {
   max-width: 80rem;
   background: none;
   box-shadow: none;
 }
 
 /* Focus rings that show on the dark leather, and in brass ink on paper. */
-.study-desk :focus-visible {
+.on-desk :focus-visible {
   outline: 2px solid #e7c97e;
   outline-offset: 3px;
 }
-.study-desk .paper :focus-visible,
-.study-desk .paper:focus-visible {
+.on-desk .paper :focus-visible,
+.on-desk .paper:focus-visible {
   outline-color: var(--brass-ink);
 }
 
@@ -292,5 +292,73 @@ a.brass:hover,
   .paper-card-inner,
   .slip {
     transition: none;
+  }
+}
+
+/* ---- Making a deck (desk redesign, phase 3) ------------------------------ */
+
+/* The yellow sticky note with a tip. */
+.sticky-note {
+  background-color: #e9d48c;
+  background-image: url("/textures/paper.png");
+  background-size: 256px 256px;
+  background-blend-mode: multiply;
+}
+
+/* A word on the "Make me …" card that opens paper slips
+   (components/desk/SlipMenu.tsx). */
+.slip-word {
+  padding: 0 4px;
+  border-bottom: 2px dotted #b08a3e;
+  border-radius: 4px 4px 0 0;
+  color: var(--brass-ink);
+  line-height: 1.15;
+  transition: background-color 0.15s;
+}
+.slip-word:not(:disabled):hover,
+.slip-word[aria-expanded="true"] {
+  background-color: rgb(201 164 92 / 0.2);
+}
+
+/* The notes sheet while a file is dragged over it. */
+.notes-sheet.is-dragging {
+  box-shadow: inset 0 0 0 2px var(--brass);
+}
+
+/* New cards land in the spread one after another (components/make/
+   DeckSpread.tsx), then Start studying gathers them to where the deck goes. */
+@keyframes card-land {
+  from {
+    opacity: 0;
+    transform: translate(-30px, -80px) rotate(calc(var(--tilt) - 14deg)) scale(1.18);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(var(--tilt));
+  }
+}
+@keyframes card-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.spread-card {
+  transform: rotate(var(--tilt));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25), 0 10px 18px -8px rgb(0 0 0 / 0.5);
+  animation: card-land 0.55s cubic-bezier(0.34, 1.25, 0.64, 1) both;
+  animation-delay: calc(var(--i) * 350ms);
+}
+.spread-card.is-gathering {
+  animation: none;
+  opacity: 0;
+  transform: translate(var(--gx), var(--gy)) rotate(0deg) scale(0.55);
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1) calc(var(--i) * 20ms), opacity 0.3s ease 0.3s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .spread-card {
+    animation: card-fade 0.3s ease both;
   }
 }

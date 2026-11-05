@@ -1,41 +1,34 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser, signInWithGoogle } from '@/lib/auth';
 import StudyViewer, { StudyItem } from '@/components/StudyViewer';
 import { generateErrorText } from '@/lib/generation-limits';
 import GenerationProgress from '@/components/GenerationProgress';
+import NotesSheet from '@/components/make/NotesSheet';
+import MakeCard from '@/components/make/MakeCard';
+import DeckSpread from '@/components/make/DeckSpread';
 import { nextProgress, PROGRESS_MIME, readGeneration, START_PROGRESS, type ProgressState } from '@/lib/generation-progress';
 import {
   DEFAULT_DIFFICULTY,
   DEFAULT_QUESTION_COUNT,
-  DIFFICULTIES,
-  DIFFICULTY_HINTS,
-  DIFFICULTY_LABELS,
-  QUESTION_COUNTS,
-  STUDY_TYPE_HINTS,
   STUDY_TYPE_LABELS,
-  STUDY_TYPES,
   type Difficulty,
   type StudyType,
 } from '@/lib/study-types';
 import { shrinkImage } from '@/lib/shrink-image';
 import { planPdfUpload } from '@/lib/prepare-pdf';
 import {
-  FILE_ACCEPT,
-  FILE_TYPES_TEXT,
+  detectSource,
   fileKind,
   isPhoto,
+  linkFromInput,
   linkProblem,
-  MAX_SOURCE_CHARS,
-  MAX_TOPIC_CHARS,
   pastedTextProblem,
   pickedFileProblem,
   quoteSourceLabel,
-  SOURCE_KINDS,
-  SOURCE_LABELS,
   topicProblem,
   type SourceKind,
 } from '@/lib/sources';
@@ -58,21 +51,26 @@ const PENDING_RESULT_KEY = 'flashforge_pending_result';
 // each question over 10.
 const slowNoticeMs = (count: number) => 15_000 + Math.max(0, count - DEFAULT_QUESTION_COUNT) * 1_000;
 
+// The home page is the desk where a deck is made (desk redesign, phase 3): the
+// notes sheet takes a file, notes, a link or a topic; the "Make me …" card says
+// how many cards, how hard and what kind; the new cards land in a spread; and
+// Start studying gathers them into the deck on the study desk.
 export default function UploadPage() {
   const router = useRouter();
   const { user } = useUser();
-  const [source, setSource] = useState<SourceKind>('file');
   const [file, setFile] = useState<File | null>(null);
-  const [pasted, setPasted] = useState('');
-  const [link, setLink] = useState('');
-  const [topic, setTopic] = useState('');
+  // Whatever is typed on the notes sheet: notes, a link or a topic.
+  const [notes, setNotes] = useState('');
+  // The student said to use the typed text as notes, whatever it looks like.
+  const [asNotes, setAsNotes] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>(DEFAULT_DIFFICULTY);
   const [studyType, setStudyType] = useState<StudyType>('flashcard');
   const [count, setCount] = useState<number>(DEFAULT_QUESTION_COUNT);
-  const [dragActive, setDragActive] = useState(false);
   const [status, setStatus] = useState<'idle' | 'generating' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [result, setResult] = useState<GeneratedResult | null>(null);
+  // A new deck lies in a spread until Start studying.
+  const [view, setView] = useState<'spread' | 'study'>('spread');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'needs-auth'>('idle');
   const [resumeAfterAuth, setResumeAfterAuth] = useState(false);
   const [slowGeneration, setSlowGeneration] = useState(false);
@@ -119,36 +117,31 @@ export default function UploadPage() {
     setFile(f);
   };
 
-  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragActive(false);
-    const dropped = e.dataTransfer.files?.[0];
-    if (dropped) validateAndSetFile(dropped);
-  }, []);
-
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (selected) validateAndSetFile(selected);
+  const editNotes = (text: string) => {
+    setNotes(text);
+    if (!text.trim()) setAsNotes(false);
+    if (status === 'error') {
+      setErrorMsg('');
+      setStatus('idle');
+    }
   };
 
-  const chooseSource = (kind: SourceKind) => {
-    setSource(kind);
-    setErrorMsg('');
-    setStatus('idle');
-  };
-
+  // What the deck is made from: the file on the sheet, or what the typed text
+  // looks like (lib/sources.ts detectSource), unless the student switched it.
+  const typed = asNotes ? 'text' : detectSource(notes);
+  const source: SourceKind | null = file ? 'file' : typed;
   const sendingPhoto = source === 'file' && file !== null && isPhoto(fileKind(file.name, file.type));
 
   const handleSubmit = async () => {
-    if (source === 'file' && !file) return;
-    // Pasted notes (#70) and links (#74) are checked here, before anything is sent.
+    if (!source) return;
+    // Notes (#70), links (#74) and topics (#79) are checked here, before anything is sent.
     const problem =
       source === 'text'
-        ? pastedTextProblem(pasted)
+        ? pastedTextProblem(notes)
         : source === 'link'
-          ? linkProblem(link)
+          ? linkProblem(linkFromInput(notes))
           : source === 'topic'
-            ? topicProblem(topic)
+            ? topicProblem(notes)
             : null;
     if (problem) {
       setErrorMsg(problem);
@@ -182,9 +175,9 @@ export default function UploadPage() {
         formData.append('file', file);
       }
     } else if (source === 'file') formData.append('file', file!);
-    else if (source === 'text') formData.append('text', pasted);
-    else if (source === 'link') formData.append('url', link.trim());
-    else formData.append('topic', topic.trim());
+    else if (source === 'text') formData.append('text', notes);
+    else if (source === 'link') formData.append('url', linkFromInput(notes));
+    else formData.append('topic', notes.trim());
     formData.append('studyType', studyType);
     formData.append('count', String(count));
     formData.append('difficulty', difficulty);
@@ -224,6 +217,7 @@ export default function UploadPage() {
     }
 
     setResult(outcome.body as unknown as GeneratedResult);
+    setView('spread');
     setStatus('idle');
   };
 
@@ -277,6 +271,7 @@ export default function UploadPage() {
       return;
     }
     setResult(null);
+    setView('spread');
     setFile(null);
     setSaveStatus('idle');
     setStatus('idle');
@@ -298,7 +293,7 @@ export default function UploadPage() {
     const saveSlot = (
       <div className="text-center space-y-2">
         {result.source && (
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-muted">
             From{' '}
             <a href={result.source.url} target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
               {result.source.name}
@@ -306,10 +301,10 @@ export default function UploadPage() {
           </p>
         )}
         {saveStatus === 'saved' ? (
-          <p className="text-sm text-green-600 font-medium">Saved ✓</p>
+          <p className="text-sm text-green-800 font-medium">Saved ✓</p>
         ) : saveStatus === 'needs-auth' ? (
           <div className="space-y-2">
-            <p className="text-sm text-amber-500">Sign in to save this study guide.</p>
+            <p className="text-sm text-amber-800">Sign in to save this study guide.</p>
             <button
               onClick={() => {
                 sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(result));
@@ -329,233 +324,97 @@ export default function UploadPage() {
             {saveStatus === 'saving' ? 'Saving...' : '💾 Save this study guide'}
           </button>
         )}
-        {saveStatus === 'error' && (
-          <p className="text-xs text-red-500">Failed to save. Try again.</p>
-        )}
+        {saveStatus === 'error' && <p className="text-xs text-pencil">Failed to save. Try again.</p>}
       </div>
     );
 
+    if (view === 'study') {
+      return (
+        <StudyViewer
+          title={result.title}
+          studyType={result.studyType}
+          cards={result.items}
+          onExit={handleExit}
+          saveSlot={saveSlot}
+          quoteLabel={quoteSourceLabel(result.sourceFilename)}
+        />
+      );
+    }
+
+    const n = result.items.length;
     return (
-      <StudyViewer
+      <DeckSpread
         title={result.title}
-        studyType={result.studyType}
-        cards={result.items}
+        meta={`${STUDY_TYPE_LABELS[result.studyType] ?? 'Flashcards'} · ${n} card${n === 1 ? '' : 's'}`}
+        items={result.items}
+        onStart={() => setView('study')}
         onExit={handleExit}
         saveSlot={saveSlot}
-        quoteLabel={quoteSourceLabel(result.sourceFilename)}
+        savedToHistory={!!result.historyId}
       />
     );
   }
 
+  const generating = status === 'generating';
+  const sourceLine = file
+    ? `from ${file.name}`
+    : source === 'topic'
+      ? `about “${notes.trim()}”`
+      : source === 'link'
+        ? 'from the web page you linked'
+        : source === 'text'
+          ? 'from the notes on the sheet'
+          : 'Put your notes, a link or a topic on the sheet first.';
+  const waitNote = sendingPhoto
+    ? 'Reading a photo can take about 30 seconds.'
+    : count > DEFAULT_QUESTION_COUNT
+      ? `${count} cards can take about 30 seconds.`
+      : 'This can take about 20 seconds.';
+
   return (
-    <main className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-md space-y-6">
-        {/* The links to My Sets, History and the role's pages, and signing in or
-            out, live on the desk around this sheet (components/desk). */}
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-semibold">FlashForge</h1>
-          <p className="text-sm text-gray-500">
-            Upload a file, paste your notes or a link, or type a topic, and get an AI-generated study guide.
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <p id="study-type-label" className="text-sm font-medium text-center">
-            What kind of study guide?
-          </p>
-          <div role="group" aria-labelledby="study-type-label" className="grid grid-cols-2 gap-2">
-            {STUDY_TYPES.map((type) => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => setStudyType(type)}
-                aria-pressed={studyType === type}
-                className={`py-2 px-2 rounded-lg border text-sm font-medium transition-colors ${
-                  studyType === type ? 'border-accent bg-accent/10 text-link' : 'border-border text-gray-500'
-                }`}
-              >
-                {STUDY_TYPE_LABELS[type]}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-gray-500 text-center">{STUDY_TYPE_HINTS[studyType]}</p>
-        </div>
-
-        <div className="space-y-2">
-          <p id="question-count-label" className="text-sm font-medium text-center">
-            How many questions?
-          </p>
-          <div role="group" aria-labelledby="question-count-label" className="grid grid-cols-5 gap-2">
-            {QUESTION_COUNTS.map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setCount(n)}
-                aria-pressed={count === n}
-                className={`py-2 rounded-lg border text-sm font-medium tabular-nums transition-colors ${
-                  count === n ? 'border-accent bg-accent/10 text-link' : 'border-border text-gray-500'
-                }`}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <p id="difficulty-label" className="text-sm font-medium text-center">
-            How hard?
-          </p>
-          <div role="group" aria-labelledby="difficulty-label" className="grid grid-cols-3 gap-2">
-            {DIFFICULTIES.map((level) => (
-              <button
-                key={level}
-                type="button"
-                onClick={() => setDifficulty(level)}
-                aria-pressed={difficulty === level}
-                className={`py-2 rounded-lg border text-sm font-medium transition-colors ${
-                  difficulty === level ? 'border-accent bg-accent/10 text-link' : 'border-border text-gray-500'
-                }`}
-              >
-                {DIFFICULTY_LABELS[level]}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-gray-500 text-center">{DIFFICULTY_HINTS[difficulty]}</p>
-        </div>
-
-        <div
-          role="group"
-          aria-label="Where are your notes?"
-          className="grid grid-cols-2 gap-1 rounded-lg border p-1 sm:grid-cols-4"
-        >
-          {SOURCE_KINDS.map((kind) => (
-            <button
-              key={kind}
-              type="button"
-              onClick={() => chooseSource(kind)}
-              aria-pressed={source === kind}
-              className={`rounded-md py-1.5 text-sm font-medium transition-colors ${
-                source === kind ? 'bg-accent text-ink' : 'text-gray-500 hover:text-foreground'
-              }`}
-            >
-              {SOURCE_LABELS[kind]}
-            </button>
-          ))}
-        </div>
-
-        {/* Keys: each kind of input is its own element, so React never turns the
-            file input into the link box. */}
-        {source === 'topic' ? (
-          <div key="topic" className="space-y-1">
-            <input
-              aria-label="Topic"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g. Photosynthesis or the OSI model"
-              maxLength={MAX_TOPIC_CHARS}
-              autoComplete="off"
-              className="w-full rounded-xl border bg-transparent p-3 text-sm"
-            />
-            <p className="text-xs text-gray-400">
-              We look the topic up on Wikipedia and make the questions from that article.
-            </p>
-          </div>
-        ) : source === 'link' ? (
-          <div key="link" className="space-y-1">
-            <input
-              type="url"
-              aria-label="Link to a web page"
-              value={link}
-              onChange={(e) => setLink(e.target.value)}
-              placeholder="https://"
-              autoComplete="off"
-              className="w-full rounded-xl border bg-transparent p-3 text-sm"
-            />
-            <p className="text-xs text-gray-400">
-              Articles and other public pages work. Pages that need signing in can&apos;t be read.
-            </p>
-          </div>
-        ) : source === 'text' ? (
-          <div key="text" className="space-y-1">
-            <textarea
-              aria-label="Your notes"
-              value={pasted}
-              onChange={(e) => setPasted(e.target.value)}
-              rows={8}
-              placeholder="Paste your notes here, from Google Docs, a website, or a chat."
-              className="w-full rounded-xl border bg-transparent p-3 text-sm"
-            />
-            <p
-              className={`text-right text-xs tabular-nums ${pasted.length > MAX_SOURCE_CHARS ? 'text-red-500' : 'text-gray-400'}`}
-            >
-              {pasted.length.toLocaleString('en-US')} / {MAX_SOURCE_CHARS.toLocaleString('en-US')} characters
-            </p>
-          </div>
-        ) : (
-        <div
-          key="file"
-          onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
-          onDragLeave={() => setDragActive(false)}
-          onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-xl p-10 text-center transition-colors ${
-            dragActive ? 'border-accent bg-accent/10' : 'border-border'
-          }`}
-        >
-          <input
-            id="file-input"
-            type="file"
-            accept={FILE_ACCEPT}
-            onChange={handleFileInput}
-            className="hidden"
+    <main className="on-desk w-full pb-8 pt-1">
+      <h1 className="sr-only">Make a deck</h1>
+      <div className="grid items-start gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <div className="paper-shadow rounded-md lg:-rotate-[0.6deg]">
+          <NotesSheet
+            text={notes}
+            onText={editNotes}
+            file={file}
+            onFile={validateAndSetFile}
+            onRemoveFile={() => setFile(null)}
+            detected={detectSource(notes)}
+            asNotes={asNotes}
+            onAsNotes={setAsNotes}
+            disabled={generating}
           />
-          <label htmlFor="file-input" className="cursor-pointer block">
-            {file ? (
-              <p className="font-medium">{file.name}</p>
-            ) : (
-              <>
-                <p className="font-medium">Drag & drop a file here</p>
-                <p className="text-sm text-gray-500 mt-1">or click to browse ({FILE_TYPES_TEXT})</p>
-              </>
-            )}
-          </label>
         </div>
-        )}
-
-        {status === 'error' && (
-          <p className="text-sm text-red-500 text-center">{errorMsg}</p>
-        )}
-
-        <button
-          onClick={handleSubmit}
-          disabled={
-            (source === 'file'
-              ? !file
-              : source === 'text'
-                ? !pasted.trim()
-                : source === 'link'
-                  ? !link.trim()
-                  : !topic.trim()) || status === 'generating'
-          }
-          className="btn btn-primary btn-lg w-full"
-        >
-          {status === 'generating' &&
-            (sendingPhoto
-              ? 'Reading your photo (this can take ~30s)...'
-              : count > DEFAULT_QUESTION_COUNT
-                ? `Generating ${count} questions (this can take ~30s)...`
-                : 'Generating (this can take ~20s)...')}
-          {(status === 'idle' || status === 'error') && 'Generate Study Guide'}
-        </button>
-
-        {status === 'generating' && <GenerationProgress progress={progress} source={source} photo={sendingPhoto} pdfRead={pdfRead} />}
-
-        {status === 'generating' && slowGeneration && progress.attempt <= 1 && (
-          <p className="text-sm text-gray-500 text-center">
-            Our AI is extra busy right now, so we&apos;re using a slower backup. This can take up
-            to a minute.
-          </p>
-        )}
+        <div className="flex flex-col gap-5">
+          <aside aria-label="Tip" className="sticky-note paper-shadow hidden max-w-xs rotate-[2.5deg] self-end rounded-sm px-4 py-3 text-[13.5px] leading-snug text-ink lg:block">
+            {generating
+              ? 'Your cards land on the desk as soon as the deck is ready.'
+              : 'Drop a PDF, Word file, slides or a photo on the sheet. Or click it and type notes, a link or a topic.'}
+          </aside>
+          <MakeCard
+            count={count}
+            onCount={setCount}
+            difficulty={difficulty}
+            onDifficulty={setDifficulty}
+            studyType={studyType}
+            onStudyType={setStudyType}
+            sourceLine={sourceLine}
+            canMake={source !== null}
+            making={generating}
+            onMake={handleSubmit}
+            waitNote={waitNote}
+            error={status === 'error' ? errorMsg : ''}
+          />
+          {generating && source && <GenerationProgress progress={progress} source={source} photo={sendingPhoto} pdfRead={pdfRead} />}
+          {generating && slowGeneration && progress.attempt <= 1 && (
+            <p className="text-sm text-on-desk/85">
+              Our AI is extra busy right now, so we&apos;re using a slower backup. This can take up to a minute.
+            </p>
+          )}
+        </div>
       </div>
     </main>
   );

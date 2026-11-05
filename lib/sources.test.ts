@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  detectSource,
   FILE_ACCEPT,
   fileKind,
   fileProblem,
+  linkFromInput,
   linkProblem,
   MAX_SOURCE_CHARS,
   pastedTextProblem,
@@ -136,5 +138,46 @@ describe('pickedFileProblem (#44)', () => {
 
   it('does not change what the server accepts: a PDF sent to it is still limited to 4 MB', () => {
     expect(fileProblem('big.pdf', 'application/pdf', 5.5 * MB)).toContain('4 MB');
+  });
+});
+
+describe('detectSource (desk redesign, phase 3)', () => {
+  it('reads a web address as a link, with or without https://', () => {
+    expect(detectSource('https://example.org/notes')).toBe('link');
+    expect(detectSource('  http://example.org  ')).toBe('link');
+    expect(detectSource('www.britannica.com/science/photosynthesis')).toBe('link');
+    expect(detectSource('example.org/notes')).toBe('link');
+    expect(detectSource('en.wikipedia.org')).toBe('link');
+  });
+
+  it('reads a short name as a topic', () => {
+    expect(detectSource('Photosynthesis')).toBe('topic');
+    expect(detectSource('the OSI model')).toBe('topic');
+    expect(detectSource('World War II causes')).toBe('topic');
+    // Names with a dot that aren't web addresses.
+    expect(detectSource('Node.js')).toBe('topic');
+    expect(detectSource('ASP.NET')).toBe('topic');
+  });
+
+  it('reads sentences, long lines and more than one line as notes', () => {
+    expect(detectSource('The stroma is the fluid inside the chloroplast.')).toBe('text');
+    expect(detectSource('What is photosynthesis?')).toBe('text');
+    expect(detectSource('Mitochondria make ATP for the cell during respiration')).toBe('text');
+    expect(detectSource('Stroma\nThylakoid')).toBe('text');
+    expect(detectSource('x'.repeat(61))).toBe('text');
+  });
+
+  it('finds nothing on an empty sheet', () => {
+    expect(detectSource('')).toBeNull();
+    expect(detectSource('   \n ')).toBeNull();
+  });
+});
+
+describe('linkFromInput', () => {
+  it('adds https:// to an address typed without it, and leaves a full link alone', () => {
+    expect(linkFromInput(' example.org/notes ')).toBe('https://example.org/notes');
+    expect(linkFromInput('www.example.org')).toBe('https://www.example.org');
+    expect(linkFromInput('http://example.org')).toBe('http://example.org');
+    expect(linkFromInput('HTTPS://Example.org')).toBe('HTTPS://Example.org');
   });
 });

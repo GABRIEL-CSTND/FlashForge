@@ -36,7 +36,7 @@ export default function GenerationProgress({ progress, source, photo, pdfRead = 
   }, []);
 
   return (
-    <div className="rounded-lg border p-4 space-y-2">
+    <div className="paper paper-shadow rounded-md px-5 py-4 space-y-2 text-ink">
       {/* The steps are announced to screen readers; the ticking clock is not. */}
       <div role="status" aria-live="polite" className="space-y-2">
         <ol aria-label="Progress" className="space-y-2">
@@ -46,16 +46,16 @@ export default function GenerationProgress({ progress, source, photo, pdfRead = 
               <li
                 key={id}
                 aria-current={status === 'current' ? 'step' : undefined}
-                className={`flex items-center gap-3 text-sm ${status === 'pending' ? 'text-gray-500' : ''} ${
+                className={`flex items-center gap-3 text-sm ${status === 'pending' ? 'text-muted' : ''} ${
                   status === 'current' ? 'font-medium text-link' : ''
                 }`}
               >
                 <span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center">
-                  {status === 'done' && <span className="text-accent">✓</span>}
+                  {status === 'done' && <span className="text-brass-ink">✓</span>}
                   {status === 'current' && (
                     <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none" />
                   )}
-                  {status === 'pending' && <span className="text-gray-500">○</span>}
+                  {status === 'pending' && <span className="text-muted">○</span>}
                 </span>
                 <span>
                   {labels[id]}
@@ -65,9 +65,9 @@ export default function GenerationProgress({ progress, source, photo, pdfRead = 
             );
           })}
         </ol>
-        {note && <p className="pl-8 text-sm text-gray-500">{note}</p>}
+        {note && <p className="pl-8 text-sm text-muted">{note}</p>}
       </div>
-      <p aria-hidden="true" className="pl-8 text-xs text-gray-500 tabular-nums">
+      <p aria-hidden="true" className="pl-8 text-xs text-muted tabular-nums">
         Working for {seconds}s
       </p>
     </div>

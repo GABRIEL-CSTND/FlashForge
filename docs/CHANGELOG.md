@@ -9,6 +9,13 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
 it's ready. It changes how the app looks, not how it works.
 
 ### Changed
+- **Making a deck happens on the desk** (phase 3, 2026-11-05): one notes sheet takes a
+  file (dropped or chosen), notes, a link or a topic, and says what it found ("Looks like a
+  topic"), with *Use it as notes* when the guess is wrong. A web address works without
+  https://. The "Make me 10 medium flashcards" card replaces the option buttons: each word
+  opens paper slips. *Generate Study Guide* is now **Make my deck**. The new cards land one
+  by one in a spread, and **Start studying** gathers them onto the study desk. The steps
+  while it works are a paper tag. Tests: 825 in all.
 - **Flashcards are studied on the desk** (phase 2, 2026-11-05): the deck on the left, the
   card in the middle and the Got it / Missed it piles on the right. On a phone the deck
   peeks out above the card and the piles are trays under it.

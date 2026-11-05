@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/supabase', () => ({
@@ -63,9 +63,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const buttonsIn = (group: string, selector = 'button') =>
-  Array.from(screen.getByRole('group', { name: group }).querySelectorAll(selector), (b) => b.textContent);
-const pressed = (group: string) => buttonsIn(group, '[aria-pressed="true"]');
+// The "Make me 10 medium flashcards" card: each word opens paper slips.
+const word = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}: `) });
+const slips = (name: string) => {
+  fireEvent.click(word(name));
+  return within(screen.getByRole('group', { name }));
+};
+const pick = (name: string, option: string) => fireEvent.click(slips(name).getByRole('button', { name: new RegExp(`^${option}`) }));
+const make = () => fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+const makeButton = () => screen.getByRole('button', { name: 'Make my deck' }) as HTMLButtonElement;
+const typeOnSheet = (text: string) =>
+  fireEvent.change(screen.getByRole('textbox', { name: 'Your notes, a link or a topic' }), { target: { value: text } });
 
 function chooseFile() {
   const input = document.getElementById('file-input') as HTMLInputElement;
@@ -73,29 +81,48 @@ function chooseFile() {
 }
 
 describe('upload page options', () => {
-  it('starts with flashcards and 10 questions', () => {
+  it('starts with 10 medium flashcards', () => {
     render(<UploadPage />);
-    expect(pressed('What kind of study guide?')).toEqual(['Flashcards']);
-    expect(pressed('How many questions?')).toEqual(['10']);
-    expect(buttonsIn('How many questions?')).toEqual(['5', '10', '15', '20', '30']);
+    expect(word('How many').textContent).toBe('10');
+    expect(word('How hard').textContent).toBe('medium');
+    expect(word('What kind').textContent).toBe('flashcards');
+    const counts = slips('How many');
+    expect(counts.getAllByRole('button').map((b) => b.textContent)).toEqual(['5', '10', '15', '20', '30']);
+    expect(counts.getByRole('button', { name: '10' }).getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('offers true or false, and says what each kind of guide is (#68)', () => {
+  it('offers true or false, and says what each kind of deck is (#68)', () => {
     render(<UploadPage />);
-    expect(buttonsIn('What kind of study guide?')).toEqual(['Flashcards', 'Multiple choice', 'True or false', 'Mixed quiz']);
-    expect(screen.getByText(/Flip, type or match them/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'True or false' }));
-    expect(pressed('What kind of study guide?')).toEqual(['True or false']);
-    expect(screen.getByText(/Decide whether each statement is true or false/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Mixed quiz' }));
-    expect(screen.getByText(/Part I multiple choice, Part II true or false, Part III identification/)).toBeTruthy();
+    const kinds = slips('What kind');
+    expect(kinds.getAllByRole('button').map((b) => b.querySelector('.font-semibold')?.textContent)).toEqual([
+      'Flashcards',
+      'Multiple choice',
+      'True or false',
+      'Mixed quiz',
+    ]);
+    expect(kinds.getByRole('button', { name: /^Flashcards/ }).textContent).toContain('Flip, type or match them');
+    expect(kinds.getByRole('button', { name: /^True or false/ }).textContent).toContain('Decide whether each statement is true or false');
+    expect(kinds.getByRole('button', { name: /^Mixed quiz/ }).textContent).toContain(
+      'Part I multiple choice, Part II true or false, Part III identification'
+    );
+    fireEvent.click(kinds.getByRole('button', { name: /^True or false/ }));
+    expect(screen.queryByRole('group', { name: 'What kind' })).toBeNull();
+    expect(word('What kind').textContent).toBe('true-or-false statements');
+  });
+
+  it('closes the slips with Escape and gives focus back to the word', () => {
+    render(<UploadPage />);
+    slips('How hard');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('group', { name: 'How hard' })).toBeNull();
+    expect(document.activeElement).toBe(word('How hard'));
   });
 
   it('takes Word and PowerPoint files, and explains the ones it cannot take (#71)', () => {
     render(<UploadPage />);
     const input = document.getElementById('file-input') as HTMLInputElement;
     expect(input.accept).toBe('.pdf,.docx,.pptx,.txt,.jpg,.jpeg,.png,.webp');
-    expect(screen.getByText('or click to browse (PDF, Word, PowerPoint, TXT or a photo)')).toBeTruthy();
+    expect(screen.getByText('PDF, Word, PowerPoint, TXT or a photo')).toBeTruthy();
     const choose = (file: File) => fireEvent.change(input, { target: { files: [file] } });
 
     choose(new File(['x'], 'lecture.ppt'));
@@ -103,11 +130,17 @@ describe('upload page options', () => {
     // Only a PDF may be big (#44); every other file keeps the 4 MB limit.
     choose(new File([new Uint8Array(5 * 1024 * 1024)], 'big deck.pptx'));
     expect(screen.getByText(/This file is 5.0 MB/)).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Generate Study Guide' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(makeButton().disabled).toBe(true);
 
     choose(new File(['x'], 'Lecture 3.pptx'));
     expect(screen.getByText('Lecture 3.pptx')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Generate Study Guide' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText('PowerPoint slides · 1 KB')).toBeTruthy();
+    expect(screen.getByText('from Lecture 3.pptx')).toBeTruthy();
+    expect(makeButton().disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Take the file off the sheet' }));
+    expect(screen.queryByText('Lecture 3.pptx')).toBeNull();
+    expect(makeButton().disabled).toBe(true);
   });
 
   it('shrinks a photo before checking its size and sending it (#72)', async () => {
@@ -117,21 +150,22 @@ describe('upload page options', () => {
     fireEvent.change(input, { target: { files: [new File([new Uint8Array(6 * 1024 * 1024)], 'IMG_2034.HEIC.png', { type: 'image/png' })] } });
     expect(await screen.findByText('IMG_2034.jpg')).toBeTruthy();
     expect(screen.queryByText(/This file is/)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    make();
     expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
     expect(sentForms[0].file).toBe('file:IMG_2034.jpg');
     shrink.to = null;
   });
 
-  it('makes a guide from a typed topic at the chosen difficulty, and credits the article (#79)', async () => {
+  it('makes a deck from a typed topic at the chosen difficulty, and credits the article (#79)', async () => {
     render(<UploadPage />);
-    expect(pressed('How hard?')).toEqual(['Medium']);
-    fireEvent.click(screen.getByRole('button', { name: 'Hard' }));
-    expect(screen.getByText('Specific details and how ideas connect, with tricky choices.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Topic' }));
-    const box = screen.getByRole('textbox', { name: 'Topic' });
-    fireEvent.change(box, { target: { value: 'x' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    expect(slips('How hard').getByRole('button', { name: /^Hard/ }).textContent).toContain(
+      'Specific details and how ideas connect, with tricky choices.'
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^Hard/ }));
+    expect(word('How hard').textContent).toBe('hard');
+    typeOnSheet('x');
+    expect(screen.getByText('Looks like a topic. We’ll look it up on Wikipedia.')).toBeTruthy();
+    make();
     expect(screen.getByText('Type a topic, like “Photosynthesis”.')).toBeTruthy();
     expect(sentForms).toEqual([]);
 
@@ -148,66 +182,81 @@ describe('upload page options', () => {
         { status: 200 }
       );
     });
-    fireEvent.change(box, { target: { value: ' photosynthesis ' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    typeOnSheet(' photosynthesis ');
+    expect(screen.queryByText('Type a topic, like “Photosynthesis”.')).toBeNull();
+    expect(screen.getByText('about “photosynthesis”')).toBeTruthy();
+    make();
     expect(await screen.findByText('Pigment that absorbs light')).toBeTruthy();
     expect(sentForms).toEqual([{ topic: 'photosynthesis', studyType: 'flashcard', count: '10', difficulty: 'hard' }]);
     const credit = screen.getByRole('link', { name: 'Wikipedia: Photosynthesis' });
     expect(credit.getAttribute('href')).toBe('https://en.wikipedia.org/wiki/Photosynthesis');
   });
 
-  it('sends a link to a web page (#74)', async () => {
+  it('sends a link to a web page, adding https:// when it was left off (#74)', async () => {
     render(<UploadPage />);
-    expect(buttonsIn('Where are your notes?')).toEqual(['Upload a file', 'Paste text', 'Web link', 'Topic']);
-    fireEvent.click(screen.getByRole('button', { name: 'Web link' }));
-    const box = screen.getByRole('textbox', { name: 'Link to a web page' });
-    fireEvent.change(box, { target: { value: 'example.org/notes' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
-    expect(screen.getByText('Paste a full link, starting with https://')).toBeTruthy();
-    expect(sentForms).toEqual([]);
-
-    fireEvent.change(box, { target: { value: ' https://example.org/notes ' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    typeOnSheet('example.org/notes');
+    expect(screen.getByText('Looks like a link. We’ll read the page.')).toBeTruthy();
+    expect(screen.getByText('from the web page you linked')).toBeTruthy();
+    make();
     expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
     expect(sentForms).toEqual([{ url: 'https://example.org/notes', studyType: 'flashcard', count: '10', difficulty: 'medium' }]);
   });
 
-  it('sends pasted notes instead of a file (#70)', async () => {
+  it('sends pasted notes, with a switch for short notes that look like a topic (#70)', async () => {
     render(<UploadPage />);
-    expect(pressed('Where are your notes?')).toEqual(['Upload a file']);
-    fireEvent.click(screen.getByRole('button', { name: 'Paste text' }));
-    const box = screen.getByRole('textbox', { name: 'Your notes' });
-    const generate = screen.getByRole('button', { name: 'Generate Study Guide' }) as HTMLButtonElement;
-    expect(generate.disabled).toBe(true);
+    expect(makeButton().disabled).toBe(true);
 
-    fireEvent.change(box, { target: { value: 'Stroma' } });
-    fireEvent.click(generate);
+    typeOnSheet('Stroma');
+    expect(screen.getByText('Looks like a topic. We’ll look it up on Wikipedia.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Use it as notes' }));
+    expect(screen.getByText('Using it as notes')).toBeTruthy();
+    expect(screen.getByText('from the notes on the sheet')).toBeTruthy();
+    make();
     expect(screen.getByText('Paste at least a sentence or two of your notes.')).toBeTruthy();
     expect(sentForms).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Look it up as a topic' }));
+    expect(screen.getByText('about “Stroma”')).toBeTruthy();
 
-    fireEvent.change(box, { target: { value: 'x'.repeat(30_001) } });
-    expect(screen.getByText('30,001 / 30,000 characters').className).toContain('text-red-500');
-    fireEvent.click(generate);
+    typeOnSheet('x'.repeat(30_001));
+    expect(screen.getByText('30,001 / 30,000 characters').className).toContain('text-pencil');
+    make();
     expect(screen.getByText(/That's 30,001 characters/)).toBeTruthy();
     expect(sentForms).toEqual([]);
 
-    fireEvent.change(box, { target: { value: 'The stroma is the fluid inside the chloroplast.' } });
-    fireEvent.click(generate);
+    typeOnSheet('The stroma is the fluid inside the chloroplast.');
+    expect(screen.getByText('Looks like notes')).toBeTruthy();
+    make();
     expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
     expect(sentForms).toEqual([
       { text: 'The stroma is the fluid inside the chloroplast.', studyType: 'flashcard', count: '10', difficulty: 'medium' },
     ]);
   });
 
-  it('sends the chosen study type and question count with the file (#65)', async () => {
+  it('sends the chosen kind of deck and number of cards with the file (#65)', async () => {
     render(<UploadPage />);
-    fireEvent.click(screen.getByRole('button', { name: 'Multiple choice' }));
-    fireEvent.click(screen.getByRole('button', { name: '20' }));
-    expect(pressed('How many questions?')).toEqual(['20']);
+    pick('What kind', 'Multiple choice');
+    pick('How many', '20');
+    expect(word('How many').textContent).toBe('20');
+    expect(word('What kind').textContent).toBe('multiple-choice questions');
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    make();
     expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
     expect(sentForms).toEqual([{ file: 'file:notes.txt', studyType: 'multiple_choice', count: '20', difficulty: 'medium' }]);
+  });
+});
+
+describe('the new deck (desk redesign, phase 3)', () => {
+  it('lays the cards out with Start studying, which gathers them onto the study desk', async () => {
+    render(<UploadPage />);
+    chooseFile();
+    make();
+    expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
+    expect(within(screen.getByRole('list', { name: 'Your new cards' })).getAllByRole('listitem')).toHaveLength(1);
+    expect(screen.getByRole('heading', { name: 'notes' })).toBeTruthy();
+    expect(screen.getByText('Flashcards · 1 card')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Start studying' }));
+    expect(await screen.findByRole('button', { name: 'Flip the card' })).toBeTruthy();
+    expect(screen.queryByRole('list', { name: 'Your new cards' })).toBeNull();
   });
 });
 
@@ -246,7 +295,7 @@ describe('progress while generating', () => {
     const server = serverYouControl();
     render(<UploadPage />);
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
 
     // Nothing from the server yet: the upload is the step under way.
     await waitFor(() => expect(currentStep()).toBe('Uploading your file'));
@@ -274,7 +323,7 @@ describe('progress while generating', () => {
     const server = serverYouControl();
     render(<UploadPage />);
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
     await waitFor(() => expect(server.fetchMock).toHaveBeenCalled());
     const init = (server.fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
     expect((init.headers as Record<string, string>).Accept).toBe(PROGRESS_MIME);
@@ -287,20 +336,20 @@ describe('progress while generating', () => {
     const server = serverYouControl();
     render(<UploadPage />);
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
     server.send({ type: 'step', step: 'reading' });
     server.send({ type: 'result', status: 503, body: { error: 'The AI is busy right now. Please try again.' } });
     server.end();
     expect(await screen.findByText('The AI is busy right now. Please try again.')).toBeTruthy();
     expect(screen.queryByRole('list', { name: 'Progress' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Generate Study Guide' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Make my deck' })).toBeTruthy();
   });
 
   it('tells the user when the connection drops mid-way', async () => {
     const server = serverYouControl();
     render(<UploadPage />);
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
     server.send({ type: 'step', step: 'writing' });
     server.end();
     expect(await screen.findByText(/connection was interrupted/)).toBeTruthy();
@@ -311,7 +360,7 @@ describe('progress while generating', () => {
     const first = serverYouControl();
     render(<UploadPage />);
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
     first.send({ type: 'step', step: 'writing' });
     await waitFor(() => expect(currentStep()).toBe('Writing your study guide with AI'));
     first.send({ type: 'result', status: 503, body: { error: 'The AI is busy right now. Please try again.' } });
@@ -319,7 +368,7 @@ describe('progress while generating', () => {
     await screen.findByText('The AI is busy right now. Please try again.');
 
     const second = serverYouControl();
-    fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
     await waitFor(() => expect(currentStep()).toBe('Uploading your file'));
     second.send(RESULT);
     second.end();
@@ -333,7 +382,7 @@ describe('big PDFs (#44)', () => {
     const input = document.getElementById('file-input') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [new File([new Uint8Array(megabytes * MB)], name, { type: 'application/pdf' })] } });
   };
-  const generate = () => fireEvent.click(screen.getByRole('button', { name: 'Generate Study Guide' }));
+  const generate = () => fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
   const currentStep = () => document.querySelector('[aria-current="step"]')?.textContent ?? null;
   const PAGES = ['The Calvin cycle takes place in the stroma.', 'Mitochondria make most of the cell’s ATP.'];
 
@@ -343,7 +392,7 @@ describe('big PDFs (#44)', () => {
     choosePdf('Week 4 lecture.pdf', 12);
     // Picked without complaint, so the button is ready.
     expect(screen.getByText('Week 4 lecture.pdf')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Generate Study Guide' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Make my deck' }) as HTMLButtonElement).disabled).toBe(false);
 
     generate();
     expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
@@ -408,7 +457,7 @@ describe('big PDFs (#44)', () => {
     expect(await screen.findByText(message)).toBeTruthy();
     expect(sentForms).toHaveLength(0);
     expect(screen.queryByRole('list', { name: 'Progress' })).toBeNull();
-    expect((screen.getByRole('button', { name: 'Generate Study Guide' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Make my deck' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('turns away an enormous PDF as soon as it is picked', () => {
@@ -418,7 +467,7 @@ describe('big PDFs (#44)', () => {
     Object.defineProperty(huge, 'size', { value: 150 * MB });
     fireEvent.change(input, { target: { files: [huge] } });
     expect(screen.getByText(/This PDF is 150 MB. PDFs can be up to 100 MB/)).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Generate Study Guide' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Make my deck' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('does not read anything that is not a PDF', async () => {

@@ -517,7 +517,7 @@ export default function FlashcardDesk({
 
   if (kind === 'phone') {
     return (
-      <main className="study-desk w-full pb-4">
+      <main className="on-desk w-full pb-4">
         <div ref={stageRef} className="relative mx-auto w-full">
           {header}
           <div className="mt-2">{label}</div>
@@ -541,7 +541,7 @@ export default function FlashcardDesk({
   }
 
   return (
-    <main className="study-desk w-full pb-6">
+    <main className="on-desk w-full pb-6">
       <div ref={stageRef} className="relative mx-auto w-full">
         {header}
         <div className="mt-3 grid items-start gap-x-6 gap-y-7" style={{ gridTemplateColumns: `minmax(0, 1fr) ${size.w}px minmax(0, 1fr)` }}>

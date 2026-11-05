@@ -86,7 +86,7 @@ Open http://localhost:3000.
 
 ```
 app/
-  page.tsx              Upload page; also shows a freshly generated guide
+  page.tsx              The desk where a deck is made: notes sheet, Make me card, the new cards spread out, then studying
   layout.tsx            Root layout: fonts, the desk around every page, profile provider,
                         title template ("%s · FlashForge")
   globals.css           Tailwind, the desk's colors and textures, brass buttons, the default border color
@@ -140,6 +140,10 @@ components/
   desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, and a tab for each section the role can open
   desk/LibraryCard.tsx  Library card (top right): name, role and Sign out, or Sign in with Google
   desk/PaperCard.tsx    A card with two faces that turns over
+  desk/SlipMenu.tsx     A word that fans out paper slips to choose from ("Make me [10] [medium] [flashcards]")
+  make/NotesSheet.tsx   One sheet for a file, notes, a link or a topic; says what it found
+  make/MakeCard.tsx     The "Make me 10 medium flashcards" card and Make my deck
+  make/DeckSpread.tsx   A new deck spread out on the desk; Start studying gathers it
   desk/useDeskLayout.ts Where the deck, the card and the piles lie (laptop and phone), for the card motion
 lib/
   gemini.ts             AI model chain, prompts, retries, output validation

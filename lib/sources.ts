@@ -37,6 +37,33 @@ export function linkProblem(input: string): string | null {
   return 'Paste a full link, starting with https://';
 }
 
+// What can be typed on the notes sheet (desk redesign, phase 3).
+export type TypedSource = Exclude<SourceKind, 'file'>;
+
+// Endings a web address typed without https:// may have. Kept short on purpose,
+// and lower case only, so "Node.js" or "ASP.NET" read as topics.
+const WEB_ENDINGS = 'com|org|net|edu|gov|io|co|uk|us|ca|au|de|fr|es|it|nl|ph|in|info|dev|app|ai|me|ly';
+const BARE_ADDRESS = new RegExp(`^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*\\.(${WEB_ENDINGS})(\\/\\S*)?$`);
+
+// The notes sheet takes notes, a link or a topic in one box, and says which it
+// thinks it was given (the student can switch it if that's wrong):
+// - a link: one web address, with or without https://
+// - a topic: a short name on one line, at most 6 words and not a sentence
+// - notes: anything else
+export function detectSource(input: string): TypedSource | null {
+  const text = input.trim();
+  if (!text) return null;
+  if (/^https?:\/\/\S+$/i.test(text) || /^www\.\S+\.\S+$/i.test(text) || BARE_ADDRESS.test(text)) return 'link';
+  if (!text.includes('\n') && text.length <= 60 && text.split(/\s+/).length <= 6 && !/[.!?]$/.test(text)) return 'topic';
+  return 'text';
+}
+
+// A link typed without https:// gets it, so "example.org/notes" works.
+export function linkFromInput(input: string): string {
+  const text = input.trim();
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`;
+}
+
 // What the quote under a card (#80) says it's from, going by the guide's source:
 // `sourceFilename` is the file's name, the web page's or Wikipedia article's link,
 // or null for pasted notes. Never "your": the viewer may not be the one who made it.

@@ -179,7 +179,7 @@ of `StudyViewer.tsx` unchanged).
   tools (Flip, Type, Match, Read aloud, Auto) under the card. On a phone: the deck peeks
   out above the card, the piles are two trays under it (Missed it on the left, Got it on
   the right), then the tools. The paper sheet steps aside for it
-  (`.desk-sheet:has(.study-desk)` in `globals.css`).
+  (`.desk-sheet:has(.on-desk)` in `globals.css`).
 - **Studying.** Click the card (or press Enter or Space) to turn it over, then click a
   pile, or press → for Got it and ← for Missed it while the card or a pile has focus. A
   card can be sorted without turning it over. When the deck is done, a paper note in the
@@ -208,14 +208,21 @@ of `StudyViewer.tsx` unchanged).
 
 ## 1. Generating a study guide
 
-1. **Upload** (`app/page.tsx`): the user picks *Flashcards*, *Multiple choice*, *True or
-   false* (#68) or *Mixed quiz* (#69), with a line under the choice saying what it is, how many questions (5,
-   10, 15, 20 or 30; 10 by default, #65), and drops a PDF (up to 100 MB, and read in
-   the browser, #44), Word (`.docx`), PowerPoint
-   (`.pptx`, #71) or TXT file of up to 4 MB, or switches to
-   **Paste text** (#70) and pastes their notes. Pasted text must be 20 to 30,000 characters
-   (`pastedTextProblem()` in `lib/sources.ts`), checked before anything is sent, with a
-   character counter under the box. Nothing is saved yet.
+1. **Make a deck** (`app/page.tsx`, the desk since redesign phase 3): one **notes sheet**
+   (`components/make/NotesSheet.tsx`) takes a dropped or chosen PDF (up to 100 MB, read in
+   the browser, #44), Word (`.docx`), PowerPoint (`.pptx`, #71), TXT file or photo of up
+   to 4 MB, or typed text. `detectSource()` in `lib/sources.ts` says what the text looks
+   like: a web address is a link (#74; `https://` is added when left off), a short name
+   (one line, at most 6 words, not a sentence) is a topic (#79), anything else is notes
+   (#70). The sheet says what it found, with a switch (*Use it as notes*) when that's
+   wrong. Notes must be 20 to 30,000 characters (`pastedTextProblem()`), with a counter.
+   The **"Make me 10 medium flashcards"** card (`components/make/MakeCard.tsx`) sets how
+   many (5, 10, 15, 20 or 30, #65), how hard and what kind (#68, #69): each word opens
+   paper slips (`components/desk/SlipMenu.tsx`) with a line saying what each choice is.
+   **Make my deck** sends it. Nothing is saved yet. When the deck arrives, its cards land
+   one by one, 350 ms apart, in a spread (`components/make/DeckSpread.tsx`; the API sends
+   all the cards at once), with Save and the source's credit; **Start studying** gathers
+   them and the study screen takes over on the same URL.
 2. **`POST /api/generate`** (`app/api/generate/route.ts`, `maxDuration = 90`):
    - Checks the caller's **daily limit** first (#63). Over it, the answer is 429 and the AI
      isn't called. See "Daily generation limits" below.
