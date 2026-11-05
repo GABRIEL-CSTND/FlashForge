@@ -2,12 +2,9 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { useUser, signInWithGoogle, signOut } from '@/lib/auth';
+import { useUser, signInWithGoogle } from '@/lib/auth';
 import StudyViewer, { StudyItem } from '@/components/StudyViewer';
-import { useProfile } from '@/components/ProfileProvider';
-import { canUseTeacherTools } from '@/lib/role-types';
 import { generateErrorText } from '@/lib/generation-limits';
 import GenerationProgress from '@/components/GenerationProgress';
 import { nextProgress, PROGRESS_MIME, readGeneration, START_PROGRESS, type ProgressState } from '@/lib/generation-progress';
@@ -64,7 +61,6 @@ const slowNoticeMs = (count: number) => 15_000 + Math.max(0, count - DEFAULT_QUE
 export default function UploadPage() {
   const router = useRouter();
   const { user } = useUser();
-  const { profile } = useProfile();
   const [source, setSource] = useState<SourceKind>('file');
   const [file, setFile] = useState<File | null>(null);
   const [pasted, setPasted] = useState('');
@@ -354,46 +350,8 @@ export default function UploadPage() {
   return (
     <main className="min-h-screen flex items-center justify-center p-6">
       <div className="w-full max-w-md space-y-6">
-        <div className="flex justify-end">
-          {user ? (
-            // Wraps on phones, where all the links don't fit on one line.
-            <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-sm">
-              {profile?.role === 'admin' && (
-                <Link href="/admin" className="text-link hover:underline">
-                  Admin
-                </Link>
-              )}
-              {canUseTeacherTools(profile?.role) && (
-                <Link href="/teacher" className="text-link hover:underline">
-                  Teacher dashboard
-                </Link>
-              )}
-              {profile?.role === 'student' && (
-                <Link href="/classes" className="text-link hover:underline">
-                  My Classes
-                </Link>
-              )}
-              <Link href="/my-sets" className="text-link hover:underline">
-                My Sets
-              </Link>
-              <Link href="/history" className="text-link hover:underline">
-                History
-              </Link>
-              <span className="text-gray-400">{user.email}</span>
-              <button onClick={() => signOut()} className="text-gray-500 hover:underline">
-                Sign out
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => signInWithGoogle()}
-              className="text-sm border rounded-lg px-3 py-1.5 font-medium hover:border-accent"
-            >
-              Sign in with Google
-            </button>
-          )}
-        </div>
-
+        {/* The links to My Sets, History and the role's pages, and signing in or
+            out, live on the desk around this sheet (components/desk). */}
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-semibold">FlashForge</h1>
           <p className="text-sm text-gray-500">
@@ -478,7 +436,7 @@ export default function UploadPage() {
               onClick={() => chooseSource(kind)}
               aria-pressed={source === kind}
               className={`rounded-md py-1.5 text-sm font-medium transition-colors ${
-                source === kind ? 'bg-accent text-white' : 'text-gray-500 hover:text-foreground'
+                source === kind ? 'bg-accent text-ink' : 'text-gray-500 hover:text-foreground'
               }`}
             >
               {SOURCE_LABELS[kind]}

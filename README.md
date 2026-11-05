@@ -87,8 +87,9 @@ Open http://localhost:3000.
 ```
 app/
   page.tsx              Upload page; also shows a freshly generated guide
-  layout.tsx            Root layout: Geist font, profile provider, title template ("%s · FlashForge")
-  globals.css           Tailwind, colors for light/dark mode, the default border color
+  layout.tsx            Root layout: fonts, the desk around every page, profile provider,
+                        title template ("%s · FlashForge")
+  globals.css           Tailwind, the desk's colors and textures, brass buttons, the default border color
   icon.svg              FlashForge icon (favicon.ico and apple-icon.png are the same design)
   */layout.tsx          Section layouts that only set the browser title ("My Sets · FlashForge")
   my-sets/page.tsx      Signed-in user's saved sets
@@ -128,6 +129,9 @@ components/
   RoleGate.tsx          Shows a page only to the allowed roles (sign-in/denied messages otherwise)
   TeacherOnly.tsx       RoleGate for teacher pages (teachers and admins)
   AdminOnly.tsx         RoleGate for admin pages
+  desk/Desk.tsx         The desk around every page: card box and library card on top, the page on a sheet of paper
+  desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, and a tab for each section the role can open
+  desk/LibraryCard.tsx  Library card (top right): name, role and Sign out, or Sign in with Google
 lib/
   gemini.ts             AI model chain, prompts, retries, output validation
   roles.ts              getAuthedUser / requireRole / chooseOwnRole (server-only)
@@ -163,6 +167,11 @@ lib/
   auth.ts               useUser hook, Google sign-in/out
 test-utils/
   fake-supabase.ts      In-memory Supabase client for route tests
+public/
+  textures/             Leather and paper tiles for the desk
+scripts/
+  make-textures.cjs     Makes public/textures, the same bytes on every run:
+                        node scripts/make-textures.cjs public/textures
 supabase/
   migrations/           Database schema and RLS policies (see supabase/README.md)
   tests/                SQL checks that simulate users; always rolled back
@@ -189,6 +198,9 @@ commands and the log of applied migrations.
 4. Open a pull request from `dev` to `main` to release (pick `main` as the base; new
    pull requests start out aimed at `dev`). Merging into `main` deploys to the live site:
    Vercel's production branch is `main`, and every other branch gets a preview.
+
+**The desk redesign** (the new look) is built in phases on **`UI_changes`**: branch from
+`UI_changes` and merge back into it, not into `dev`, until the redesign is ready for `dev`.
 
 The repository ruleset requires pull requests and one approving review. Repository
 admins can bypass it with the **"Merge without waiting for requirements"** checkbox.

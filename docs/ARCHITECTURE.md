@@ -105,34 +105,65 @@ the 50-class limit), 429 (too many wrong join codes; includes a `Retry-After` he
 
 ### Page layout
 
-The root `<body>` is a flex column (`app/layout.tsx`), so a centered `<main>`
-(`max-w-* mx-auto`) sizes to its content. Pages with one-line text that can be long
-(`truncate`) add `w-full` to it; otherwise a long title makes the page wider than a phone
-screen instead of shortening with "…".
+Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The root layout
+(`app/layout.tsx`) makes the `<body>` the desk, a flex column, and wraps every page in
+`components/desk/Desk.tsx`:
 
-**Look and feel (UI polish, phase 1):**
-- **Font:** Geist, loaded in `app/layout.tsx` and set on the body in `app/globals.css`.
+- **Card box** (`components/desk/CardBox.tsx`), at the top left, holds the navigation that
+  used to be the upload page's header links. Its front is the brass **FlashForge** button
+  (to `/`, a new study guide), and a paper divider tab sticks up for each section the user
+  can open (`cardBoxTabs()`): *My Sets* and *History* when signed in, then *My Classes*
+  (`/classes`) for students, *Classes* (`/teacher`) for teachers and admins, and *Admin*
+  for admins. The role's tabs appear once the profile has loaded. The open section's tab
+  stands tallest and has a brass edge (`aria-current="page"`). Signed out, there are no
+  tabs.
+- **Library card** (`components/desk/LibraryCard.tsx`), at the top right: the user's name
+  (or email, without a name), role and *Sign out*; signed out, *Sign in with Google*.
+  While the session loads it keeps its height, so the desk doesn't jump.
+- **The sheet:** the page itself lies on a sheet of paper below them (`.desk-sheet`, at
+  most `max-w-5xl`). On a phone the card box and library card share the top row (the card
+  gets narrower and stays on the right) and the sheet nearly fills the width.
+- Pages keep their own layout on the sheet. The sheet is a flex column too, so a centered
+  `<main>` (`max-w-* mx-auto`) sizes to its content: pages with one-line text that can be
+  long (`truncate`) add `w-full` to it, or a long title makes the page wider than a phone
+  screen instead of shortening with "…". Pages built to fill the window (`min-h-screen`)
+  only fill the sheet (`.desk-sheet .min-h-screen` in `globals.css`).
+- Later phases take pages off the sheet and onto the desk itself: the study screen, making
+  a deck, quizzes, the library, the teacher pages, then admin and cleanup.
+
+**Look and feel:**
+- **Fonts:** Instrument Sans for the app (`--font-sans`, set on the body), Fraunces for
+  titles (`h1` and `h2` on the sheet) and names on the desk (`--font-serif`, the
+  `font-serif` class), and Geist Mono for code (`--font-mono`). All three are loaded in
+  `app/layout.tsx` with `next/font`.
+- **Colors:** `globals.css` defines the desk's palette once, as variables that are also
+  Tailwind colors: `desk` (green leather), `sheet` and `paper` (cream), `ink` (text),
+  `muted`, `brass`, `brass-ink` (brass for words on paper, 5.4:1 contrast), `pencil` (red,
+  for corrections and warnings) and `on-desk` (words straight on the desk). The names the
+  pages already used point at it: `--background` is the sheet, `--foreground` is ink,
+  `--accent` is brass and `--link` is brass-ink, so `bg-accent`, `border-accent` and
+  `text-link` follow along. There is no dark mode: the paper always stays light.
+- **Textures:** `.desk` lays `public/textures/leather.png` over the desk color
+  (`soft-light`), and `.paper` and `.sheet` lay `paper.png` over cream (`multiply`). Both
+  are 256 px tiles made by `scripts/make-textures.cjs`, which gives the same bytes on every
+  run.
 - **Borders:** Tailwind 4 draws a plain `border` in the text color, so `globals.css` sets a
-  default border color for everything: `--border`, gray-300 in light mode and gray-700 in
-  dark mode. Colored borders (`border-red-500`, `border-blue-400`) still override it.
+  default border color for everything: `--border`, a soft paper line. Colored borders
+  (`border-red-500`, `border-blue-400`) still override it.
 - **Icon:** `app/icon.svg` (stacked flashcards with a spark), plus the same design as
   `favicon.ico` (32px) and `apple-icon.png` (180px). Next.js adds the `<link>` tags.
 - **Browser titles:** the root layout's template is `%s · FlashForge`. Pages are Client
   Components and can't export metadata, so each section has a small `layout.tsx` that only
   sets its title. The sections with titled pages below them (`teacher`, a class, `admin`)
   must pass the template on again, or Next drops it for deeper pages.
-- **Accent color (phase 2):** `--accent` (blue-600 for now, blue-700 on hover) and `--link`
-  (blue-600 on white, blue-500 on black, so links stay readable) in `globals.css`. They
-  become the classes `bg-accent`, `border-accent`, `text-link` and so on. Changing the brand
-  color later means editing these variables only.
-- **Buttons:** use `.btn` with `.btn-primary` (a page's main action) or `.btn-secondary`
-  (everything else), plus `.btn-lg` for the big full-width ones, instead of writing button
-  classes by hand. Layout classes on the element (`w-full`, `flex-1`, `shrink-0`) still
-  apply. Links use `text-link hover:underline`. Selected options use
-  `border-accent bg-accent/10`.
-- Still to do: consistent loading, empty and error states and card/badge styles. The top
-  bar and replacing the emoji with icons wait on the team's choices of accent color, icon
-  style and logo.
+- **Buttons:** use `.btn` with `.btn-primary` (a page's main action, brass with dark text)
+  or `.btn-secondary` (everything else), plus `.btn-lg` for the big full-width ones,
+  instead of writing button classes by hand. Layout classes on the element (`w-full`,
+  `flex-1`, `shrink-0`) still apply. Links use `text-link hover:underline`. Selected
+  options use `border-accent bg-accent/10`; ones filled with the accent use
+  `bg-accent text-ink`, because white text on brass is too faint to read. `.brass` gives
+  the same brass look to things that aren't buttons, like the FlashForge plate.
+- Still to do: consistent loading, empty and error states, and icons instead of the emoji.
 
 ## 1. Generating a study guide
 
@@ -471,7 +502,7 @@ screen instead of shortening with "…".
 
 ### Joining a class (#54)
 
-- Students open **My classes** (`/classes`, linked in the upload page header) and type a
+- Students open **My classes** (`/classes`, the *My Classes* tab in the card box) and type a
   code. Case, spaces and the hyphen don't matter (`k7m 2qx` → `K7M2QX`, using
   `normalizeJoinCode`). Before joining, the page says: *"Your teacher will see your name,
   email, and your scores on this class's assignments."*
@@ -685,7 +716,7 @@ screen instead of shortening with "…".
 
 ### Admin: users and roles (#60)
 
-- Admins get an **Admin** link in the header, to `/admin` and `/admin/users`
+- Admins get an **Admin** tab in the card box, to `/admin` and `/admin/users`
   (`components/AdminOnly.tsx`). The page lists every user (newest first) with their role,
   sign-up date and number of saved sets, and searches by part of an email or name.
 - **Changing a role** (student, teacher or admin) asks first, then calls
@@ -855,6 +886,7 @@ transaction. Run them after every database change.
     attempt and class-results APIs, using `test-utils/fake-supabase.ts`. That's an
     in-memory client with unique keys (23505) and cascading deletes.
   - Component tests for `RoleChooser`, `StudyViewer`, `CardEditor`, `AssignPanel`, the
+    desk's card box and library card (the tabs each role gets, signing in and out), the
     set page, the History pages and the teacher and student pages, in jsdom with React Testing Library.
     Component tests start with `// @vitest-environment jsdom`.
 - `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and

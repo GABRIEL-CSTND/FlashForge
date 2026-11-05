@@ -113,7 +113,7 @@ function ModeSwitcher({ mode, onChange }: { mode: FlashcardMode; onChange: (mode
           onClick={() => onChange(m)}
           aria-pressed={mode === m}
           className={`rounded-md px-3 py-1 font-medium transition-colors ${
-            mode === m ? 'bg-accent text-white' : 'text-gray-500 hover:text-foreground'
+            mode === m ? 'bg-accent text-ink' : 'text-gray-500 hover:text-foreground'
           }`}
         >
           {FLASHCARD_MODE_LABELS[m]}

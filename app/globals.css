@@ -1,19 +1,33 @@
 @import "tailwindcss";
 
+/* The desk (UI redesign, phase 1): a forest-green leather desk with cream paper
+   on it and brass as the one accent. It is one look in light and dark mode, so
+   pages always sit on light paper (the old dark theme is gone). */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  /* Default color of every border and divider (gray-300). */
-  --border: #d1d5db;
-  /* Accent for buttons (blue-600, blue-700 on hover) and for links. The one
-     place to change when the team picks a brand color. Links are blue-600 on
-     white and blue-500 on black, so both stay readable. */
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
-  --link: #2563eb;
-  /* Native controls (date pickers, checkboxes, scrollbars) follow the same
-     light/dark preference as the rest of the page. */
-  color-scheme: light dark;
+  --desk: #1f3b2d;
+  /* The sheet every page sits on, and the cream card stock for cards and labels. */
+  --sheet: #fbf7ee;
+  --paper: #f6efdf;
+  --ink: #2a2620;
+  --muted: #6b6255;
+  /* Brass is a fill (buttons, the card box plate) with dark text on it. Brass
+     words on paper use the darker brass-ink, which keeps 5.4:1 contrast. */
+  --brass: #c9a45c;
+  --brass-hover: #d8b56e;
+  --brass-ink: #7a5c22;
+  /* Red pencil, for corrections and warnings written on paper. */
+  --pencil: #b4473b;
+  /* Words written straight on the desk, outside any paper. */
+  --on-desk: #ede6d6;
+
+  /* The names the pages already use, pointed at the desk palette. */
+  --background: var(--sheet);
+  --foreground: var(--ink);
+  --border: #dcd2bd;
+  --accent: var(--brass);
+  --accent-hover: var(--brass-hover);
+  --link: var(--brass-ink);
+  color-scheme: light;
 }
 
 @theme inline {
@@ -23,24 +37,25 @@
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-link: var(--link);
-  --font-sans: var(--font-geist-sans);
+  --color-desk: var(--desk);
+  --color-sheet: var(--sheet);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-brass: var(--brass);
+  --color-brass-ink: var(--brass-ink);
+  --color-pencil: var(--pencil);
+  --color-on-desk: var(--on-desk);
+  /* Instrument Sans for the app around the cards, Fraunces for titles and card
+     text. Both are loaded in app/layout.tsx. */
+  --font-sans: var(--font-instrument-sans);
+  --font-serif: var(--font-fraunces);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    /* gray-700 */
-    --border: #374151;
-    /* blue-500 */
-    --link: #3b82f6;
-  }
-}
-
-/* Buttons: .btn plus .btn-primary (the page's main action) or .btn-secondary
-   (everything else); .btn-lg for the big full-width ones. Layout classes on the
-   element (w-full, flex-1, shrink-0) still apply. */
+/* Buttons: .btn plus .btn-primary (the page's main action, brass) or
+   .btn-secondary (everything else); .btn-lg for the big full-width ones. Layout
+   classes on the element (w-full, flex-1, shrink-0) still apply. */
 @layer components {
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors;
@@ -52,7 +67,8 @@
     @apply py-3 text-base;
   }
   .btn-primary {
-    @apply bg-accent text-white;
+    @apply bg-accent text-ink;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 -2px 0 rgb(0 0 0 / 0.15);
   }
   .btn-primary:not(:disabled):hover {
     @apply bg-accent-hover;
@@ -63,11 +79,37 @@
   .btn-secondary:not(:disabled):hover {
     @apply border-accent;
   }
+
+  /* Desk surfaces. The textures are 256 px tiles from scripts/make-textures.cjs:
+     leather lightens and darkens the desk color, paper adds a faint grain. */
+  .desk {
+    background-color: var(--desk);
+    background-image: url("/textures/leather.png");
+    background-size: 256px 256px;
+    background-blend-mode: soft-light;
+  }
+  .paper,
+  .sheet {
+    background-image: url("/textures/paper.png");
+    background-size: 256px 256px;
+    background-blend-mode: multiply;
+  }
+  .paper {
+    background-color: var(--paper);
+  }
+  .sheet {
+    background-color: var(--sheet);
+  }
+  .brass {
+    background-color: var(--brass);
+    color: #2a2112;
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 -2px 0 rgb(0 0 0 / 0.18);
+  }
 }
 
 /* Tailwind 4 draws a plain `border` in the text color, which gave every box a
-   black (or, in dark mode, white) outline. Default to a soft gray instead;
-   colored borders such as border-red-500 still win. */
+   black outline. Default to a soft paper line instead; colored borders such as
+   border-red-500 still win. */
 @layer base {
   *,
   ::after,
@@ -79,8 +121,46 @@
 }
 
 body {
-  background: var(--background);
   color: var(--foreground);
-  /* Geist is loaded in app/layout.tsx. */
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* The sheet of paper each page sits on (components/desk/Desk.tsx). */
+.desk-sheet {
+  box-shadow: 0 2px 3px rgb(0 0 0 / 0.2), 0 24px 44px -18px rgb(0 0 0 / 0.65);
+}
+
+/* A small paper object lying on the desk (the library card). */
+.paper-shadow {
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.2), 0 14px 26px -12px rgb(0 0 0 / 0.6);
+}
+
+/* The card box (components/desk/CardBox.tsx): a walnut box front with the
+   divider tabs rising out of it; the open page's tab has a brass edge. */
+.card-box-front {
+  background-color: #5b3e2a;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    inset 0 -3px 0 rgb(0 0 0 / 0.25),
+    0 16px 26px -10px rgb(0 0 0 / 0.6);
+}
+.card-box-tab {
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3);
+}
+.card-box-tab[aria-current="page"] {
+  box-shadow: inset 0 3px 0 var(--brass), 0 2px 6px rgb(0 0 0 / 0.3);
+}
+
+/* Titles on the sheet are printed in Fraunces. :where keeps the rule weak, so a
+   page's own classes (size, weight) still win. */
+.desk-sheet :where(h1, h2) {
+  font-family: var(--font-serif), Georgia, serif;
+  letter-spacing: -0.01em;
+}
+
+/* Pages were built to fill the window (min-h-screen). On the desk they sit on
+   the sheet below the card box, so a full-window page only fills the sheet.
+   Outside Tailwind's layers, so it wins over the utility. */
+.desk-sheet .min-h-screen {
+  min-height: calc(100dvh - 13rem);
 }

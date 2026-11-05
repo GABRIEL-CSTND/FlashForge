@@ -3,6 +3,33 @@
 Notable changes to FlashForge, newest first. Issue and PR numbers refer to
 [GABRIEL-CSTND/FlashForge](https://github.com/GABRIEL-CSTND/FlashForge).
 
+## Desk redesign (on `UI_changes`, not on `dev` yet)
+
+The new look, built in 7 phases on the `UI_changes` branch and merged into `dev` when
+it's ready. It changes how the app looks, not how it works.
+
+### Changed
+- **Every page sits on a desk** (phase 1, 2026-11-05): a green leather desk with the page
+  on a sheet of cream paper, Instrument Sans for text, Fraunces for titles, and brass as
+  the one accent color.
+  - The header links moved into a **card box** at the top left: its brass *FlashForge*
+    button starts a new guide, and a tab sticks up for each section you can open (My
+    Sets, History, then My Classes, Classes or Admin, by role). The open section's tab
+    stands tallest.
+  - The account moved onto a **library card** at the top right: your name, role and
+    Sign out, or Sign in with Google.
+  - Main buttons are brass with dark text. `.btn-primary` itself turned brass, so every
+    main button changed at once (the plan had a separate `.btn-brass` class). Links are
+    a darker brass that's readable on paper.
+  - Choices filled with the accent color (Upload a file / Paste text / Web link / Topic,
+    and Flip / Type / Match) have dark text, since white on brass was hard to read.
+  - The leather and paper textures are small tiles made by `scripts/make-textures.cjs`.
+- **No dark mode for now:** the paper always stays light.
+- Lint skips the Claude app's worktrees (`.claude/`), as the tests already did, and
+  allows `require()` in Node scripts.
+- The header tests (`app/upload-header.test.tsx`) became tests for the card box and the
+  library card (`components/desk/`): 805 tests in all.
+
 ## Unreleased (on `dev`, not on the live site yet)
 
 Everything here was done between 2026-10-20 and 2026-10-24. It reaches the live site when `dev` is merged

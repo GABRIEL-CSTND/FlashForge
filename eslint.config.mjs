@@ -12,7 +12,14 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The Claude app's worktrees: other checkouts of this repo, not this project's code.
+    ".claude/**",
   ]),
+  // Node scripts (scripts/make-textures.cjs) are CommonJS and load modules with require().
+  {
+    files: ["scripts/**/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
 ]);
 
 export default eslintConfig;
