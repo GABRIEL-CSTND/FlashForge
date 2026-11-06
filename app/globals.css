@@ -474,3 +474,28 @@ button.desk-spot:not(:disabled) {
     animation: none !important;
   }
 }
+
+/* ---- The teacher's desk (desk redesign, phase 6) ------------------------- */
+
+/* A class is a kraft folder (components/desk/KraftFolder.tsx). */
+.kraft {
+  background-color: #d6c096;
+  background-image: url("/textures/paper.png");
+  background-size: 256px 256px;
+  background-blend-mode: multiply;
+}
+.kraft-body {
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.25), 0 18px 30px -16px rgb(0 0 0 / 0.65);
+}
+.kraft-folder {
+  transition: translate 0.2s ease;
+}
+.kraft-folder:hover,
+.kraft-folder:focus-visible {
+  translate: 0 -6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kraft-folder {
+    transition: none;
+  }
+}

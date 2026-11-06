@@ -107,24 +107,24 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
       }}
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-6"
     >
-      <div className="w-full max-w-md space-y-4 rounded-xl border bg-background p-6 shadow-xl">
+      <div className="w-full max-w-md space-y-4 sheet paper-shadow rounded-lg p-6 shadow-xl">
         <div className="space-y-1">
           <h2 id="assign-title" className="text-lg font-semibold">
             Assign to class
           </h2>
-          <p className="truncate text-sm text-gray-500">{setTitle}</p>
+          <p className="truncate text-sm text-muted">{setTitle}</p>
         </div>
 
-        {state.status === 'loading' && <p className="text-sm text-gray-500">Loading your classes...</p>}
+        {state.status === 'loading' && <p className="text-sm text-muted">Loading your classes...</p>}
 
         {state.status === 'error' && (
-          <p role="alert" className="text-sm text-red-500">
+          <p role="alert" className="text-sm text-pencil">
             {state.message}
           </p>
         )}
 
         {state.status === 'ready' && state.classes.length === 0 && (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted">
             You don&apos;t have any classes yet.{' '}
             <Link href="/teacher" className="text-link hover:underline">
               Create one on the Teacher dashboard
@@ -136,7 +136,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
         {state.status === 'ready' && state.classes.length > 0 && (
           <>
             <fieldset className="space-y-2" disabled={saving}>
-              <legend className="text-xs uppercase tracking-wide text-gray-400">Classes</legend>
+              <legend className="text-xs uppercase tracking-wide text-muted">Classes</legend>
               {state.classes.map((c) => {
                 const assigned = c.assignmentId !== null;
                 return (
@@ -156,7 +156,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{c.className}</span>
                       {assigned && (
-                        <span className="block text-xs text-gray-400">
+                        <span className="block text-xs text-muted">
                           Assigned · {c.dueAt ? `due ${formatDueDate(c.dueAt)}` : 'no due date'}
                         </span>
                       )}
@@ -167,7 +167,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
             </fieldset>
 
             <div className="space-y-1">
-              <label htmlFor="assign-due" className="text-xs uppercase tracking-wide text-gray-400">
+              <label htmlFor="assign-due" className="text-xs uppercase tracking-wide text-muted">
                 Due date (optional)
               </label>
               <input
@@ -178,13 +178,13 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
                 disabled={saving}
                 className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
               />
-              <p className="text-xs text-gray-400">Students see it in their own time zone.</p>
+              <p className="text-xs text-muted">Students see it in their own time zone.</p>
             </div>
           </>
         )}
 
         {message && (
-          <p role={message.kind === 'error' ? 'alert' : 'status'} className={`text-sm ${message.kind === 'error' ? 'text-red-500' : 'text-green-600'}`}>
+          <p role={message.kind === 'error' ? 'alert' : 'status'} className={`text-sm ${message.kind === 'error' ? 'text-pencil' : 'text-green-800'}`}>
             {message.text}
           </p>
         )}

@@ -77,18 +77,24 @@ function ResultsView({ id }: { id: string }) {
   }, [id]);
 
   if (state.status === 'loading') {
-    return <main className="min-h-screen flex items-center justify-center">Loading...</main>;
+    return (
+      <main className="on-desk w-full py-16">
+        <p className="text-on-desk/85">Loading...</p>
+      </main>
+    );
   }
 
   if (state.status === 'not-found' || state.status === 'error') {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
-        <p className={state.status === 'error' ? 'text-red-500' : 'text-gray-500'}>
-          {state.status === 'error' ? state.message : 'Class not found.'}
-        </p>
-        <Link href="/teacher" className="text-link hover:underline">
-          ← All classes
-        </Link>
+      <main className="on-desk w-full py-10">
+        <div className="paper paper-shadow max-w-md rounded-md px-6 py-5 text-[15px] text-ink">
+          <p className={state.status === 'error' ? 'text-pencil' : 'text-ink'}>
+            {state.status === 'error' ? state.message : 'Class not found.'}
+          </p>
+          <Link href="/teacher" className="mt-2 inline-block font-semibold text-link hover:underline">
+            ← All classes
+          </Link>
+        </div>
       </main>
     );
   }
@@ -109,24 +115,24 @@ function ResultsView({ id }: { id: string }) {
   return (
     // w-full: the body is a flex column, so without it a wide table would stretch
     // the page instead of scrolling inside its box.
-    <main className="min-h-screen w-full p-6 max-w-5xl mx-auto space-y-6">
+    <main className="on-desk w-full space-y-6 pb-12">
       <Link
         href={`/teacher/classes/${id}`}
-        className="inline-block max-w-full truncate align-top text-sm text-gray-500 hover:text-gray-800"
+        className="inline-flex min-h-11 max-w-full items-center truncate text-sm font-medium text-on-desk/80 hover:text-on-desk"
       >
         ← {results.class.name}
       </Link>
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold">Student results</h1>
-          <p className="break-words text-sm text-gray-500">{results.class.name}</p>
+          <h1 className="text-[34px] font-normal leading-tight text-[#f3ecdd]">Grade book</h1>
+          <p className="break-words text-[14.5px] text-on-desk/85">{results.class.name}</p>
         </div>
         {assignments.length > 0 && students.length > 0 && (
           <button
             type="button"
             onClick={downloadCsv}
-            className="btn btn-secondary"
+            className="btn btn-primary min-h-11 rounded-full px-5"
           >
             Download CSV
           </button>
@@ -134,15 +140,15 @@ function ResultsView({ id }: { id: string }) {
       </div>
 
       {assignments.length === 0 ? (
-        <div className="rounded-lg border p-6 text-center text-sm text-gray-500">
+        <div className="paper paper-shadow max-w-md rounded-md px-6 py-5 text-[15px] text-ink">
           Nothing assigned yet. To assign a set, open it from{' '}
           <Link href="/my-sets" className="text-link hover:underline">
             My Sets
           </Link>{' '}
-          and choose <span className="font-medium">📌 Assign to class</span>.
+          and choose <span className="font-medium">Assign to class</span>.
         </div>
       ) : students.length === 0 ? (
-        <div className="rounded-lg border p-6 text-center text-sm text-gray-500">
+        <div className="paper paper-shadow max-w-md rounded-md px-6 py-5 text-[15px] text-ink">
           No students yet. Share the join code from the{' '}
           <Link href={`/teacher/classes/${id}`} className="text-link hover:underline">
             class page
@@ -151,7 +157,7 @@ function ResultsView({ id }: { id: string }) {
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border">
+          <div className="sheet paper-shadow overflow-x-auto rounded-md text-ink">
             {/* Borders sit on the cells: the sticky column's background would hide row borders. */}
             <table className="w-full border-separate border-spacing-0 text-sm">
               <caption className="sr-only">Each student&apos;s best score on each assignment in {results.class.name}</caption>
@@ -169,7 +175,7 @@ function ResultsView({ id }: { id: string }) {
                       >
                         {a.setTitle}
                       </Link>
-                      <span className="block text-xs font-normal text-gray-400">
+                      <span className="block text-xs font-normal text-muted">
                         {a.dueAt ? `Due ${formatDueDate(a.dueAt)}` : 'No due date'}
                       </span>
                     </th>
@@ -188,7 +194,7 @@ function ResultsView({ id }: { id: string }) {
                         {studentLabel(s)}
                       </button>
                       {s.displayName && s.email && (
-                        <span className="block max-w-32 sm:max-w-48 truncate text-xs text-gray-400">{s.email}</span>
+                        <span className="block max-w-32 sm:max-w-48 truncate text-xs text-muted">{s.email}</span>
                       )}
                     </th>
                     {assignments.map((a) => (
@@ -207,7 +213,7 @@ function ResultsView({ id }: { id: string }) {
                   {assignments.map((a) => (
                     <td key={a.id} className="px-3 py-2 align-top">
                       <span className="block font-medium">{a.average === null ? '—' : `${a.average}%`}</span>
-                      <span className="block text-xs text-gray-400">
+                      <span className="block text-xs text-muted">
                         {a.doneCount} of {students.length} done
                       </span>
                     </td>
@@ -216,7 +222,7 @@ function ResultsView({ id }: { id: string }) {
               </tfoot>
             </table>
           </div>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-on-desk/85">
             Each cell shows the student&apos;s best score. <span className="font-medium">Late</span> means they first
             finished after the due date. Students who haven&apos;t started aren&apos;t counted in the average.
             Flashcard scores are marked by the students themselves when they flip the cards, and checked when they
@@ -242,7 +248,7 @@ function ResultsView({ id }: { id: string }) {
 function ResultCell({ result, overdue }: { result: ResultSummary | undefined; overdue: boolean }) {
   if (!result?.best) {
     return (
-      <span className={overdue ? 'text-red-500' : 'text-gray-400'}>
+      <span className={overdue ? 'text-red-500' : 'text-muted'}>
         Not started
         {overdue && <span className="block text-xs">Past due</span>}
       </span>
@@ -257,8 +263,8 @@ function ResultCell({ result, overdue }: { result: ResultSummary | undefined; ov
       <span className="font-medium">
         {result.best.score}/{result.best.total}
       </span>
-      <span className="text-gray-400"> · {percent(result.best)}%</span>
-      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-gray-400">
+      <span className="text-muted"> · {percent(result.best)}%</span>
+      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
         {result.attemptCount} {result.attemptCount === 1 ? 'attempt' : 'attempts'}
         {result.status === 'late' && (
           <span className="rounded bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-600">Late</span>

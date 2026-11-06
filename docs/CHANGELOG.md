@@ -9,6 +9,20 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
 it's ready. It changes how the app looks, not how it works.
 
 ### Changed
+- **The teacher pages are on the desk** (phase 6, 2026-11-06), following the canvas's
+  `Desk-Printed-Teacher`.
+  - **Your classes** (was *Teacher dashboard*): each class is a kraft folder with its name,
+    student count and join code on a brass plate; a new class is named in the empty folder at
+    the end.
+  - **A class**: the join code on a paper plate (*Copy code*, *Get a new code*), the assigned
+    sets as decks tagged with their due date or *Overdue*, and the roster on a sheet of paper.
+    *📊 Student results* is now **Open the grade book**.
+  - **The grade book** (was *Student results*) is on a sheet of paper; **An assignment**'s page
+    lays its cards out hardest first, each with its % wrong and a red bar.
+  - The "Assign to class" and student results dialogs moved onto the paper colors.
+  - Not yet: overdue counts on the folders (the classes API doesn't return them) and assigning
+    from the class page; sets are still assigned from the set page.
+  - Tests: the class and assignment page tests use the new names: 845 in all.
 - **The library is on the desk** (phase 5, 2026-11-06): My Sets, History and My Classes lay
   their sets out as decks on the leather, each with a paper tag, as in the canvas's
   `Desk-Printed-Library`.

@@ -194,9 +194,9 @@ describe('class page', () => {
     expect(screen.getByRole('heading', { name: 'Students (2)' })).toBeTruthy();
   });
 
-  it("links to the class's student results", async () => {
+  it("links to the class's grade book", async () => {
     render(<TeacherClassPage />);
-    const link = await screen.findByRole('link', { name: '📊 Student results' });
+    const link = await screen.findByRole('link', { name: 'Open the grade book' });
     expect(link.getAttribute('href')).toBe('/teacher/classes/c1/results');
   });
 
@@ -257,9 +257,9 @@ describe('class page', () => {
   it('lists assigned sets with due dates, an Overdue badge, and links to the sets', async () => {
     render(<TeacherClassPage />);
     const section = (await screen.findByRole('heading', { name: 'Assigned sets (2)' })).closest('section')!;
-    const link = within(section).getByRole('link', { name: 'Photosynthesis' });
+    const link = within(section).getByRole('link', { name: /^Pick up Photosynthesis/ });
     expect(link.getAttribute('href')).toBe('/sets/set-1');
-    expect(within(section).getAllByText('Overdue')).toHaveLength(1);
+    expect(within(section).getAllByText(/^Overdue · was due /)).toHaveLength(1);
     expect(section.textContent).toContain('Due ');
   });
 

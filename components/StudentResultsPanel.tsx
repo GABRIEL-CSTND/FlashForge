@@ -37,9 +37,9 @@ type LoadState =
   | { status: 'ready'; assignments: AssignmentAttempts[] };
 
 const STATUS_CLASSES: Record<ResultStatus, string> = {
-  done: 'bg-green-500/10 text-green-600',
+  done: 'bg-green-800/10 text-green-800',
   late: 'bg-amber-500/10 text-amber-600',
-  'not-started': 'bg-gray-500/10 text-gray-500',
+  'not-started': 'bg-ink/10 text-muted',
 };
 
 // One student's attempts on the class's assignments (#58), opened from the
@@ -84,13 +84,13 @@ export default function StudentResultsPanel({
       }}
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-6"
     >
-      <div className="w-full max-w-md space-y-4 rounded-xl border bg-background p-6 shadow-xl">
+      <div className="w-full max-w-md space-y-4 sheet paper-shadow rounded-lg p-6 shadow-xl">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
             <h2 id="student-results-title" className="truncate text-lg font-semibold">
               {studentLabel(student)}
             </h2>
-            <p className="truncate text-sm text-gray-500">
+            <p className="truncate text-sm text-muted">
               {student.displayName && student.email ? `${student.email} · ` : ''}
               Joined {new Date(student.joinedAt).toLocaleDateString()}
             </p>
@@ -105,16 +105,16 @@ export default function StudentResultsPanel({
           </button>
         </div>
 
-        {state.status === 'loading' && <p className="text-sm text-gray-500">Loading attempts...</p>}
+        {state.status === 'loading' && <p className="text-sm text-muted">Loading attempts...</p>}
 
         {state.status === 'error' && (
-          <p role="alert" className="text-sm text-red-500">
+          <p role="alert" className="text-sm text-pencil">
             {state.message}
           </p>
         )}
 
         {state.status === 'ready' && state.assignments.length === 0 && (
-          <p className="text-sm text-gray-500">Nothing is assigned to this class yet.</p>
+          <p className="text-sm text-muted">Nothing is assigned to this class yet.</p>
         )}
 
         {state.status === 'ready' && state.assignments.length > 0 && (
@@ -127,7 +127,7 @@ export default function StudentResultsPanel({
                     {STATUS_LABELS[a.result.status]}
                   </span>
                 </div>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-muted">
                   {a.dueAt ? `Due ${formatDueDate(a.dueAt)}` : 'No due date'}
                   {a.result.best && ` · best ${a.result.best.score}/${a.result.best.total}`}
                 </p>
@@ -136,10 +136,10 @@ export default function StudentResultsPanel({
                     {a.attempts.map((t) => (
                       <li key={t.id} className="flex items-center justify-between gap-3 px-3 py-2">
                         {/* Same format as the due date above, so late finishes are easy to spot. */}
-                        <span className="text-gray-500">{formatDueDate(t.completedAt)}</span>
+                        <span className="text-muted">{formatDueDate(t.completedAt)}</span>
                         <span className="flex shrink-0 items-center gap-2">
                           {a.studyType === 'flashcard' && (
-                            <span className="text-xs text-gray-400">{FLASHCARD_MODE_TAGS[t.mode ?? 'flip']}</span>
+                            <span className="text-xs text-muted">{FLASHCARD_MODE_TAGS[t.mode ?? 'flip']}</span>
                           )}
                           {t.late && (
                             <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-600">
@@ -149,7 +149,7 @@ export default function StudentResultsPanel({
                           <span className="font-medium">
                             {t.score}/{t.total}
                           </span>
-                          <span className="w-10 text-right text-gray-400">{percent(t)}%</span>
+                          <span className="w-10 text-right text-muted">{percent(t)}%</span>
                         </span>
                       </li>
                     ))}

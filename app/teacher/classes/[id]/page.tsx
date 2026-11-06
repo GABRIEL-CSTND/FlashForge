@@ -2,6 +2,11 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import LibraryDeck, { DESK_TEXT_BUTTON } from '@/components/desk/LibraryDeck';
+import { DeskNote } from '@/components/desk/LibraryDesk';
+import type { TagTone } from '@/components/desk/PaperTag';
+import { shortDate } from '@/lib/library';
+import { STUDY_TYPE_LABELS, toStudyType } from '@/lib/study-types';
 import { useParams, useRouter } from 'next/navigation';
 import TeacherOnly from '@/components/TeacherOnly';
 import { apiFetch, errorMessage } from '@/lib/api-client';
@@ -199,231 +204,195 @@ function ClassView({ id }: { id: string }) {
     if (data) router.push('/teacher');
   };
 
+  const assignmentTag = (a: Assignment): { text: string; tone: TagTone } => {
+    if (!a.dueAt) return { text: 'No due date', tone: 'muted' };
+    if (isOverdue(a.dueAt)) return { text: `Overdue · was due ${formatDueDate(a.dueAt)}`, tone: 'pencil' };
+    return { text: `Due ${formatDueDate(a.dueAt)}`, tone: 'brass' };
+  };
+  const studentLine = cls.students.length === 0 ? 'No students yet' : `${cls.students.length} student${cls.students.length === 1 ? '' : 's'}`;
+
   return (
-    // w-full: the body is a flex column, so without it a long set title would
-    // widen the page past a phone screen instead of truncating.
-    <main className="min-h-screen w-full p-6 max-w-md mx-auto space-y-6">
-      <Link href="/teacher" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
-        ← All classes
+    // A class on the desk (desk redesign, phase 6): its name, the brass join-code
+    // plate, the assigned sets as decks, and the roster on a sheet of paper.
+    <main className="on-desk w-full pb-12">
+      <Link href="/teacher" className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-on-desk/80 hover:text-on-desk">
+        ← Your classes
       </Link>
 
-      <div className="space-y-2">
-        {editingName ? (
-          <div className="space-y-2">
-            <label htmlFor="class-name" className="sr-only">
-              Class name
-            </label>
-            <input
-              id="class-name"
-              autoFocus
-              value={nameDraft}
-              maxLength={CLASS_NAME_MAX_LENGTH}
-              onChange={(e) => setNameDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveName();
-                if (e.key === 'Escape') setEditingName(false);
-              }}
-              disabled={busy}
-              className="w-full rounded-lg border bg-transparent px-3 py-2"
-            />
-            <div className="flex gap-3 text-sm">
-              <button
-                type="button"
-                onClick={saveName}
-                disabled={busy || !nameDraft.trim()}
-                className="text-link hover:underline disabled:opacity-40"
-              >
-                {busy ? 'Saving...' : 'Save'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditingName(false)}
+      <div className="mt-2 flex flex-wrap items-start justify-between gap-x-10 gap-y-6">
+        <div className="min-w-0 flex-1">
+          {editingName ? (
+            <div className="paper paper-shadow max-w-md space-y-2 rounded-md px-5 py-4 text-ink">
+              <label htmlFor="class-name" className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brass-ink">
+                Class name
+              </label>
+              <input
+                id="class-name"
+                autoFocus
+                value={nameDraft}
+                maxLength={CLASS_NAME_MAX_LENGTH}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveName();
+                  if (e.key === 'Escape') setEditingName(false);
+                }}
                 disabled={busy}
-                className="text-gray-500 hover:underline disabled:opacity-40"
+                className="min-h-11 w-full border-0 border-b-[1.5px] border-[#8c8270] bg-transparent px-0.5 font-serif text-2xl text-[#1f2a44]"
+              />
+              <div className="flex gap-4 text-sm">
+                <button type="button" onClick={saveName} disabled={busy || !nameDraft.trim()} className="btn btn-primary min-h-11 rounded-full px-5">
+                  {busy ? 'Saving...' : 'Save'}
+                </button>
+                <button type="button" onClick={() => setEditingName(false)} disabled={busy} className="min-h-11 font-semibold text-muted hover:underline disabled:opacity-40">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-baseline gap-x-4">
+              <h1 className="break-words text-[34px] font-normal leading-tight text-[#f3ecdd]">{cls.name}</h1>
+              <button
+                type="button"
+                onClick={() => {
+                  setNameDraft(cls.name);
+                  setEditingName(true);
+                }}
+                className={DESK_TEXT_BUTTON}
               >
-                Cancel
+                Rename
               </button>
             </div>
+          )}
+          <p className="mt-1 text-[14.5px] text-on-desk/85">{studentLine}</p>
+          <Link href={`/teacher/classes/${id}/results`} className="btn btn-primary mt-4 min-h-11 rounded-full px-5">
+            Open the grade book
+          </Link>
+        </div>
+
+        <section aria-labelledby="join-code-heading" className="paper paper-shadow w-full max-w-[300px] -rotate-1 rounded-md px-4 pb-1.5 pt-3 text-ink">
+          <div className="flex items-center justify-between gap-2.5">
+            <h2 id="join-code-heading" className="font-sans text-[11px] font-semibold uppercase tracking-[0.16em] text-brass-ink">
+              Join code
+            </h2>
+            <span className="brass rounded px-3 py-1 font-serif text-xl tracking-[0.16em]" data-testid="join-code">
+              {formatJoinCode(cls.joinCode)}
+            </span>
           </div>
-        ) : (
-          <div className="flex items-start justify-between gap-3">
-            <h1 className="break-words text-xl font-semibold">{cls.name}</h1>
-            <button
-              type="button"
-              onClick={() => {
-                setNameDraft(cls.name);
-                setEditingName(true);
-              }}
-              className="shrink-0 text-sm text-gray-500 hover:underline"
-            >
-              Rename
+          <p className="mt-2 text-[13px] text-muted">Students sign in, open My Classes and type this code.</p>
+          <div className="flex items-center justify-between gap-2">
+            <button type="button" onClick={copyCode} className="min-h-11 text-[13.5px] font-semibold text-brass-ink hover:underline">
+              Copy code
+            </button>
+            <button type="button" onClick={newCode} disabled={busy} className="min-h-11 text-[13.5px] font-semibold text-muted hover:underline disabled:opacity-40">
+              Get a new code
             </button>
           </div>
-        )}
+          {notice && (
+            <p role="status" className="pb-2 text-xs text-muted">
+              {notice}
+            </p>
+          )}
+        </section>
       </div>
 
-      <Link
-        href={`/teacher/classes/${id}/results`}
-        className="btn btn-secondary w-full"
-      >
-        📊 Student results
-      </Link>
-
       {actionError && (
-        <p role="alert" className="text-sm text-red-500">
+        <p role="alert" className="mt-4 text-sm font-medium text-[#efb2a8]">
           {actionError}
         </p>
       )}
 
-      <section className="space-y-3 rounded-xl border p-5 text-center" aria-labelledby="join-code-heading">
-        <h2 id="join-code-heading" className="text-xs uppercase tracking-wide text-gray-400">
-          Join code
-        </h2>
-        <p className="font-mono text-3xl font-bold tracking-widest" data-testid="join-code">
-          {formatJoinCode(cls.joinCode)}
-        </p>
-        <p className="text-sm text-gray-500">
-          Students sign in to FlashForge, open <span className="font-medium">My Classes</span>, and enter this
-          code.
-        </p>
-        <div className="flex justify-center gap-2">
-          <button
-            type="button"
-            onClick={copyCode}
-            className="btn btn-secondary"
-          >
-            Copy code
-          </button>
-          <button
-            type="button"
-            onClick={newCode}
-            disabled={busy}
-            className="btn btn-secondary"
-          >
-            Get a new code
-          </button>
-        </div>
-        {notice && (
-          <p role="status" className="text-xs text-gray-500">
-            {notice}
-          </p>
-        )}
-      </section>
-
-      <section className="space-y-2" aria-labelledby="assigned-heading">
-        <h2 id="assigned-heading" className="font-medium">
+      <section aria-labelledby="assigned-heading" className="mt-10">
+        <h2 id="assigned-heading" className="font-sans text-[11px] font-semibold uppercase tracking-[0.16em] text-on-desk/85">
           Assigned sets ({cls.assignments.length})
         </h2>
         {cls.assignments.length === 0 ? (
-          <div className="rounded-lg border p-6 text-center text-sm text-gray-500">
-            Nothing assigned yet. To assign a set, open it from{' '}
-            <Link href="/my-sets" className="text-link hover:underline">
-              My Sets
-            </Link>{' '}
-            and choose <span className="font-medium">📌 Assign to class</span>.
+          <div className="mt-4">
+            <DeskNote>
+              Nothing assigned yet. To assign a set, open it from{' '}
+              <Link href="/my-sets" className="font-semibold text-link hover:underline">
+                My Sets
+              </Link>{' '}
+              and choose <span className="font-medium">Assign to class</span>.
+            </DeskNote>
           </div>
         ) : (
-          <ul className="divide-y rounded-lg border">
-            {cls.assignments.map((a) => (
-              <li key={a.id} className="space-y-2 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link href={`/sets/${a.setId}`} className="block truncate font-medium hover:underline">
-                      {a.setTitle}
-                    </Link>
-                    <p className="text-xs text-gray-400">
-                      {a.dueAt ? `Due ${formatDueDate(a.dueAt)}` : 'No due date'}
-                      {isOverdue(a.dueAt) && (
-                        <span className="ml-2 rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-500">Overdue</span>
-                      )}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-3 text-sm">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingDueId(a.id);
-                        setDueDraft(a.dueAt ? toLocalInputValue(a.dueAt) : '');
-                      }}
-                      disabled={busy}
-                      aria-label={`Change due date for ${a.setTitle}`}
-                      className="text-gray-500 hover:underline disabled:opacity-40"
-                    >
-                      Due date
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => unassign(a)}
-                      disabled={busy}
-                      aria-label={`Unassign ${a.setTitle}`}
-                      className="text-red-500 hover:underline disabled:opacity-40"
-                    >
-                      Unassign
-                    </button>
-                  </div>
-                </div>
-                {editingDueId === a.id && (
-                  <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <label htmlFor={`due-${a.id}`} className="sr-only">
-                      New due date for {a.setTitle}
-                    </label>
-                    <input
-                      id={`due-${a.id}`}
-                      type="datetime-local"
-                      value={dueDraft}
-                      onChange={(e) => setDueDraft(e.target.value)}
-                      disabled={busy}
-                      className="rounded-lg border bg-transparent px-2 py-1"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => saveDue(a, fromLocalInputValue(dueDraft))}
-                      disabled={busy || !dueDraft}
-                      className="text-link hover:underline disabled:opacity-40"
-                    >
-                      Save
-                    </button>
-                    {a.dueAt && (
+          <ul className="mt-5 grid gap-x-10 gap-y-12 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
+            {cls.assignments.map((a, i) => (
+              <LibraryDeck
+                key={a.id}
+                index={i}
+                href={`/sets/${a.setId}`}
+                morph={`deck-${a.setId}`}
+                kind={STUDY_TYPE_LABELS[toStudyType(a.studyType)]}
+                title={a.setTitle}
+                meta={`Assigned ${shortDate(a.createdAt)}`}
+                tag={assignmentTag(a)}
+                actions={
+                  <div className="flex flex-col items-start">
+                    <div className="flex gap-4">
                       <button
                         type="button"
-                        onClick={() => saveDue(a, null)}
+                        onClick={() => {
+                          setEditingDueId(a.id);
+                          setDueDraft(a.dueAt ? toLocalInputValue(a.dueAt) : '');
+                        }}
                         disabled={busy}
-                        className="text-gray-500 hover:underline disabled:opacity-40"
+                        aria-label={`Change due date for ${a.setTitle}`}
+                        className={DESK_TEXT_BUTTON}
                       >
-                        Remove due date
+                        Due date
                       </button>
+                      <button type="button" onClick={() => unassign(a)} disabled={busy} aria-label={`Unassign ${a.setTitle}`} className={DESK_TEXT_BUTTON}>
+                        Unassign
+                      </button>
+                    </div>
+                    {editingDueId === a.id && (
+                      <div className="paper paper-shadow mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-3 py-2 text-sm text-ink">
+                        <label htmlFor={`due-${a.id}`} className="sr-only">
+                          New due date for {a.setTitle}
+                        </label>
+                        <input
+                          id={`due-${a.id}`}
+                          type="datetime-local"
+                          value={dueDraft}
+                          onChange={(e) => setDueDraft(e.target.value)}
+                          disabled={busy}
+                          className="min-h-11 rounded border bg-transparent px-2"
+                        />
+                        <button type="button" onClick={() => saveDue(a, fromLocalInputValue(dueDraft))} disabled={busy || !dueDraft} className="min-h-11 font-semibold text-link hover:underline disabled:opacity-40">
+                          Save
+                        </button>
+                        {a.dueAt && (
+                          <button type="button" onClick={() => saveDue(a, null)} disabled={busy} className="min-h-11 text-muted hover:underline disabled:opacity-40">
+                            Remove due date
+                          </button>
+                        )}
+                        <button type="button" onClick={() => setEditingDueId(null)} disabled={busy} className="min-h-11 text-muted hover:underline disabled:opacity-40">
+                          Cancel
+                        </button>
+                      </div>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => setEditingDueId(null)}
-                      disabled={busy}
-                      className="text-gray-500 hover:underline disabled:opacity-40"
-                    >
-                      Cancel
-                    </button>
                   </div>
-                )}
-              </li>
+                }
+              />
             ))}
           </ul>
         )}
       </section>
 
-      <section className="space-y-2" aria-labelledby="students-heading">
-        <h2 id="students-heading" className="font-medium">
+      <section aria-labelledby="students-heading" className="sheet paper-shadow mt-12 max-w-3xl rotate-[-0.3deg] rounded-md px-6 pb-4 pt-5 text-ink">
+        <h2 id="students-heading" className="text-[22px] font-normal">
           Students ({cls.students.length})
         </h2>
         {cls.students.length === 0 ? (
-          <div className="rounded-lg border p-6 text-center text-sm text-gray-500">
-            No students yet. Share the join code above.
-          </div>
+          <p className="mt-2 pb-2 text-sm text-muted">No students yet. Share the join code above.</p>
         ) : (
-          <ul className="divide-y rounded-lg border">
+          <ul className="mt-2 divide-y divide-ink/10">
             {cls.students.map((s) => (
-              <li key={s.studentId} className="flex items-center justify-between gap-3 p-3">
+              <li key={s.studentId} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
                   <p className="truncate font-medium">{studentLabel(s)}</p>
-                  <p className="truncate text-xs text-gray-400">
+                  <p className="truncate text-xs text-muted">
                     {s.displayName && s.email ? `${s.email} · ` : ''}
                     Joined {new Date(s.joinedAt).toLocaleDateString()}
                   </p>
@@ -433,7 +402,7 @@ function ClassView({ id }: { id: string }) {
                   onClick={() => removeStudent(s)}
                   disabled={busy}
                   aria-label={`Remove ${studentLabel(s)}`}
-                  className="shrink-0 text-sm text-red-500 hover:underline disabled:opacity-40"
+                  className="min-h-11 shrink-0 text-sm font-semibold text-pencil hover:underline disabled:opacity-40"
                 >
                   Remove
                 </button>
@@ -443,13 +412,8 @@ function ClassView({ id }: { id: string }) {
         )}
       </section>
 
-      <div className="border-t pt-4 text-center">
-        <button
-          type="button"
-          onClick={deleteClass}
-          disabled={busy}
-          className="text-sm text-red-500 hover:underline disabled:opacity-40"
-        >
+      <div className="mt-8">
+        <button type="button" onClick={deleteClass} disabled={busy} className={DESK_TEXT_BUTTON}>
           Delete this class
         </button>
       </div>

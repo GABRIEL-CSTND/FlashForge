@@ -52,7 +52,7 @@ describe('most-missed questions page', () => {
     ]);
     expect(screen.getByRole('heading', { name: 'Layers quiz' })).toBeTruthy();
     expect(screen.getByText(/2 of 3 students have finished it/)).toBeTruthy();
-    expect(screen.getByRole('link', { name: '← Student results' }).getAttribute('href')).toBe('/teacher/classes/c1/results');
+    expect(screen.getByRole('link', { name: '← Grade book' }).getAttribute('href')).toBe('/teacher/classes/c1/results');
   });
 
   it('explains how flashcards are counted', async () => {

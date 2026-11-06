@@ -96,10 +96,10 @@ app/
   history/page.tsx      History: every guide made while signed in, as decks; save one to My Sets or remove it
   history/[id]/page.tsx One guide from History: study it again, or save it to My Sets
   sets/[id]/page.tsx    A saved set: study and save the score; the owner can edit cards, rename, delete
-  teacher/page.tsx      Teacher dashboard: create classes, see join codes
-  teacher/classes/[id]/ One class: join code, assigned sets, roster, rename, delete
-  teacher/classes/[id]/results/  Student results: best scores, attempts, late / not started, averages, CSV
-  teacher/classes/[id]/assignments/[assignmentId]/  One assignment's questions, hardest first
+  teacher/page.tsx      Your classes (teachers): each class a kraft folder with its join code; make a new one
+  teacher/classes/[id]/ One class on the desk: join-code plate, assigned decks, roster on paper, rename, delete
+  teacher/classes/[id]/results/  The grade book: best scores, attempts, late / not started, averages, CSV
+  teacher/classes/[id]/assignments/[assignmentId]/  One assignment's cards on the desk, hardest first
   classes/page.tsx      My Classes (students): a tray of assigned decks per class (due, overdue, done), join with a code, leave
   admin/page.tsx        Admin home (admins only)
   admin/users/          Users and roles: search users, change roles
@@ -149,6 +149,7 @@ components/
   desk/PaperTag.tsx     A small paper tag: best score, saved or not, due date
   desk/DeckMorph.tsx    Morphs a deck picked up in the library into the page it opens (React ViewTransition)
   desk/OpeningDeck.tsx  The deck a set or guide page shows while it loads, so the morph has somewhere to land
+  desk/KraftFolder.tsx  A class on the teacher's desk: a kraft folder with its name and join code
   desk/SlipMenu.tsx     A word that fans out paper slips to choose from ("Make me [10] [medium] [flashcards]")
   make/NotesSheet.tsx   One sheet for a file, notes, a link or a topic; says what it found
   make/MakeCard.tsx     The "Make me 10 medium flashcards" card and Make my deck

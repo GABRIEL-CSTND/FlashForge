@@ -128,9 +128,9 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
   long (`truncate`) add `w-full` to it, or a long title makes the page wider than a phone
   screen instead of shortening with "…". Pages built to fill the window (`min-h-screen`)
   only fill the sheet (`.desk-sheet .min-h-screen` in `globals.css`).
-- Studying flashcards (phase 2), making a deck (phase 3), taking quizzes (phase 4) and the
-  library (phase 5: My Sets, History, My Classes) happen on the desk itself (below).
-  Later phases do the same for the teacher pages, then admin and cleanup.
+- Studying flashcards (phase 2), making a deck (phase 3), taking quizzes (phase 4), the
+  library (phase 5: My Sets, History, My Classes) and the teacher pages (phase 6) happen on
+  the desk itself (below). Phase 7 moves the admin pages onto the new look and cleans up.
 
 **Look and feel:**
 - **Fonts:** Instrument Sans for the app (`--font-sans`, set on the body), Fraunces for
@@ -285,6 +285,29 @@ and failed states) and `LibraryDeck.tsx`.
 - **Layout:** a grid of decks about 220 to 258 px wide, as many columns as fit: four or
   five on a laptop, one on a phone. Dates are worded in the viewer's own time zone
   (`shortDate()`): *Today*, *Yesterday*, *Oct 29*, or *Oct 29, 2025* in another year.
+
+### The teacher's desk (desk redesign, phase 6)
+
+The teacher pages follow `Desk-Printed-Teacher` on the design canvas, built from the same pieces
+as the library (phase 5).
+
+- **Your classes** (`app/teacher/page.tsx`): each class is a kraft folder
+  (`components/desk/KraftFolder.tsx`): a tab, the class's name, its student count and its join
+  code on a brass plate. The whole folder is the link that opens the class. The last place
+  is an empty folder for a **New class**: name it and **Create class** makes it and its code.
+- **A class** (`app/teacher/classes/[id]/page.tsx`): the name on the leather with **Rename**,
+  **Open the grade book**, and the join code on a paper plate with **Copy code** and **Get a
+  new code**. The assigned sets are decks (`LibraryDeck`) tagged with when they're due or
+  *Overdue*, with **Due date** and **Unassign** under each. The roster is a sheet of paper.
+- **The grade book** (the results page): the same table as before, on a sheet of paper, with
+  **Download CSV** as a brass button on the leather. On a phone the table scrolls sideways
+  inside its paper.
+- **An assignment** (`assignments/[assignmentId]`): its cards laid out on the desk, hardest
+  first, each with its % wrong, the answer, the most common wrong answer and a red bar.
+- **Still to do from the design:** the folders don't show how many assignments are overdue,
+  because `GET /api/teacher/classes` doesn't return it (the API stays as it is), and sets are
+  still assigned from the set page (**Assign to class**) rather than from a slip on the class.
+- `AssignPanel` and `StudentResultsPanel` keep their dialogs, now on paper colors.
 
 ## 1. Generating a study guide
 
@@ -811,7 +834,7 @@ and failed states) and `LibraryDeck.tsx`.
 
 ### Student results for teachers (#58)
 
-- On a class page, **📊 Student results** opens `/teacher/classes/[id]/results`: one row
+- On a class page, **Open the grade book** opens `/teacher/classes/[id]/results`: one row
   per student in the class (by name) and one column per assignment (soonest due first).
   On phones the table scrolls sideways and the student column stays in place.
 - **Each cell** shows the student's best score (e.g. *9/10 · 90%*), how many attempts
