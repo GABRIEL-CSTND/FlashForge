@@ -140,6 +140,8 @@ components/
   TeacherOnly.tsx       RoleGate for teacher pages (teachers and admins)
   AdminOnly.tsx         RoleGate for admin pages
   desk/Desk.tsx         The desk around every page: card box and library card on top, the page on a sheet of paper
+  desk/PageTurn.tsx     The sheet; turns the page on every navigation (React ViewTransition) and eases it in on Back
+  desk/view-transition.ts  React's ViewTransition, looked up, since the tests' React doesn't have it
   desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, and a tab for each section the role can open
   desk/LibraryCard.tsx  Library card (top right): name, role and Sign out, or Sign in with Google
   desk/PaperCard.tsx    A card with two faces that turns over

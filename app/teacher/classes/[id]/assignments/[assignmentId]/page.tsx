@@ -74,7 +74,7 @@ function QuestionsView({ id, assignmentId }: { id: string; assignmentId: string 
   if (state.status === 'loading') {
     return (
       <main className="on-desk w-full py-16">
-        <p className="text-on-desk/85">Loading...</p>
+        <p className="desk-wait text-on-desk/85">Loading...</p>
       </main>
     );
   }
@@ -99,7 +99,7 @@ function QuestionsView({ id, assignmentId }: { id: string; assignmentId: string 
 
   return (
     // An assignment's cards on the desk (desk redesign, phase 6), hardest first.
-    <main className="on-desk w-full space-y-6 pb-12">
+    <main className="desk-arrive on-desk w-full space-y-6 pb-12">
       <Link
         href={`/teacher/classes/${id}/results`}
         className="inline-flex min-h-11 max-w-full items-center truncate text-sm font-medium text-on-desk/80 hover:text-on-desk"

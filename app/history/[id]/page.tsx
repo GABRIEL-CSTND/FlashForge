@@ -150,6 +150,7 @@ export default function HistoryGuidePage() {
       onFinish={() => router.push('/history')}
       saveSlot={saveSlot}
       quoteLabel={quoteSourceLabel(guide.source_filename)}
+      arrive
     />
   );
 }

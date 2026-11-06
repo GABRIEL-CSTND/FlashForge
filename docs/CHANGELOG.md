@@ -9,6 +9,17 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
 it's ready. It changes how the app looks, not how it works.
 
 ### Changed
+- **Pages turn instead of swapping** (2026-11-07): moving to another page fades the old one
+  out as it sinks a little, and the new one rises into place (React's `<ViewTransition>` in
+  `components/desk/PageTurn.tsx`, around every page). A deck picked up in the library still
+  morphs into the page it opens.
+  - Back and Forward ease the new page in too (React runs no view transition for them),
+    except after a phone's swipe back, which the browser already animates.
+  - What a page loads arrives instead of popping in: decks, folders and class trays one
+    after another, and pages that showed only "Loading…" all at once, the study desk
+    included. "Loading…" only shows when loading takes more than a moment.
+  - With reduced motion, pages and what they load only fade.
+  - Tests: 6 for `PageTurn`; 851 in all. Checked in Edge with the animations slowed down.
 - **The old look is gone** (phase 7, 2026-11-06): the admin pages (users, sets, AI usage),
   the role chooser, the card editor and the last set and History screens use the desk's
   colors, and the redesign's seven phases are done.

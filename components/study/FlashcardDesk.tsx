@@ -50,6 +50,8 @@ export interface FlashcardDeskProps {
   completionSlot?: ReactNode;
   saveSlot?: ReactNode;
   quoteLabel?: string;
+  // Fade and rise in on mount (StudyViewer).
+  arrive?: boolean;
 }
 
 // Flashcards on the desk (desk redesign, phase 2): the deck on the left, the
@@ -68,6 +70,7 @@ export default function FlashcardDesk({
   completionSlot,
   saveSlot,
   quoteLabel = 'From the document',
+  arrive = false,
 }: FlashcardDeskProps) {
   const count = cards.length;
   const [mode, setMode] = useState<FlashcardMode>('flip');
@@ -498,7 +501,7 @@ export default function FlashcardDesk({
 
   if (kind === 'phone') {
     return (
-      <main className="on-desk w-full pb-4">
+      <main className={`on-desk w-full pb-4${arrive ? ' desk-arrive' : ''}`}>
         <div ref={stageRef} className="relative mx-auto w-full">
           {header}
           <div className="mt-2">{label}</div>
@@ -522,7 +525,7 @@ export default function FlashcardDesk({
   }
 
   return (
-    <main className="on-desk w-full pb-6">
+    <main className={`on-desk w-full pb-6${arrive ? ' desk-arrive' : ''}`}>
       <div ref={stageRef} className="relative mx-auto w-full">
         {header}
         <div className="mt-3 grid items-start gap-x-6 gap-y-7" style={{ gridTemplateColumns: `minmax(0, 1fr) ${size.w}px minmax(0, 1fr)` }}>

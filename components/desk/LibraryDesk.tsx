@@ -36,10 +36,10 @@ export default function LibraryDesk({
 }
 
 // A note on paper in the middle of the desk: signed out, nothing yet, or a
-// load that failed.
+// load that failed. It arrives like the decks do.
 export function DeskNote({ children, role }: { children: ReactNode; role?: 'alert' | 'status' }) {
   return (
-    <div role={role} className="paper paper-shadow w-full max-w-md -rotate-[0.6deg] rounded-md px-6 py-5 text-[15px] text-ink">
+    <div role={role} className="desk-arrive paper paper-shadow w-full max-w-md -rotate-[0.6deg] rounded-md px-6 py-5 text-[15px] text-ink">
       {children}
     </div>
   );

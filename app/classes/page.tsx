@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import LibraryDeck, { DESK_TEXT_BUTTON } from '@/components/desk/LibraryDeck';
 import LibraryDesk, { DeskNote } from '@/components/desk/LibraryDesk';
 import type { TagTone } from '@/components/desk/PaperTag';
@@ -160,7 +160,7 @@ function MyClasses() {
             Your classes{state.status === 'ready' ? ` (${state.classes.length})` : ''}
           </h2>
 
-          {state.status === 'loading' && <p className="text-sm text-on-desk/85">Loading classes...</p>}
+          {state.status === 'loading' && <p className="desk-wait text-sm text-on-desk/85">Loading classes...</p>}
 
           {state.status === 'error' && (
             <DeskNote>
@@ -186,7 +186,7 @@ function MyClasses() {
             <ul className="flex flex-col gap-12">
               {state.classes.map((c, k) => (
                 // Each class is a tray in the leather, its name on a paper label.
-                <li key={c.id} aria-label={c.name}>
+                <li key={c.id} aria-label={c.name} className="desk-arrive" style={{ '--i': k } as CSSProperties}>
                   <div className="relative z-10 -mb-[18px] ml-4 flex flex-wrap items-center gap-x-4">
                     <h3
                       className={`paper rounded px-3.5 py-1.5 text-ink shadow-[0_6px_12px_-8px_rgb(0_0_0/0.6)] ${k % 2 ? 'rotate-1' : '-rotate-[1.5deg]'}`}

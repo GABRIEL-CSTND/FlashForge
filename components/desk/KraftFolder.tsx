@@ -1,11 +1,13 @@
 import Link from 'next/link';
+import type { CSSProperties } from 'react';
 
 // Small tilts, so folders look laid down by hand.
 const TILTS = ['-1deg', '0.8deg', '-0.4deg', '1.2deg'];
 
 // A class on the teacher's desk (desk redesign, phase 6): a kraft folder with
 // a tab, the class's name and a line or two, and its join code on a brass
-// plate. The whole folder is the link that opens the class.
+// plate. The whole folder is the link that opens the class. Folders arrive one
+// after another once the page has loaded them.
 export default function KraftFolder({
   href,
   name,
@@ -24,8 +26,8 @@ export default function KraftFolder({
     <Link
       href={href}
       aria-label={`Open ${name}, ${lines.join(', ')}, join code ${code}`}
-      className="kraft-folder relative block h-[238px] w-full max-w-[420px] rounded-[10px] text-ink"
-      style={{ rotate: TILTS[index % TILTS.length] }}
+      className="desk-arrive kraft-folder relative block h-[238px] w-full max-w-[420px] rounded-[10px] text-ink"
+      style={{ rotate: TILTS[index % TILTS.length], '--i': index } as CSSProperties}
     >
       <span aria-hidden="true" className="kraft absolute left-0 top-0 h-10 w-1/2 rounded-[10px_14px_0_0]" />
       <span className="kraft kraft-body absolute inset-x-0 bottom-0 top-[30px] flex flex-col gap-1.5 rounded-[0_10px_10px_10px] px-[22px] py-[18px]">

@@ -28,6 +28,10 @@ interface StudyViewerProps {
   // What a card's quote says it's from, e.g. "From Wikipedia" (quoteSourceLabel()
   // in lib/sources.ts).
   quoteLabel?: string;
+  // The desk arrives (fades and rises in) when it mounts: on a set's page,
+  // after the deck that opened it. Not on the home page, where the new cards
+  // gather into the deck first.
+  arrive?: boolean;
 }
 
 // The study screen, on the desk: flashcards in components/study/

@@ -468,10 +468,91 @@ button.desk-spot:not(:disabled) {
   .deck-top {
     transition: none;
   }
+  /* Nothing moves: the deck is just in its new place. Pages still fade (below). */
   ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
+  ::view-transition-old(.morph),
+  ::view-transition-new(.morph) {
     animation: none !important;
+  }
+}
+
+/* ---- Turning pages ------------------------------------------------------- */
+
+/* Every navigation turns the page (components/desk/PageTurn.tsx). The old page
+   leaves quickly, fading and sinking a little, so it doesn't compete; the new
+   one rises into place more gently, its fade starting as the old one is nearly gone. The
+   card box and the desk stay put (they fade only if they changed, like the
+   open tab). */
+::view-transition-old(.page-out) {
+  animation: page-out 0.15s cubic-bezier(0.4, 0, 1, 1) both;
+}
+::view-transition-new(.page-in) {
+  animation:
+    page-fade-in 0.22s ease-out 0.12s both,
+    page-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+/* Clicks during a turn go to the page, not the overlay. */
+::view-transition {
+  pointer-events: none;
+}
+@keyframes page-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes page-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes page-rise {
+  from {
+    transform: translateY(16px);
+  }
+}
+
+/* What a page loads arrives on the desk instead of popping in: decks, folders
+   and trays one after another (--i is their place, capped so a long library
+   doesn't keep anyone waiting), a whole page at once when all it had was
+   "Loading…". It only fills backwards, so hover lifts work once it's down, and
+   it moves with transform, so it doesn't fight their rotate and translate. */
+@keyframes desk-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.desk-arrive {
+  animation: desk-arrive 0.38s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay: calc(min(var(--i, 0), 8) * 45ms);
+}
+/* "Loading…" shows only when loading takes a moment, so a quick load doesn't
+   flash it. */
+@keyframes desk-wait {
+  from {
+    opacity: 0;
+  }
+}
+.desk-wait {
+  animation: desk-wait 0.25s ease 0.35s backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Pages and what they load only fade; nothing moves. */
+  ::view-transition-old(.page-out) {
+    animation: page-fade-out 0.15s ease-in both;
+  }
+  ::view-transition-new(.page-in) {
+    animation: page-fade-in 0.2s ease-out both;
+  }
+  .desk-arrive {
+    animation-name: card-fade;
   }
 }
 

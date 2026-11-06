@@ -121,7 +121,8 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
   (or email, without a name), role and *Sign out*; signed out, *Sign in with Google*.
   While the session loads it keeps its height, so the desk doesn't jump.
 - **The sheet:** the page itself lies on a sheet of paper below them (`.desk-sheet`, at
-  most `max-w-5xl`). On a phone the card box and library card share the top row (the card
+  most `max-w-5xl`), which `components/desk/PageTurn.tsx` renders so every page turns (see
+  "Moving between pages" below). On a phone the card box and library card share the top row (the card
   gets narrower and stays on the right) and the sheet nearly fills the width.
 - Pages keep their own layout on the sheet. The sheet is a flex column too, so a centered
   `<main>` (`max-w-* mx-auto`) sizes to its content: pages with one-line text that can be
@@ -312,6 +313,47 @@ as the library (phase 5).
   because `GET /api/teacher/classes` doesn't return it (the API stays as it is), and sets are
   still assigned from the set page (**Assign to class**) rather than from a slip on the class.
 - `AssignPanel` and `StudentResultsPanel` keep their dialogs, now on paper colors.
+
+### Moving between pages (page turns)
+
+Every navigation turns the page instead of swapping it at once
+(`components/desk/PageTurn.tsx`, which renders the sheet in `Desk.tsx`, so every page,
+new ones included, gets it without doing anything):
+
+- **Links and `router.push`:** App Router navigations are transitions, so React runs them as
+  view transitions. `PageTurn` wraps the page in a `<ViewTransition>` keyed by the path. The
+  old page leaves (`page-out`: it fades and sinks 8 px in 0.15 s) and the new one arrives
+  (`page-in`: it rises 16 px into place over 0.42 s, fading in from 0.12 s, when the old page
+  is nearly gone). The card box, library card and desk stay put. The styles are under
+  "Turning pages" in `globals.css`. A deck picked up in the library still morphs on top
+  (`DeckMorph`, above). `ViewTransition` is looked up in `components/desk/view-transition.ts`,
+  as the tests' React doesn't have it.
+- **Only navigations turn the page:** `default="none"`, so a state change on a page never
+  animates the whole page, and search params don't change the path. The key remounts the page
+  tree on each new path, which the App Router does for a new page anyway. (With
+  `cacheComponents` on, Next would keep recent pages alive in hidden `<Activity>` boundaries,
+  and the key would drop them. It's off.)
+- **Back and Forward:** React renders those at once, so the browser can restore the scroll,
+  and runs no view transition. `PageTurn` gives the sheet the same rise itself (the Web
+  Animations API), unless the browser already animated it (`hasUAVisualTransition`, a swipe
+  back on a phone).
+- **What a page loads arrives** instead of popping in (`.desk-arrive`: a 0.38 s fade and 10 px
+  rise). Decks, folders, class trays and paper notes come one after another (`--i` is the
+  place in the list, capped at 8, so a long library doesn't keep anyone waiting). Pages that
+  had only "Loading…" come all at once: a class, the grade book, an assignment, the admin
+  lists, and the study desk after the deck that opened it (`StudyViewer`'s `arrive`, not on
+  the home page, where the new cards gather into the deck first). It moves with `transform`
+  and only fills backwards, so it doesn't fight the decks' tilt or their hover lift.
+- **"Loading…" lines wait** 0.35 s before they fade in (`.desk-wait`), so a quick load
+  doesn't flash them. Screen readers still hear them straight away.
+- **Reduced motion:** pages and what they load only fade. Nothing moves, and there's no
+  deck morph.
+- **On a new page:** put `.desk-arrive` (with `--i` in a list) on what replaces a loading
+  line, and `.desk-wait` on the loading line itself. Don't add `.desk-arrive` to something
+  that's there as soon as the page opens: the page turn already brings it in.
+- Browsers without view transitions swap pages as before. Checked in Edge with the
+  animations slowed down 10 times: turns both ways, the morph, Back and Forward, a click
+  right after Back, reduced motion, a phone's width and the study desk arriving.
 
 ## 1. Generating a study guide
 
@@ -1059,7 +1101,7 @@ transaction. Run them after every database change.
     the Missed it pile dealt again, Type and Match; and the quiz desk: answer slips, the
     Right / Wrong piles, the Wrong pile again, part cards and focus), `CardEditor`,
     `AssignPanel`, the desk's card box and library card (the tabs each role gets, signing
-    in and out), `PaperCard`, the desk layout at four widths, the
+    in and out), `PageTurn` (the sheet, and the rise after Back and Forward), `PaperCard`, the desk layout at four widths, the
     set page, My Sets (its decks, best scores, delete), the History pages (saving from a deck too) and the teacher and student pages, in jsdom with React Testing Library.
     Component tests start with `// @vitest-environment jsdom`.
 - `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and

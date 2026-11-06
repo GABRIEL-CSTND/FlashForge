@@ -13,7 +13,7 @@ export default function OpeningDeck({ morph }: { morph: string }) {
           <span className="paper deck-top absolute inset-0 rounded-[7px]" />
         </div>
       </DeckMorph>
-      <p role="status" className="text-sm text-on-desk/85">
+      <p role="status" className="desk-wait text-sm text-on-desk/85">
         Opening the deck…
       </p>
     </main>

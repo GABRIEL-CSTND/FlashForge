@@ -1,17 +1,5 @@
-import * as React from 'react';
-import type { ComponentType, ReactNode } from 'react';
-
-interface ViewTransitionProps {
-  name: string;
-  share?: string;
-  default?: string;
-  children: ReactNode;
-}
-
-// React's <ViewTransition> is in the canary React that the App Router runs on
-// (node_modules/next/dist/docs/01-app/02-guides/view-transitions.md), not in
-// the react package the tests use, so it's looked up rather than imported.
-const ViewTransition = (React as unknown as { ViewTransition?: ComponentType<ViewTransitionProps> }).ViewTransition;
+import type { ReactNode } from 'react';
+import { ViewTransition } from './view-transition';
 
 // Picking up a deck (desk redesign, phase 5). The deck in the library and the
 // deck the next page opens with carry the same name, so the browser morphs one

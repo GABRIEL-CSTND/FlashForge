@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import KraftFolder from '@/components/desk/KraftFolder';
 import LibraryDesk, { DeskNote } from '@/components/desk/LibraryDesk';
 import TeacherOnly from '@/components/TeacherOnly';
@@ -102,8 +102,9 @@ function Dashboard() {
         : `${classes.length} class${classes.length === 1 ? '' : 'es'} · ${studentCountLabel(totalStudents)}`;
 
   // The empty folder at the end: name a class and FlashForge makes its code.
+  // After the folders, so it arrives last.
   const newClass = (
-    <li>
+    <li className="desk-arrive" style={{ '--i': classes.length } as CSSProperties}>
       <section aria-labelledby="new-class-heading" className="new-deck mt-[30px] flex w-full max-w-[420px] flex-col gap-2.5 rounded-[10px] px-6 py-5">
         <h2 id="new-class-heading" className="flex items-center gap-2.5 font-serif text-[23px] font-normal text-[#f3ecdd]">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#e2c887" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
@@ -144,7 +145,7 @@ function Dashboard() {
 
   return (
     <LibraryDesk title="Your classes" subline={subline} tip={TIP}>
-      {state.status === 'loading' && <p className="text-sm text-on-desk/85">Loading classes...</p>}
+      {state.status === 'loading' && <p className="desk-wait text-sm text-on-desk/85">Loading classes...</p>}
 
       {state.status === 'error' && (
         <DeskNote>

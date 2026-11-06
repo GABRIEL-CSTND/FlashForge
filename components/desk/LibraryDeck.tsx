@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import DeckMorph from './DeckMorph';
 import PaperTag, { type TagTone } from './PaperTag';
 
@@ -16,7 +16,7 @@ export interface LibraryDeckProps {
   title: string;
   meta: string;
   tag?: { text: string; tone: TagTone };
-  // Its place on the desk, for its tilt.
+  // Its place on the desk, for its tilt and when it arrives.
   index: number;
   // Buttons on the desk under it (save, delete, remove).
   actions?: ReactNode;
@@ -25,7 +25,8 @@ export interface LibraryDeckProps {
 // A deck lying in the library (desk redesign, phase 5): a stack of paper cards
 // with its kind, title and one line about it on top, and a paper tag tied to
 // its corner. The whole deck is the link that picks it up; the tag is part of
-// the link, so it's read with it.
+// the link, so it's read with it. Decks arrive on the desk one after another
+// once the page has loaded them (.desk-arrive).
 export default function LibraryDeck({ href, morph, kind, title, meta, tag, index, actions }: LibraryDeckProps) {
   const deck = (
     <Link
@@ -49,7 +50,7 @@ export default function LibraryDeck({ href, morph, kind, title, meta, tag, index
     </Link>
   );
   return (
-    <li className="flex min-w-0 flex-col items-start">
+    <li className="desk-arrive flex min-w-0 flex-col items-start" style={{ '--i': index } as CSSProperties}>
       {morph ? <DeckMorph name={morph}>{deck}</DeckMorph> : deck}
       {actions && <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-1">{actions}</div>}
     </li>
@@ -57,9 +58,10 @@ export default function LibraryDeck({ href, morph, kind, title, meta, tag, index
 }
 
 // The empty place for a new deck at the end of My Sets: it goes to making one.
-export function NewDeckSpot() {
+// index: its place after the decks, so it arrives last.
+export function NewDeckSpot({ index = 0 }: { index?: number }) {
   return (
-    <li className="flex min-w-0 flex-col items-start">
+    <li className="desk-arrive flex min-w-0 flex-col items-start" style={{ '--i': index } as CSSProperties}>
       <Link
         href="/"
         className="new-deck flex aspect-[258/161] w-full max-w-[258px] flex-col items-center justify-center gap-1 rounded-[7px] text-center"

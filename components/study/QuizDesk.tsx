@@ -84,6 +84,8 @@ export interface QuizDeskProps {
   completionSlot?: ReactNode;
   saveSlot?: ReactNode;
   quoteLabel?: string;
+  // Fade and rise in on mount (StudyViewer).
+  arrive?: boolean;
 }
 
 // Quizzes on the desk (desk redesign, phase 4): multiple choice, true or false
@@ -104,6 +106,7 @@ export default function QuizDesk({
   completionSlot,
   saveSlot,
   quoteLabel = 'From the document',
+  arrive = false,
 }: QuizDeskProps) {
   const mixed = studyType === 'mixed';
   // A mixed quiz goes part by part (#69), keeping the saved order within each.
@@ -527,7 +530,7 @@ export default function QuizDesk({
 
   if (kind === 'phone') {
     return (
-      <main className="on-desk w-full pb-4">
+      <main className={`on-desk w-full pb-4${arrive ? ' desk-arrive' : ''}`}>
         <div ref={stageRef} className="relative mx-auto w-full">
           {header}
           <div className="mt-2">{label}</div>
@@ -552,7 +555,7 @@ export default function QuizDesk({
   }
 
   return (
-    <main className="on-desk w-full pb-6">
+    <main className={`on-desk w-full pb-6${arrive ? ' desk-arrive' : ''}`}>
       <div ref={stageRef} className="relative mx-auto w-full">
         {header}
         <div className="mt-3 grid items-start gap-x-6 gap-y-7" style={{ gridTemplateColumns: `minmax(0, 1fr) ${size.w}px minmax(0, 1fr)` }}>

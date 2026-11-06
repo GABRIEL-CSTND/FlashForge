@@ -372,6 +372,7 @@ export default function SetPage() {
       onComplete={recordAttempt}
       completionSlot={completionSlot}
       quoteLabel={quoteSourceLabel(set.source_filename)}
+      arrive
     />
     {isOwner && assigning && (
       <AssignPanel setId={set.id} setTitle={set.title} onClose={() => setAssigning(false)} />

@@ -87,7 +87,7 @@ function UsageView() {
           ← Admin
         </Link>
         {state.status === 'loading' ? (
-          <p className="text-sm text-muted">Loading usage...</p>
+          <p className="desk-wait text-sm text-muted">Loading usage...</p>
         ) : (
           <p role="alert" className="text-sm text-pencil">
             {state.message}
@@ -107,7 +107,7 @@ function UsageView() {
 
   return (
     // w-full: the body is a flex column (see the class results page).
-    <main className="min-h-screen w-full p-6 max-w-2xl mx-auto space-y-6">
+    <main className="desk-arrive min-h-screen w-full p-6 max-w-2xl mx-auto space-y-6">
       <Link href="/admin" className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
         ← Admin
       </Link>

@@ -131,17 +131,17 @@ function SetsView() {
         </p>
       )}
 
-      {state.status === 'loading' && <p className="text-sm text-muted">Loading sets...</p>}
+      {state.status === 'loading' && <p className="desk-wait text-sm text-muted">Loading sets...</p>}
       {state.status === 'error' && (
         <p role="alert" className="text-sm text-pencil">
           {state.message}
         </p>
       )}
       {state.status === 'ready' && state.sets.length === 0 && (
-        <div className="rounded-lg border p-6 text-center text-sm text-muted">No sets match that search.</div>
+        <div className="desk-arrive rounded-lg border p-6 text-center text-sm text-muted">No sets match that search.</div>
       )}
       {state.status === 'ready' && state.sets.length > 0 && (
-        <ul aria-label="Study sets" className="divide-y rounded-lg border">
+        <ul aria-label="Study sets" className="desk-arrive divide-y rounded-lg border">
           {state.sets.map((s) => (
             <li key={s.id} className="flex items-center justify-between gap-3 p-3">
               <div className="min-w-0">

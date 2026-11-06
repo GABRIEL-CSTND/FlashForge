@@ -95,7 +95,7 @@ function ClassView({ id }: { id: string }) {
   if (state.status === 'loading') {
     return (
       <main className="on-desk w-full py-16">
-        <p className="text-on-desk/85">Loading...</p>
+        <p className="desk-wait text-on-desk/85">Loading...</p>
       </main>
     );
   }
@@ -221,7 +221,7 @@ function ClassView({ id }: { id: string }) {
   return (
     // A class on the desk (desk redesign, phase 6): its name, the brass join-code
     // plate, the assigned sets as decks, and the roster on a sheet of paper.
-    <main className="on-desk w-full pb-12">
+    <main className="desk-arrive on-desk w-full pb-12">
       <Link href="/teacher" className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-on-desk/80 hover:text-on-desk">
         ← Your classes
       </Link>

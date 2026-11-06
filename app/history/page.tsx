@@ -115,7 +115,7 @@ export default function HistoryPage() {
   if (userLoading || (user && loading)) {
     return (
       <LibraryDesk title="History">
-        <p role="status" className="text-on-desk/85">
+        <p role="status" className="desk-wait text-on-desk/85">
           Loading your guides…
         </p>
       </LibraryDesk>

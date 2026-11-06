@@ -38,7 +38,11 @@ export default function RoleGate({ allow, signedOutMessage, deniedMessage, denie
   const { user, profile, loading } = useProfile();
 
   if (loading) {
-    return <main className="min-h-screen flex items-center justify-center">Loading...</main>;
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <p className="desk-wait">Loading...</p>
+      </main>
+    );
   }
   if (!user) return <GateMessage message={signedOutMessage} link={BACK_HOME} />;
   if (!profile) {

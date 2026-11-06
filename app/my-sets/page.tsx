@@ -67,7 +67,7 @@ export default function MySetsPage() {
   if (userLoading || (user && loading)) {
     return (
       <LibraryDesk title="My Sets">
-        <p role="status" className="text-on-desk/85">
+        <p role="status" className="desk-wait text-on-desk/85">
           Loading your decks…
         </p>
       </LibraryDesk>
@@ -126,7 +126,7 @@ export default function MySetsPage() {
               />
             );
           })}
-          <NewDeckSpot />
+          <NewDeckSpot index={sets.length} />
         </ul>
       )}
     </LibraryDesk>
