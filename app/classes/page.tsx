@@ -1,12 +1,16 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import LibraryDeck, { DESK_TEXT_BUTTON } from '@/components/desk/LibraryDeck';
+import LibraryDesk, { DeskNote } from '@/components/desk/LibraryDesk';
+import type { TagTone } from '@/components/desk/PaperTag';
 import RoleGate from '@/components/RoleGate';
 import { apiFetch, errorMessage } from '@/lib/api-client';
 import { normalizeJoinCode } from '@/lib/classes-shared';
+import { shortDate } from '@/lib/library';
 import { STUDENT_ROLES } from '@/lib/role-types';
 import { formatDueDate, isOverdue } from '@/lib/due-dates';
+import { STUDY_TYPE_LABELS, toStudyType } from '@/lib/study-types';
 
 interface AssignedSet {
   id: string;
@@ -40,6 +44,7 @@ const BAD_CODE_MESSAGE = "That doesn't look like a class code. Codes have 6 lett
 // Shown before joining (#54). Teachers see names and emails on the roster
 // (#53) and will see assignment scores (#58).
 const JOIN_NOTICE = "Your teacher will see your name, email, and your scores on this class's assignments.";
+const TIP = 'Sets your teachers assign show up in each class, with their due dates.';
 
 async function fetchMyClasses(): Promise<LoadState> {
   try {
@@ -53,7 +58,9 @@ async function fetchMyClasses(): Promise<LoadState> {
 }
 
 // Students' classes (#54): join with a code, see the classes they're in and
-// what's assigned in each (#56), leave.
+// what's assigned in each (#56), leave. On the desk since redesign phase 5:
+// each class is a tray of decks, each tagged with when it's due or its best
+// score, and joining is a paper card.
 export default function MyClassesPage() {
   return (
     <RoleGate
@@ -140,144 +147,137 @@ function MyClasses() {
     }
   };
 
-  const feedbackColor = { success: 'text-green-600', info: 'text-gray-500', error: 'text-red-500' } as const;
+  const feedbackColor = { success: 'text-green-800', info: 'text-muted', error: 'text-pencil' } as const;
+  // A set assigned in two classes lies on the desk twice; only the first one
+  // carries the morph name, as names must be unique on a page.
+  const morphed = new Set<string>();
 
   return (
-    // w-full: the body is a flex column, so without it a long class name or set
-    // title would widen the page past a phone screen instead of truncating.
-    <main className="min-h-screen w-full p-6 max-w-md mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">My classes</h1>
-        <Link href="/" className="text-sm text-link hover:underline">
-          + New set
-        </Link>
-      </div>
+    <LibraryDesk title="My Classes" subline="Sets your teachers assigned, with their due dates." tip={TIP}>
+      <div className="grid items-start gap-12 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <section aria-labelledby="classes-heading" className="min-w-0">
+          <h2 id="classes-heading" className="sr-only">
+            Your classes{state.status === 'ready' ? ` (${state.classes.length})` : ''}
+          </h2>
 
-      <section className="space-y-3" aria-labelledby="join-heading">
-        <h2 id="join-heading" className="font-medium">
-          Join a class
-        </h2>
-        <form onSubmit={handleJoin} className="flex gap-2">
-          <label htmlFor="join-code" className="sr-only">
-            Class code
-          </label>
-          <input
-            id="join-code"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="Class code, e.g. K7M-2QX"
-            autoComplete="off"
-            autoCapitalize="characters"
-            spellCheck={false}
-            maxLength={12}
-            disabled={joining}
-            className="min-w-0 flex-1 rounded-lg border bg-transparent px-3 py-2 font-mono uppercase tracking-wider placeholder:font-sans placeholder:normal-case placeholder:tracking-normal"
-          />
-          <button
-            type="submit"
-            disabled={!code.trim() || joining}
-            className="btn btn-primary shrink-0"
-          >
-            {joining ? 'Joining...' : 'Join'}
-          </button>
-        </form>
-        <p className="text-xs text-gray-500">{JOIN_NOTICE}</p>
-        {feedback && (
-          <p role={feedback.kind === 'error' ? 'alert' : 'status'} className={`text-sm ${feedbackColor[feedback.kind]}`}>
-            {feedback.text}
-          </p>
-        )}
-      </section>
+          {state.status === 'loading' && <p className="text-sm text-on-desk/85">Loading classes...</p>}
 
-      <section className="space-y-2" aria-labelledby="classes-heading">
-        <h2 id="classes-heading" className="font-medium">
-          Your classes{state.status === 'ready' ? ` (${state.classes.length})` : ''}
-        </h2>
+          {state.status === 'error' && (
+            <DeskNote>
+              <p className="text-pencil">{state.message}</p>
+              <button
+                type="button"
+                onClick={async () => {
+                  setState({ status: 'loading' });
+                  await reload();
+                }}
+                className="mt-2 min-h-11 font-semibold text-link hover:underline"
+              >
+                Try again
+              </button>
+            </DeskNote>
+          )}
 
-        {state.status === 'loading' && <p className="text-center text-sm text-gray-500">Loading classes...</p>}
+          {state.status === 'ready' && state.classes.length === 0 && (
+            <DeskNote>You haven&apos;t joined any classes yet. Ask your teacher for a class code.</DeskNote>
+          )}
 
-        {state.status === 'error' && (
-          <div className="space-y-2 rounded-lg border p-4 text-center text-sm">
-            <p className="text-red-500">{state.message}</p>
-            <button
-              type="button"
-              onClick={async () => {
-                setState({ status: 'loading' });
-                await reload();
-              }}
-              className="text-link hover:underline"
-            >
-              Try again
-            </button>
-          </div>
-        )}
-
-        {state.status === 'ready' && state.classes.length === 0 && (
-          <div className="rounded-lg border p-6 text-center text-sm text-gray-500">
-            You haven&apos;t joined any classes yet. Ask your teacher for a class code.
-          </div>
-        )}
-
-        {state.status === 'ready' && state.classes.length > 0 && (
-          <ul className="space-y-2">
-            {state.classes.map((c) => (
-              <li key={c.id} aria-label={c.name} className="space-y-3 rounded-lg border p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{c.name}</p>
-                    <p className="mt-1 text-xs text-gray-400">
-                      {c.teacherName ? `${c.teacherName} · ` : ''}Joined {new Date(c.joinedAt).toLocaleDateString()}
-                    </p>
+          {state.status === 'ready' && state.classes.length > 0 && (
+            <ul className="flex flex-col gap-12">
+              {state.classes.map((c, k) => (
+                // Each class is a tray in the leather, its name on a paper label.
+                <li key={c.id} aria-label={c.name}>
+                  <div className="relative z-10 -mb-[18px] ml-4 flex flex-wrap items-center gap-x-4">
+                    <h3
+                      className={`paper rounded px-3.5 py-1.5 text-ink shadow-[0_6px_12px_-8px_rgb(0_0_0/0.6)] ${k % 2 ? 'rotate-1' : '-rotate-[1.5deg]'}`}
+                    >
+                      <span className="font-serif text-[17px] font-normal">{c.name}</span>
+                      {c.teacherName && <span className="ml-2 font-sans text-[12.5px] text-muted">{c.teacherName}</span>}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => handleLeave(c)}
+                      disabled={leavingId !== null}
+                      aria-label={`Leave ${c.name}`}
+                      className={DESK_TEXT_BUTTON}
+                    >
+                      {leavingId === c.id ? 'Leaving...' : 'Leave'}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => handleLeave(c)}
-                    disabled={leavingId !== null}
-                    aria-label={`Leave ${c.name}`}
-                    className="shrink-0 text-sm text-red-500 hover:underline disabled:opacity-40"
-                  >
-                    {leavingId === c.id ? 'Leaving...' : 'Leave'}
-                  </button>
-                </div>
-                {c.assignments.length === 0 ? (
-                  <p className="text-xs text-gray-400">No assigned sets yet.</p>
-                ) : (
-                  <ul className="space-y-1" aria-label={`Assigned in ${c.name}`}>
-                    {c.assignments.map((a) => (
-                      <li key={a.id}>
-                        <Link
-                          href={`/sets/${a.setId}?assignment=${a.id}`}
-                          className="block rounded-lg bg-gray-500/5 px-3 py-2 text-sm hover:bg-gray-500/10"
-                        >
-                          <span className="block truncate font-medium">{a.setTitle}</span>
-                          <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                            {a.dueAt ? `Due ${formatDueDate(a.dueAt)}` : 'No due date'}
-                            {a.myProgress ? (
-                              <span className="rounded bg-green-500/10 px-1.5 py-0.5 font-medium text-green-600">
-                                Done · best {a.myProgress.bestScore}/{a.myProgress.bestTotal}
-                              </span>
-                            ) : (
-                              isOverdue(a.dueAt) && (
-                                <span className="rounded bg-red-500/10 px-1.5 py-0.5 font-medium text-red-500">Overdue</span>
-                              )
-                            )}
-                          </span>
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                  <div className="desk-tray rounded-[18px] px-6 pb-10 pt-11">
+                    {c.assignments.length === 0 ? (
+                      <p className="text-sm text-on-desk/85">No assigned sets yet.</p>
+                    ) : (
+                      <ul aria-label={`Assigned in ${c.name}`} className="grid gap-x-8 gap-y-12 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]">
+                        {c.assignments.map((a, i) => {
+                          const morph = morphed.has(a.setId) ? undefined : `deck-${a.setId}`;
+                          morphed.add(a.setId);
+                          return (
+                            <LibraryDeck
+                              key={a.id}
+                              index={i + k}
+                              href={`/sets/${a.setId}?assignment=${a.id}`}
+                              morph={morph}
+                              kind={STUDY_TYPE_LABELS[toStudyType(a.studyType)]}
+                              title={a.setTitle}
+                              meta={`Assigned ${shortDate(a.createdAt)}`}
+                              tag={assignmentTag(a)}
+                            />
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-      <p className="text-center text-sm">
-        <Link href="/my-sets" className="text-link hover:underline">
-          My Sets
-        </Link>
-      </p>
-    </main>
+        <section aria-labelledby="join-heading" className="paper paper-shadow -rotate-1 rounded-lg px-6 pb-5 pt-6 text-ink">
+          <h2 id="join-heading" className="text-[25px] font-normal leading-tight">
+            Join a class
+          </h2>
+          <p className="mt-1 text-sm text-muted">Type the code your teacher gave you.</p>
+          <form onSubmit={handleJoin} className="mt-3 flex items-end gap-3">
+            <label
+              htmlFor="join-code"
+              className="flex min-w-0 flex-1 flex-col gap-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-brass-ink"
+            >
+              Class code
+              <input
+                id="join-code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="e.g. K7M-2QX"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                maxLength={12}
+                disabled={joining}
+                className="min-h-11 w-full min-w-0 border-0 border-b-[1.5px] border-[#8c8270] bg-transparent px-0.5 font-serif text-2xl font-normal uppercase tracking-[0.14em] text-[#1f2a44] placeholder:text-lg placeholder:normal-case placeholder:tracking-normal placeholder:text-[#9a907e]"
+              />
+            </label>
+            <button type="submit" disabled={!code.trim() || joining} className="btn btn-primary min-h-11 shrink-0 rounded-full px-5">
+              {joining ? 'Joining...' : 'Join'}
+            </button>
+          </form>
+          <p className="mt-3 text-xs text-muted">{JOIN_NOTICE}</p>
+          {feedback && (
+            <p role={feedback.kind === 'error' ? 'alert' : 'status'} className={`mt-2 text-sm ${feedbackColor[feedback.kind]}`}>
+              {feedback.text}
+            </p>
+          )}
+        </section>
+      </div>
+    </LibraryDesk>
   );
+}
+
+// An assignment's tag: done with its best score, overdue, when it's due, or no date.
+function assignmentTag(a: AssignedSet): { text: string; tone: TagTone } {
+  if (a.myProgress) return { text: `Done · best ${a.myProgress.bestScore}/${a.myProgress.bestTotal}`, tone: 'ink' };
+  if (!a.dueAt) return { text: 'No due date', tone: 'muted' };
+  if (isOverdue(a.dueAt)) return { text: `Overdue · was due ${shortDate(a.dueAt)}`, tone: 'pencil' };
+  return { text: `Due ${formatDueDate(a.dueAt)}`, tone: 'brass' };
 }

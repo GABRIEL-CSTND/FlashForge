@@ -9,6 +9,15 @@ vi.mock('@/lib/auth', () => ({ useUser: () => ({ user: state.user, loading: fals
 // The browser client. The fake has no RLS (that's in supabase/tests/history-rls-check.sql),
 // so another user's entry here shows that the page asks only for the user's own.
 vi.mock('@/lib/supabase', () => ({ supabase: { from: (t: string) => fake.current!.client.from(t) } }));
+// Saving from a deck goes to /api/save-set, as on the guide's own page.
+const api = vi.hoisted(() => ({ calls: [] as { path: string; body: unknown }[], fail: false }));
+vi.mock('@/lib/api-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api-client')>()),
+  apiFetch: vi.fn(async (path: string, init: { body?: unknown } = {}) => {
+    api.calls.push({ path, body: init.body });
+    return api.fail ? { ok: false, status: 400, data: { error: 'Card 1: add a question.' } } : { ok: true, status: 201, data: { id: 'set-9' } };
+  }),
+}));
 
 import HistoryPage from '@/app/history/page';
 
@@ -29,6 +38,8 @@ const entry = (id: string, title: string, createdAt: string, extra: Record<strin
 
 beforeEach(() => {
   state.user = { id: SAM };
+  api.calls = [];
+  api.fail = false;
   fake.current = createFakeSupabase({ tables: { guide_history: { unique: [['id']] } } });
   db = fake.current.db;
   vi.stubGlobal('confirm', vi.fn(() => true));
@@ -53,12 +64,40 @@ describe('History page', () => {
     );
     render(<HistoryPage />);
     const items = within(await screen.findByRole('list', { name: 'Your study guides' })).getAllByRole('listitem');
-    expect(items.map((li) => within(li).getByRole('link').getAttribute('href'))).toEqual(['/history/h2', '/history/h1']);
-    expect(items[0].textContent).toContain('Photosynthesis');
-    expect(items[0].textContent).toContain('Multiple choice · 1 question ·');
-    expect(items[0].textContent).not.toContain('Saved');
-    expect(items[1].textContent).toContain('Flashcards · 10 questions ·');
-    expect(items[1].textContent).toContain('Saved');
+    // Each guide is a deck: the link that picks it up, with its tag in it.
+    const decks = items.map((li) => within(li).getByRole('link'));
+    expect(decks.map((a) => a.getAttribute('href'))).toEqual(['/history/h2', '/history/h1']);
+    expect(decks[0].getAttribute('aria-label')).toMatch(/^Pick up Photosynthesis, Multiple choice, 1 question\. .+ · not saved$/);
+    expect(decks[1].getAttribute('aria-label')).toMatch(/^Pick up Cells, Flashcards, 10 questions\. .+ · saved$/);
+    // Only the guide that wasn't saved can be saved from here.
+    expect(within(items[0]).getByRole('button', { name: 'Save to My Sets' })).toBeTruthy();
+    expect(within(items[1]).queryByRole('button', { name: 'Save to My Sets' })).toBeNull();
+  });
+
+  it('saves a guide to My Sets from its deck, with its History entry', async () => {
+    db.rows.guide_history.push(
+      entry('h2', 'Photosynthesis', '2026-10-29T09:00:00Z', { source_filename: 'bio.pdf', items: [{ question: 'Fluid in the chloroplast', answer: 'Stroma' }] })
+    );
+    render(<HistoryPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Save to My Sets' }));
+    expect((await screen.findByRole('status')).textContent).toBe('Saved Photosynthesis to My Sets.');
+    expect(api.calls).toEqual([
+      {
+        path: '/api/save-set',
+        body: { title: 'Photosynthesis', sourceFilename: 'bio.pdf', studyType: 'flashcard', items: [{ question: 'Fluid in the chloroplast', answer: 'Stroma' }], historyId: 'h2' },
+      },
+    ]);
+    expect(screen.queryByRole('button', { name: 'Save to My Sets' })).toBeNull();
+    expect(screen.getByRole('link', { name: /^Pick up Photosynthesis/ }).getAttribute('aria-label')).toMatch(/ · saved$/);
+  });
+
+  it('says so when saving fails, and keeps the button', async () => {
+    api.fail = true;
+    db.rows.guide_history.push(entry('h2', 'Photosynthesis', '2026-10-29T09:00:00Z', { items: [] }));
+    render(<HistoryPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Save to My Sets' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Card 1: add a question.');
+    expect(screen.getByRole('button', { name: 'Save to My Sets' })).toBeTruthy();
   });
 
   it('says when there are no guides yet', async () => {

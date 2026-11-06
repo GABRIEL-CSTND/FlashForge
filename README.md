@@ -79,7 +79,7 @@ Open http://localhost:3000.
 | `npm run dev` | Start the dev server |
 | `npm run build` | Production build (also type-checks) |
 | `npm start` | Run the production build |
-| `npm run lint` | ESLint (3 known errors in `app/page.tsx` and `app/my-sets/page.tsx`, unrelated to recent work) |
+| `npm run lint` | ESLint (2 known errors in `app/page.tsx`, unrelated to recent work) |
 | `npm test` | Unit, API-route and component tests (Vitest + React Testing Library) |
 
 ## Project structure
@@ -92,15 +92,15 @@ app/
   globals.css           Tailwind, the desk's colors and textures, brass buttons, the default border color
   icon.svg              FlashForge icon (favicon.ico and apple-icon.png are the same design)
   */layout.tsx          Section layouts that only set the browser title ("My Sets · FlashForge")
-  my-sets/page.tsx      Signed-in user's saved sets
-  history/page.tsx      History: every guide the user made while signed in, saved or not; remove one
+  my-sets/page.tsx      My Sets: the saved sets as decks on the desk, each with its best score; delete one
+  history/page.tsx      History: every guide made while signed in, as decks; save one to My Sets or remove it
   history/[id]/page.tsx One guide from History: study it again, or save it to My Sets
   sets/[id]/page.tsx    A saved set: study and save the score; the owner can edit cards, rename, delete
   teacher/page.tsx      Teacher dashboard: create classes, see join codes
   teacher/classes/[id]/ One class: join code, assigned sets, roster, rename, delete
   teacher/classes/[id]/results/  Student results: best scores, attempts, late / not started, averages, CSV
   teacher/classes/[id]/assignments/[assignmentId]/  One assignment's questions, hardest first
-  classes/page.tsx      My classes (students): join with a code, see assigned sets (done or not), leave
+  classes/page.tsx      My Classes (students): a tray of assigned decks per class (due, overdue, done), join with a code, leave
   admin/page.tsx        Admin home (admins only)
   admin/users/          Users and roles: search users, change roles
   admin/sets/           Study sets: open or delete any set
@@ -144,6 +144,11 @@ components/
   desk/LibraryCard.tsx  Library card (top right): name, role and Sign out, or Sign in with Google
   desk/PaperCard.tsx    A card with two faces that turns over
   desk/Pencil.tsx       The pencil on the desk that opens the card editor
+  desk/LibraryDesk.tsx  The library pages' frame on the desk: name, line, tip note, and a paper note for empty states
+  desk/LibraryDeck.tsx  A deck lying in the library: the link that picks it up, with its paper tag
+  desk/PaperTag.tsx     A small paper tag: best score, saved or not, due date
+  desk/DeckMorph.tsx    Morphs a deck picked up in the library into the page it opens (React ViewTransition)
+  desk/OpeningDeck.tsx  The deck a set or guide page shows while it loads, so the morph has somewhere to land
   desk/SlipMenu.tsx     A word that fans out paper slips to choose from ("Make me [10] [medium] [flashcards]")
   make/NotesSheet.tsx   One sheet for a file, notes, a link or a topic; says what it found
   make/MakeCard.tsx     The "Make me 10 medium flashcards" card and Make my deck
@@ -168,6 +173,7 @@ lib/
   answer-check.ts       Checking typed answers (capitals, accents, one typo), shared by the study screen and server
   sets.ts               Study sets scoped to their owner; saving edited cards (server-only)
   history.ts            History: adding each generated guide, marking one saved (server-only)
+  library.ts            The library's tags: each deck's best score, short dates ("Today", "Oct 29")
   ids.ts                isUuid() and newId(), shared by server and client
   classes.ts            Class logic, always scoped to the acting teacher (server-only)
   classes-shared.ts     Class name, join-code and student-name rules shared by server and client

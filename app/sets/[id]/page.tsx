@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
 import StudyViewer, { type StudyResult } from '@/components/StudyViewer';
+import OpeningDeck from '@/components/desk/OpeningDeck';
 import { newId } from '@/lib/ids';
 import CardEditor, { type CardPayload, type SaveResult } from '@/components/CardEditor';
 import { apiFetch, errorMessage } from '@/lib/api-client';
@@ -235,9 +236,8 @@ export default function SetPage() {
     }
   };
 
-  if (loading) {
-    return <main className="min-h-screen flex items-center justify-center">Loading...</main>;
-  }
+  // A deck picked up in My Sets or My Classes morphs into this while it loads.
+  if (loading) return <OpeningDeck morph={`deck-${params.id}`} />;
 
   if (notFound || !set) {
     return <main className="min-h-screen flex items-center justify-center">Set not found.</main>;

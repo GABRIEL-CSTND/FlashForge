@@ -2,8 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import LibraryDeck, { DESK_TEXT_BUTTON } from '@/components/desk/LibraryDeck';
+import LibraryDesk, { DeskNote } from '@/components/desk/LibraryDesk';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
+import { apiFetch, errorMessage } from '@/lib/api-client';
+import { questionsWord, shortDate } from '@/lib/library';
 import { STUDY_TYPE_LABELS, toStudyType } from '@/lib/study-types';
 
 // Every study guide the user made while signed in, saved or not (lib/history.ts).
@@ -18,6 +22,14 @@ interface HistoryEntry {
   created_at: string;
 }
 
+type Notice = { kind: 'success' | 'error'; text: string } | null;
+
+const TIP = 'Every guide you make lands here, saved or not. Save the ones you want to keep.';
+const SAVE_FAILED = "Couldn't save it. Please try again.";
+
+// History on the desk (desk redesign, phase 5): every guide is a deck whose tag
+// says when it was made and whether it's saved. One that isn't can be saved to
+// My Sets from here; picking a deck up opens it on /history/[id].
 export default function HistoryPage() {
   const { user, loading: userLoading } = useUser();
   const userId = user?.id;
@@ -25,6 +37,8 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -65,81 +79,116 @@ export default function HistoryPage() {
     setEntries((prev) => prev.filter((e) => e.id !== entry.id));
   };
 
+  // The same save as on the guide's own page (/history/[id]): the guide's cards
+  // go to /api/save-set with its History entry, which then points at the set.
+  const handleSave = async (entry: HistoryEntry) => {
+    setSavingId(entry.id);
+    setNotice(null);
+    try {
+      const { data, error } = await supabase
+        .from('guide_history')
+        .select('title, study_type, source_filename, items')
+        .eq('id', entry.id)
+        .maybeSingle();
+      const guide = data as { title: string; study_type: string; source_filename: string | null; items: unknown[] } | null;
+      if (error || !guide) {
+        setNotice({ kind: 'error', text: SAVE_FAILED });
+        return;
+      }
+      const res = await apiFetch('/api/save-set', {
+        method: 'POST',
+        body: { title: guide.title, sourceFilename: guide.source_filename, studyType: guide.study_type, items: guide.items, historyId: entry.id },
+      });
+      if (!res.ok) {
+        setNotice({ kind: 'error', text: errorMessage(res.data, SAVE_FAILED) });
+        return;
+      }
+      setEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, set_id: res.data.id as string } : e)));
+      setNotice({ kind: 'success', text: `Saved ${entry.title} to My Sets.` });
+    } catch {
+      setNotice({ kind: 'error', text: 'Could not reach the server. Check your connection and try again.' });
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   if (userLoading || (user && loading)) {
-    return <main className="min-h-screen flex items-center justify-center">Loading...</main>;
+    return (
+      <LibraryDesk title="History">
+        <p role="status" className="text-on-desk/85">
+          Loading your guides…
+        </p>
+      </LibraryDesk>
+    );
   }
 
   if (!user) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
-        <p className="text-gray-500">Sign in to see the study guides you&apos;ve made.</p>
-        <Link href="/" className="text-link hover:underline">
-          ← Back to upload
-        </Link>
-      </main>
+      <LibraryDesk title="History">
+        <DeskNote>
+          <p>Sign in to see the study guides you&apos;ve made.</p>
+          <Link href="/" className="mt-2 inline-block font-semibold text-link hover:underline">
+            Make a deck
+          </Link>
+        </DeskNote>
+      </LibraryDesk>
     );
   }
 
   return (
-    // w-full: the body is a flex column, so without it a long title would
-    // widen the page past a phone screen instead of truncating.
-    <main className="min-h-screen w-full p-6 max-w-md mx-auto space-y-6">
-      <div className="space-y-1">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold">History</h1>
-          <Link href="/" className="text-sm text-link hover:underline">
-            + New study guide
-          </Link>
-        </div>
-        <p className="text-sm text-gray-500">
-          Every study guide you&apos;ve made while signed in, saved or not. The ones you saved are also in{' '}
-          <Link href="/my-sets" className="text-link hover:underline">
-            My Sets
-          </Link>
-          .
+    <LibraryDesk title="History" subline="Every guide you've made, saved or not." tip={TIP}>
+      {notice && (
+        <p role={notice.kind === 'error' ? 'alert' : 'status'} className={`mb-6 text-sm font-medium ${notice.kind === 'error' ? 'text-[#efb2a8]' : 'text-[#e2c887]'}`}>
+          {notice.text}
         </p>
-      </div>
-
+      )}
       {loadFailed ? (
-        <p role="alert" className="text-sm text-red-500">
-          Couldn&apos;t load your history. Please try again.
-        </p>
+        <DeskNote role="alert">Couldn&apos;t load your history. Please try again.</DeskNote>
       ) : entries.length === 0 ? (
-        <div className="border rounded-lg p-6 text-center text-gray-500">
-          No study guides yet. The ones you make while signed in will show up here.
-        </div>
+        <DeskNote>No study guides yet. The ones you make while signed in will show up here.</DeskNote>
       ) : (
-        <ul className="space-y-2" aria-label="Your study guides">
-          {entries.map((e) => (
-            <li
+        <ul aria-label="Your study guides" className="grid gap-x-10 gap-y-12 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
+          {entries.map((e, i) => (
+            <LibraryDeck
               key={e.id}
-              className="flex items-center justify-between border rounded-lg p-4 hover:border-accent transition-colors"
-            >
-              <Link href={`/history/${e.id}`} className="flex-1 min-w-0">
-                <p className="font-medium truncate">{e.title}</p>
-                <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-400">
-                  <span>
-                    {STUDY_TYPE_LABELS[toStudyType(e.study_type)]} · {e.item_count}{' '}
-                    {e.item_count === 1 ? 'question' : 'questions'} ·{' '}
-                    {new Date(e.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
-                  </span>
-                  {e.set_id && (
-                    <span className="rounded bg-green-500/10 px-1.5 py-0.5 font-medium text-green-600">Saved</span>
+              index={i}
+              href={`/history/${e.id}`}
+              morph={`deck-h-${e.id}`}
+              kind={STUDY_TYPE_LABELS[toStudyType(e.study_type)]}
+              title={e.title}
+              meta={questionsWord(e.item_count)}
+              tag={
+                e.set_id
+                  ? { text: `${shortDate(e.created_at)} · saved`, tone: 'ink' }
+                  : { text: `${shortDate(e.created_at)} · not saved`, tone: 'pencil' }
+              }
+              actions={
+                <>
+                  {!e.set_id && (
+                    <button
+                      type="button"
+                      onClick={() => handleSave(e)}
+                      disabled={savingId !== null}
+                      className="btn btn-primary min-h-11 rounded-full px-4 text-[13px] font-semibold"
+                    >
+                      {savingId === e.id ? 'Saving…' : 'Save to My Sets'}
+                    </button>
                   )}
-                </p>
-              </Link>
-              <button
-                onClick={() => handleRemove(e)}
-                disabled={removingId === e.id}
-                aria-label={`Remove ${e.title} from history`}
-                className="text-red-500 text-sm hover:underline disabled:opacity-40 ml-3 shrink-0"
-              >
-                {removingId === e.id ? '...' : '🗑'}
-              </button>
-            </li>
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(e)}
+                    disabled={removingId === e.id}
+                    aria-label={`Remove ${e.title} from history`}
+                    className={DESK_TEXT_BUTTON}
+                  >
+                    {removingId === e.id ? 'Removing…' : 'Remove'}
+                  </button>
+                </>
+              }
+            />
           ))}
         </ul>
       )}
-    </main>
+    </LibraryDesk>
   );
 }

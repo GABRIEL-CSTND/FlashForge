@@ -128,9 +128,9 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
   long (`truncate`) add `w-full` to it, or a long title makes the page wider than a phone
   screen instead of shortening with "…". Pages built to fill the window (`min-h-screen`)
   only fill the sheet (`.desk-sheet .min-h-screen` in `globals.css`).
-- Studying flashcards (phase 2), making a deck (phase 3) and taking quizzes (phase 4)
-  happen on the desk itself (below). Later phases do the same for the library, the
-  teacher pages, then admin and cleanup.
+- Studying flashcards (phase 2), making a deck (phase 3), taking quizzes (phase 4) and the
+  library (phase 5: My Sets, History, My Classes) happen on the desk itself (below).
+  Later phases do the same for the teacher pages, then admin and cleanup.
 
 **Look and feel:**
 - **Fonts:** Instrument Sans for the app (`--font-sans`, set on the body), Fraunces for
@@ -249,6 +249,42 @@ layout hook (`useDeskLayout`), so it reads the same way on a laptop and a phone.
   part's card (*Part 2. True or false. 3 questions.*).
 - **Scoring is unchanged:** the first time through, each answer is reported in the
   quiz's order (`reportAnswer()`), and the server scores it in `lib/attempts.ts`.
+
+### The library on the desk (desk redesign, phase 5)
+
+My Sets (`app/my-sets/page.tsx`), History (`app/history/page.tsx`) and My Classes
+(`app/classes/page.tsx`) lay their decks out on the leather, following `Desk-Printed-Library`
+on the design canvas. They share `components/desk/LibraryDesk.tsx` (the page's name and a line
+on the leather, a sticky note with a tip on a laptop, and `DeskNote` for signed-out, empty
+and failed states) and `LibraryDeck.tsx`.
+
+- **A deck** is a stack of paper cards: its study type, title and one line on top, and a
+  paper tag (`components/desk/PaperTag.tsx`) tied to its corner. The whole deck is the link
+  that picks it up, named *Pick up <title>, <kind>, <line>. <tag>*; the tag sits inside the
+  link, so it's read with it. Buttons for the deck (Delete, Save to My Sets, Remove) lie on
+  the leather under it.
+- **My Sets:** each saved set, newest first, tagged with its best score (*Best 9 of 10*,
+  from the user's own attempts, `bestByDeck()` in `lib/library.ts`) or *Not studied yet*.
+  The last place is the dashed outline of a **New deck**, which goes to `/`. **Delete** asks
+  first, as before.
+- **History:** each guide's tag says when it was made and whether it's saved (*Today ·
+  saved*, *Oct 29 · not saved* in red pencil). See "History" below for saving and removing.
+- **My Classes:** each class is a tray in the leather with its name and teacher on a paper
+  label and **Leave** beside it. Its assignments are decks tagged *Due Fri, Nov 7, 5:00 PM*
+  (brass), *Overdue · was due Nov 2* (red), *Done · best 8/10* or *No due date*. The **Join
+  a class** card sits beside the trays on a laptop and under them on a phone. *Your classes
+  (N)* stays as a heading for screen readers only.
+- **Picking up a deck** morphs it into the page it opens, with React's `<ViewTransition>`
+  (`components/desk/DeckMorph.tsx`): the deck and the next page's opening deck carry the same
+  name (`deck-<set id>`, or `deck-h-<entry id>` from History). `/sets/[id]` and `/history/[id]`
+  show that opening deck (`components/desk/OpeningDeck.tsx`) while their cards load, so the
+  morph has somewhere to land. `ViewTransition` is only in the canary React the App Router
+  runs, not in the `react` package the tests use, so `DeckMorph` looks it up and shows the
+  deck as it is without it. Names must be unique on a page, so a set assigned in two classes
+  morphs from its first tray only. With `prefers-reduced-motion` there's no morph.
+- **Layout:** a grid of decks about 220 to 258 px wide, as many columns as fit: four or
+  five on a laptop, one on a phone. Dates are worded in the viewer's own time zone
+  (`shortDate()`): *Today*, *Yesterday*, *Oct 29*, or *Oct 29, 2025* in another year.
 
 ## 1. Generating a study guide
 
@@ -531,9 +567,11 @@ layout hook (`useDeskLayout`), so it reads the same way on a laptop and a phone.
 - **Saved or not:** `/api/save-set` takes an optional `historyId` and sets that entry's
   `set_id` to the new set (`markSaved()`, only for the caller's own entry). If the set
   is deleted later, `set_id` goes back to null and the guide shows as not saved again.
-- **`/history`** lists the user's entries, newest first: title, study type, number of
-  questions, date and time, and a *Saved* badge. 🗑 removes one after asking; the warning
-  says whether it was saved (the set stays in My Sets) or will be gone for good.
+- **`/history`** lays the user's entries out as decks, newest first (see "The library on
+  the desk" above): study type, title, number of questions, and a tag with the day and
+  *saved* or *not saved*. An unsaved one has **Save to My Sets**, the same save as on its
+  own page. **Remove** takes one off after asking; the warning says whether it was saved
+  (the set stays in My Sets) or will be gone for good.
 - **`/history/[id]`** opens one entry in `StudyViewer` to study again. An unsaved
   guide has **💾 Save to My Sets**, which saves it with its `historyId` and opens the
   new set; a saved one links to its set instead. Exit and Done go back to History.
@@ -664,8 +702,8 @@ layout hook (`useDeskLayout`), so it reads the same way on a laptop and a phone.
 - **Recent scores:** after saving, the finish screen lists the student's last 10 results
   on that set (`GET /api/attempts`).
 - **Done / not done:** `GET /api/student/classes` adds `myProgress` (number of attempts,
-  best score, last finish) to each assignment, and My classes shows **Done · best 8/10**
-  in place of the Overdue badge. Finishing after the due date still counts as done.
+  best score, last finish) to each assignment, and My classes tags that deck **Done · best
+  8/10** in place of Overdue. Finishing after the due date still counts as done.
 - **Who can read attempts (RLS):** the student, and the class's teacher only for attempts
   made from that class's assignment, and only while the student is still in the class.
   Private study is never visible to teachers, and unassigning a set keeps the attempts
@@ -995,7 +1033,7 @@ transaction. Run them after every database change.
     Right / Wrong piles, the Wrong pile again, part cards and focus), `CardEditor`,
     `AssignPanel`, the desk's card box and library card (the tabs each role gets, signing
     in and out), `PaperCard`, the desk layout at four widths, the
-    set page, the History pages and the teacher and student pages, in jsdom with React Testing Library.
+    set page, My Sets (its decks, best scores, delete), the History pages (saving from a deck too) and the teacher and student pages, in jsdom with React Testing Library.
     Component tests start with `// @vitest-environment jsdom`.
 - `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and
   classes. Each prints expected vs. actual (10, 10 and 21 cases).

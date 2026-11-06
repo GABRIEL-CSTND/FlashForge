@@ -73,9 +73,9 @@ async function joinWith(code: string) {
   fireEvent.change(codeInput(), { target: { value: code } });
   fireEvent.click(screen.getByRole('button', { name: 'Join' }));
 }
-// Top-level class cards only (each class card also contains its assignments list).
+// The class trays only (each tray also holds its list of assigned decks).
 const classItems = () => [...document.querySelectorAll('section[aria-labelledby="classes-heading"] > ul > li')] as HTMLElement[];
-const classNames = () => classItems().map((li) => li.querySelector('p.font-medium')!.textContent);
+const classNames = () => classItems().map((li) => li.getAttribute('aria-label'));
 
 describe('my classes page', () => {
   it('lists the student\'s classes with the teacher\'s name', async () => {

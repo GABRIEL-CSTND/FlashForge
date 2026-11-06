@@ -9,6 +9,26 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
 it's ready. It changes how the app looks, not how it works.
 
 ### Changed
+- **The library is on the desk** (phase 5, 2026-11-06): My Sets, History and My Classes lay
+  their sets out as decks on the leather, each with a paper tag, as in the canvas's
+  `Desk-Printed-Library`.
+  - **My Sets** tags each deck with its best score (*Best 9 of 10*) or *Not studied yet*,
+    and ends with a **New deck** outline. Delete is a word under the deck instead of 🗑.
+  - **History** tags each guide with its day and *saved* or *not saved*, and an unsaved one
+    can be saved with **Save to My Sets** right there. Remove replaces 🗑 (same name for
+    screen readers: *Remove <title> from history*).
+  - **My Classes** puts each class in a tray with its name and teacher on a label, and its
+    assignments as decks tagged with the due date, *Overdue*, or *Done · best 8/10*. Join a
+    class is a paper card beside the trays. The "+ New set" and "My Sets" links are gone:
+    the card box has the tabs.
+  - Picking up a deck morphs it into the set or guide it opens (React `<ViewTransition>`,
+    where the browser supports it), through a new *Opening the deck…* state on `/sets/[id]`
+    and `/history/[id]`.
+  - New in `components/desk/`: `LibraryDesk`, `LibraryDeck`, `PaperTag`, `DeckMorph`,
+    `OpeningDeck`; helpers in `lib/library.ts`. The old lint error in `app/my-sets/page.tsx`
+    is fixed, so lint shows 2 known errors now.
+  - Tests: a new My Sets page test, saving from History, the library helpers, and the
+    class and History tests updated for the decks: 845 in all.
 - **Quizzes are taken on the desk** (phase 4, 2026-11-05): multiple choice, true or
   false and mixed quizzes use the same desk as flashcards: the deck on the left, the
   question card in the middle, and **Right** and **Wrong** piles on the right (trays on a

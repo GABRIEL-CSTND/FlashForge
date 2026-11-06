@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
 import StudyViewer, { type StudyItem } from '@/components/StudyViewer';
+import OpeningDeck from '@/components/desk/OpeningDeck';
 import { apiFetch, errorMessage } from '@/lib/api-client';
 import { isUuid } from '@/lib/ids';
 import { quoteSourceLabel } from '@/lib/sources';
@@ -80,9 +81,8 @@ export default function HistoryGuidePage() {
     }
   };
 
-  if (userLoading || (user && validId && loading)) {
-    return <main className="min-h-screen flex items-center justify-center">Loading...</main>;
-  }
+  // A deck picked up in History morphs into this while it loads.
+  if (userLoading || (user && validId && loading)) return <OpeningDeck morph={`deck-h-${params.id}`} />;
 
   if (!user) {
     return (
