@@ -272,7 +272,7 @@ export default function SetPage() {
             className="w-full max-w-xs text-center px-3 py-1.5 rounded-lg border text-sm"
             placeholder="Study guide name"
           />
-          {titleError && <p className="text-xs text-red-500">{titleError}</p>}
+          {titleError && <p className="text-xs text-pencil">{titleError}</p>}
           <div className="flex gap-3 text-sm">
             <button
               onClick={saveTitle}
@@ -284,7 +284,7 @@ export default function SetPage() {
             <button
               onClick={cancelEditingTitle}
               disabled={savingTitle}
-              className="text-gray-500 hover:underline disabled:opacity-40"
+              className="text-muted hover:underline disabled:opacity-40"
             >
               Cancel
             </button>
@@ -295,16 +295,16 @@ export default function SetPage() {
           {/* Edit cards is the pencil on the study screen (onEdit below). */}
           <button
             onClick={startEditingTitle}
-            className="text-sm text-gray-500 hover:underline"
+            className="text-sm text-muted hover:underline"
           >
             Rename this set
           </button>
           {canUseTeacherTools(profile?.role) && (
             <button
               onClick={() => setAssigning(true)}
-              className="text-sm text-gray-500 hover:underline"
+              className="text-sm text-muted hover:underline"
             >
-              📌 Assign to class
+              Assign to class
             </button>
           )}
         </div>
@@ -313,9 +313,9 @@ export default function SetPage() {
         <button
           onClick={handleDelete}
           disabled={deleting}
-          className="text-sm text-red-500 hover:underline disabled:opacity-40"
+          className="text-sm text-pencil hover:underline disabled:opacity-40"
         >
-          {deleting ? 'Deleting...' : '🗑 Delete this set'}
+          {deleting ? 'Deleting...' : 'Delete this set'}
         </button>
       </div>
     </div>
@@ -332,7 +332,7 @@ export default function SetPage() {
         <p
           role={saveState.status === 'error' ? 'alert' : 'status'}
           className={
-            saveState.status === 'error' ? 'text-red-500' : saveState.status === 'saved' ? 'text-green-600' : 'text-gray-500'
+            saveState.status === 'error' ? 'text-pencil' : saveState.status === 'saved' ? 'text-green-800' : 'text-muted'
           }
         >
           {saveState.status === 'signed-out' && 'Sign in to save your scores.'}
@@ -345,11 +345,11 @@ export default function SetPage() {
         </p>
         {history.length > 0 && (
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-wide text-gray-400">Your recent scores</p>
+            <p className="text-xs uppercase tracking-wide text-muted">Your recent scores</p>
             <ul className="space-y-1" aria-label="Your recent scores">
               {history.map((a) => (
                 <li key={a.id} className="flex justify-between gap-3">
-                  <span className="text-gray-500">{new Date(a.completedAt).toLocaleString()}</span>
+                  <span className="text-muted">{new Date(a.completedAt).toLocaleString()}</span>
                   <span className="font-medium">{scoreLabel(a)}</span>
                 </li>
               ))}

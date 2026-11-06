@@ -108,14 +108,14 @@ describe('study set page', () => {
   it.each([['teacher'], ['admin']])('offers a %s who owns the set "Assign to class"', async (role) => {
     state.role = role;
     render(<SetPage />);
-    fireEvent.click(await screen.findByRole('button', { name: '📌 Assign to class' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Assign to class' }));
     expect(screen.getByRole('dialog').textContent).toBe('Assign Photosynthesis');
   });
 
   it('does not offer "Assign to class" to a student who owns the set', async () => {
     render(<SetPage />);
     await screen.findByRole('button', { name: 'Edit cards' });
-    expect(screen.queryByRole('button', { name: '📌 Assign to class' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Assign to class' })).toBeNull();
   });
 
   it.each([
@@ -128,7 +128,7 @@ describe('study set page', () => {
     await screen.findByText('Pigment that absorbs light');
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Edit cards' })).toBeNull());
     expect(screen.queryByRole('button', { name: 'Rename this set' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '📌 Assign to class' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Assign to class' })).toBeNull();
   });
 });
 

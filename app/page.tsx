@@ -304,7 +304,7 @@ export default function UploadPage() {
           <p className="text-sm text-green-800 font-medium">Saved ✓</p>
         ) : saveStatus === 'needs-auth' ? (
           <div className="space-y-2">
-            <p className="text-sm text-amber-800">Sign in to save this study guide.</p>
+            <p className="text-sm text-brass-ink">Sign in to save this study guide.</p>
             <button
               onClick={() => {
                 sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(result));
@@ -321,7 +321,7 @@ export default function UploadPage() {
             disabled={saveStatus === 'saving'}
             className="text-sm border rounded-lg px-4 py-2 font-medium hover:border-accent disabled:opacity-40"
           >
-            {saveStatus === 'saving' ? 'Saving...' : '💾 Save this study guide'}
+            {saveStatus === 'saving' ? 'Saving...' : 'Save this study guide'}
           </button>
         )}
         {saveStatus === 'error' && <p className="text-xs text-pencil">Failed to save. Try again.</p>}

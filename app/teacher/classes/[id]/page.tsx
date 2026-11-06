@@ -91,19 +91,26 @@ function ClassView({ id }: { id: string }) {
     };
   }, [id]);
 
+  // The same desk as the loaded class, so the paper sheet doesn't flash first.
   if (state.status === 'loading') {
-    return <main className="min-h-screen flex items-center justify-center">Loading...</main>;
+    return (
+      <main className="on-desk w-full py-16">
+        <p className="text-on-desk/85">Loading...</p>
+      </main>
+    );
   }
 
   if (state.status === 'not-found' || state.status === 'error') {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
-        <p className={state.status === 'error' ? 'text-red-500' : 'text-gray-500'}>
-          {state.status === 'error' ? state.message : 'Class not found.'}
-        </p>
-        <Link href="/teacher" className="text-link hover:underline">
-          ← All classes
-        </Link>
+      <main className="on-desk w-full py-10">
+        <DeskNote>
+          <p className={state.status === 'error' ? 'text-pencil' : 'text-ink'}>
+            {state.status === 'error' ? state.message : 'Class not found.'}
+          </p>
+          <Link href="/teacher" className="mt-2 inline-block font-semibold text-link hover:underline">
+            ← All classes
+          </Link>
+        </DeskNote>
       </main>
     );
   }

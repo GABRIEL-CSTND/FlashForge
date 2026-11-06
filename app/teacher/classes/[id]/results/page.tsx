@@ -248,7 +248,7 @@ function ResultsView({ id }: { id: string }) {
 function ResultCell({ result, overdue }: { result: ResultSummary | undefined; overdue: boolean }) {
   if (!result?.best) {
     return (
-      <span className={overdue ? 'text-red-500' : 'text-muted'}>
+      <span className={overdue ? 'text-pencil' : 'text-muted'}>
         Not started
         {overdue && <span className="block text-xs">Past due</span>}
       </span>
@@ -267,7 +267,7 @@ function ResultCell({ result, overdue }: { result: ResultSummary | undefined; ov
       <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
         {result.attemptCount} {result.attemptCount === 1 ? 'attempt' : 'attempts'}
         {result.status === 'late' && (
-          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-600">Late</span>
+          <span className="rounded bg-brass/15 px-1.5 py-0.5 font-medium text-brass-ink">Late</span>
         )}
       </span>
     </span>

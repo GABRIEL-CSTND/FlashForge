@@ -94,7 +94,7 @@ function UsersView() {
   return (
     // w-full: the body is a flex column (see the class results page).
     <main className="min-h-screen w-full p-6 max-w-2xl mx-auto space-y-6">
-      <Link href="/admin" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
+      <Link href="/admin" className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
         ← Admin
       </Link>
       <h1 className="text-xl font-semibold">Users and roles</h1>
@@ -124,19 +124,19 @@ function UsersView() {
       </form>
 
       {message && (
-        <p role={message.kind === 'error' ? 'alert' : 'status'} className={`text-sm ${message.kind === 'error' ? 'text-red-500' : 'text-green-600'}`}>
+        <p role={message.kind === 'error' ? 'alert' : 'status'} className={`text-sm ${message.kind === 'error' ? 'text-pencil' : 'text-green-800'}`}>
           {message.text}
         </p>
       )}
 
-      {state.status === 'loading' && <p className="text-sm text-gray-500">Loading users...</p>}
+      {state.status === 'loading' && <p className="text-sm text-muted">Loading users...</p>}
       {state.status === 'error' && (
-        <p role="alert" className="text-sm text-red-500">
+        <p role="alert" className="text-sm text-pencil">
           {state.message}
         </p>
       )}
       {state.status === 'ready' && state.users.length === 0 && (
-        <div className="rounded-lg border p-6 text-center text-sm text-gray-500">No users match that search.</div>
+        <div className="rounded-lg border p-6 text-center text-sm text-muted">No users match that search.</div>
       )}
       {state.status === 'ready' && state.users.length > 0 && (
         <ul aria-label="Users" className="divide-y rounded-lg border">
@@ -145,9 +145,9 @@ function UsersView() {
               <div className="min-w-0">
                 <p className="truncate font-medium">
                   {studentLabel(u)}
-                  {u.id === user?.id && <span className="ml-1 text-xs font-normal text-gray-400">(you)</span>}
+                  {u.id === user?.id && <span className="ml-1 text-xs font-normal text-muted">(you)</span>}
                 </p>
-                <p className="truncate text-xs text-gray-400">
+                <p className="truncate text-xs text-muted">
                   {u.displayName && u.email ? `${u.email} · ` : ''}
                   Joined {new Date(u.signedUpAt).toLocaleDateString()} · {u.setCount} set{u.setCount === 1 ? '' : 's'}
                 </p>

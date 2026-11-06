@@ -83,13 +83,13 @@ function UsageView() {
   if (state.status !== 'ready') {
     return (
       <main className="min-h-screen w-full p-6 max-w-2xl mx-auto space-y-6">
-        <Link href="/admin" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
+        <Link href="/admin" className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
           ← Admin
         </Link>
         {state.status === 'loading' ? (
-          <p className="text-sm text-gray-500">Loading usage...</p>
+          <p className="text-sm text-muted">Loading usage...</p>
         ) : (
-          <p role="alert" className="text-sm text-red-500">
+          <p role="alert" className="text-sm text-pencil">
             {state.message}
           </p>
         )}
@@ -108,7 +108,7 @@ function UsageView() {
   return (
     // w-full: the body is a flex column (see the class results page).
     <main className="min-h-screen w-full p-6 max-w-2xl mx-auto space-y-6">
-      <Link href="/admin" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
+      <Link href="/admin" className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
         ← Admin
       </Link>
       <h1 className="text-xl font-semibold">AI usage</h1>
@@ -118,7 +118,7 @@ function UsageView() {
           <h2 id="today-heading" className="font-medium">
             Today
           </h2>
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-muted">
             Days run midnight to midnight Pacific time, when the free Gemini quota resets. Requests include retries
             and backups.
           </p>
@@ -132,16 +132,16 @@ function UsageView() {
               <li key={model} className="space-y-1">
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="min-w-0 truncate font-mono text-sm">{model}</span>
-                  <span className="shrink-0 text-xs text-gray-400">{i === 0 ? 'main' : 'backup'}</span>
+                  <span className="shrink-0 text-xs text-muted">{i === 0 ? 'main' : 'backup'}</span>
                 </div>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-muted">
                   {i === 0 ? `${requests} of about ${mainModelDailyQuota} requests` : plural(requests, 'request')} ·{' '}
                   {plural(guides, 'guide')} made
                 </p>
                 {i === 0 && (
-                  <div className="h-1.5 rounded-full bg-gray-500/15" aria-hidden="true">
+                  <div className="h-1.5 rounded-full bg-ink/10" aria-hidden="true">
                     <div
-                      className={`h-1.5 rounded-full ${share >= 100 ? 'bg-red-500' : share >= 75 ? 'bg-amber-500' : 'bg-green-500'}`}
+                      className={`h-1.5 rounded-full ${share >= 100 ? 'bg-pencil' : share >= 75 ? 'bg-brass' : 'bg-green-700'}`}
                       style={{ width: `${share}%` }}
                     />
                   </div>
@@ -151,10 +151,10 @@ function UsageView() {
           })}
         </ul>
         {todayRow && todayRow.failures > 0 && (
-          <p className="text-sm text-red-500">{plural(todayRow.failures, 'generation')} failed today.</p>
+          <p className="text-sm text-pencil">{plural(todayRow.failures, 'generation')} failed today.</p>
         )}
         {todayRow && todayRow.limited > 0 && (
-          <p className="text-sm text-amber-600">{plural(todayRow.limited, 'request')} refused by the daily limits today.</p>
+          <p className="text-sm text-brass-ink">{plural(todayRow.limited, 'request')} refused by the daily limits today.</p>
         )}
       </section>
 
@@ -165,10 +165,10 @@ function UsageView() {
           Last {periodDays} days
         </h2>
         {days.length === 0 ? (
-          <div className="rounded-lg border p-6 text-center text-sm text-gray-500">No study guides generated yet.</div>
+          <div className="rounded-lg border p-6 text-center text-sm text-muted">No study guides generated yet.</div>
         ) : (
           <>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-muted">
               {plural(total, 'guide')} · {Math.round((failed / total) * 100)}% failed · average wait {seconds(averageMs)} ·{' '}
               {signedOut} signed out
               {limited > 0 && ` · ${limited} refused by limits`}
@@ -177,7 +177,7 @@ function UsageView() {
               <table className="w-full text-sm">
                 <caption className="sr-only">Study guides generated per day</caption>
                 <thead>
-                  <tr className="border-b text-left text-xs whitespace-nowrap text-gray-400">
+                  <tr className="border-b text-left text-xs whitespace-nowrap text-muted">
                     <th scope="col" className="px-3 py-2 font-medium">Day</th>
                     <th scope="col" className="px-3 py-2 font-medium">Guides</th>
                     <th scope="col" className="px-3 py-2 font-medium">Failed</th>
@@ -192,9 +192,9 @@ function UsageView() {
                         {formatDay(d.day)}
                       </th>
                       <td className="px-3 py-2">{d.generations}</td>
-                      <td className={`px-3 py-2 ${d.failures > 0 ? 'text-red-500' : ''}`}>{d.failures}</td>
+                      <td className={`px-3 py-2 ${d.failures > 0 ? 'text-pencil' : ''}`}>{d.failures}</td>
                       <td className="px-3 py-2">{seconds(d.avgMs)}</td>
-                      <td className="px-3 py-2 text-xs text-gray-500">
+                      <td className="px-3 py-2 text-xs text-muted">
                         {/* One model per line, never broken mid-name (it scrolls on phones). */}
                         {models.some((m) => d.answered[m])
                           ? models
@@ -220,16 +220,16 @@ function UsageView() {
           Top users
         </h2>
         {topUsers.length === 0 ? (
-          <p className="text-sm text-gray-500">No signed-in generations in the last {periodDays} days.</p>
+          <p className="text-sm text-muted">No signed-in generations in the last {periodDays} days.</p>
         ) : (
           <ol aria-label="Top users" className="divide-y rounded-lg border">
             {topUsers.map((u) => (
               <li key={u.id} className="flex items-center justify-between gap-3 p-3">
                 <div className="min-w-0">
                   <p className="truncate font-medium">{studentLabel(u)}</p>
-                  <p className="text-xs capitalize text-gray-400">{u.role}</p>
+                  <p className="text-xs capitalize text-muted">{u.role}</p>
                 </div>
-                <span className="shrink-0 text-sm text-gray-500">
+                <span className="shrink-0 text-sm text-muted">
                   {plural(u.generations, 'guide')}
                   {u.failures > 0 && ` · ${u.failures} failed`}
                 </span>
@@ -288,7 +288,7 @@ function LimitsEditor({ initial }: { initial: GenerationLimits | null }) {
         <h2 id="limits-heading" className="font-medium">
           Daily limits
         </h2>
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-muted">
           Study guides each person can make per day (signed-out visitors are counted per IP address). Leave a box empty
           for no limit. Anyone can choose &quot;teacher&quot; at sign-up, so keep that limit modest.
         </p>
@@ -325,7 +325,7 @@ function LimitsEditor({ initial }: { initial: GenerationLimits | null }) {
           {message && (
             <p
               role={message.kind === 'error' ? 'alert' : 'status'}
-              className={`text-sm ${message.kind === 'error' ? 'text-red-500' : 'text-green-600'}`}
+              className={`text-sm ${message.kind === 'error' ? 'text-pencil' : 'text-green-800'}`}
             >
               {message.text}
             </p>

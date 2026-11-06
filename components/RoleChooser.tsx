@@ -82,7 +82,7 @@ export default function RoleChooser() {
           <h2 id="role-chooser-title" className="text-xl font-semibold">
             Welcome to FlashForge!
           </h2>
-          <p className="text-sm text-gray-500">Are you a student or a teacher?</p>
+          <p className="text-sm text-muted">Are you a student or a teacher?</p>
         </div>
 
         <fieldset className="space-y-2" disabled={submitting}>
@@ -105,17 +105,17 @@ export default function RoleChooser() {
                 className="sr-only"
               />
               <span className="block font-medium">{opt.title}</span>
-              <span className="mt-1 block text-sm text-gray-500">{opt.description}</span>
+              <span className="mt-1 block text-sm text-muted">{opt.description}</span>
             </label>
           ))}
         </fieldset>
 
-        <p className="text-center text-xs text-gray-400">
+        <p className="text-center text-xs text-muted">
           You can only choose once. If you pick the wrong one, ask an admin to change it.
         </p>
 
         {error && (
-          <p role="alert" className="text-center text-sm text-red-500">
+          <p role="alert" className="text-center text-sm text-pencil">
             {error}
           </p>
         )}
@@ -129,9 +129,9 @@ export default function RoleChooser() {
           {submitting ? 'Saving...' : 'Continue'}
         </button>
 
-        <p className="text-center text-xs text-gray-400">
+        <p className="text-center text-xs text-muted">
           Wrong account?{' '}
-          <button type="button" onClick={() => signOut()} className="underline hover:text-gray-600">
+          <button type="button" onClick={() => signOut()} className="underline hover:text-ink">
             Sign out
           </button>
         </p>

@@ -96,7 +96,7 @@ function SetsView() {
   return (
     // w-full: the body is a flex column (see the class results page).
     <main className="min-h-screen w-full p-6 max-w-2xl mx-auto space-y-6">
-      <Link href="/admin" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
+      <Link href="/admin" className="inline-flex items-center gap-1 text-sm text-muted hover:text-ink">
         ← Admin
       </Link>
       <h1 className="text-xl font-semibold">Study sets</h1>
@@ -126,19 +126,19 @@ function SetsView() {
       </form>
 
       {message && (
-        <p role={message.kind === 'error' ? 'alert' : 'status'} className={`text-sm ${message.kind === 'error' ? 'text-red-500' : 'text-green-600'}`}>
+        <p role={message.kind === 'error' ? 'alert' : 'status'} className={`text-sm ${message.kind === 'error' ? 'text-pencil' : 'text-green-800'}`}>
           {message.text}
         </p>
       )}
 
-      {state.status === 'loading' && <p className="text-sm text-gray-500">Loading sets...</p>}
+      {state.status === 'loading' && <p className="text-sm text-muted">Loading sets...</p>}
       {state.status === 'error' && (
-        <p role="alert" className="text-sm text-red-500">
+        <p role="alert" className="text-sm text-pencil">
           {state.message}
         </p>
       )}
       {state.status === 'ready' && state.sets.length === 0 && (
-        <div className="rounded-lg border p-6 text-center text-sm text-gray-500">No sets match that search.</div>
+        <div className="rounded-lg border p-6 text-center text-sm text-muted">No sets match that search.</div>
       )}
       {state.status === 'ready' && state.sets.length > 0 && (
         <ul aria-label="Study sets" className="divide-y rounded-lg border">
@@ -148,13 +148,13 @@ function SetsView() {
                 <Link href={`/sets/${s.id}`} className="block truncate font-medium hover:underline">
                   {s.title}
                 </Link>
-                <p className="truncate text-xs text-gray-400">
+                <p className="truncate text-xs text-muted">
                   {ownerLabel(s)} · {new Date(s.createdAt).toLocaleDateString()} · {s.cardCount} card
                   {s.cardCount === 1 ? '' : 's'} · {STUDY_TYPE_LABELS[toStudyType(s.studyType)]}
                 </p>
                 {s.assignmentCount > 0 && (
                   <p className="mt-1 text-xs">
-                    <span className="rounded bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-600">
+                    <span className="rounded bg-brass/15 px-1.5 py-0.5 font-medium text-brass-ink">
                       Assigned to {s.assignmentCount} class{s.assignmentCount === 1 ? '' : 'es'}
                     </span>
                   </p>
@@ -165,7 +165,7 @@ function SetsView() {
                 onClick={() => remove(s)}
                 disabled={busyId !== null}
                 aria-label={`Delete ${s.title}`}
-                className="shrink-0 text-sm text-red-500 hover:underline disabled:opacity-40"
+                className="shrink-0 text-sm text-pencil hover:underline disabled:opacity-40"
               >
                 Delete
               </button>

@@ -87,7 +87,7 @@ export default function HistoryGuidePage() {
   if (!user) {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
-        <p className="text-gray-500">Sign in to see the study guides you&apos;ve made.</p>
+        <p className="text-muted">Sign in to see the study guides you&apos;ve made.</p>
         <Link href="/" className="text-link hover:underline">
           ← Back to upload
         </Link>
@@ -98,7 +98,7 @@ export default function HistoryGuidePage() {
   if (!guide) {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
-        <p className="text-gray-500">Study guide not found.</p>
+        <p className="text-muted">Study guide not found.</p>
         <Link href="/history" className="text-link hover:underline">
           ← Back to History
         </Link>
@@ -110,7 +110,7 @@ export default function HistoryGuidePage() {
   const saveSlot = (
     <div className="text-center space-y-2">
       {credit && /^https?:\/\//.test(credit.url) && (
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-muted">
           From{' '}
           <a href={credit.url} target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
             {credit.name}
@@ -119,7 +119,7 @@ export default function HistoryGuidePage() {
       )}
       {guide.set_id ? (
         <p className="text-sm">
-          <span className="text-green-600 font-medium">Saved ✓</span>{' '}
+          <span className="text-green-800 font-medium">Saved ✓</span>{' '}
           <Link href={`/sets/${guide.set_id}`} className="text-link hover:underline">
             Open it in My Sets
           </Link>
@@ -130,11 +130,11 @@ export default function HistoryGuidePage() {
           disabled={saveState.status === 'saving'}
           className="text-sm border rounded-lg px-4 py-2 font-medium hover:border-accent disabled:opacity-40"
         >
-          {saveState.status === 'saving' ? 'Saving...' : '💾 Save to My Sets'}
+          {saveState.status === 'saving' ? 'Saving...' : 'Save to My Sets'}
         </button>
       )}
       {saveState.status === 'error' && (
-        <p role="alert" className="text-xs text-red-500">
+        <p role="alert" className="text-xs text-pencil">
           {saveState.message}
         </p>
       )}

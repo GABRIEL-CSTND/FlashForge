@@ -130,7 +130,8 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
   only fill the sheet (`.desk-sheet .min-h-screen` in `globals.css`).
 - Studying flashcards (phase 2), making a deck (phase 3), taking quizzes (phase 4), the
   library (phase 5: My Sets, History, My Classes) and the teacher pages (phase 6) happen on
-  the desk itself (below). Phase 7 moves the admin pages onto the new look and cleans up.
+  the desk itself (below). Phase 7 put the admin pages, the role chooser and the card editor
+  on the desk's colors and removed the rest of the old look.
 
 **Look and feel:**
 - **Fonts:** Instrument Sans for the app (`--font-sans`, set on the body), Fraunces for
@@ -164,7 +165,10 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
   options use `border-accent bg-accent/10`; ones filled with the accent use
   `bg-accent text-ink`, because white text on brass is too faint to read. `.brass` gives
   the same brass look to things that aren't buttons, like the FlashForge plate.
-- Still to do: consistent loading, empty and error states, and icons instead of the emoji.
+- **No other palette:** Tailwind's gray, red and amber classes are gone (phase 7). Muted words
+  use `muted`, warnings and wrong answers `pencil`, "late" `brass-ink`; the one green left is
+  `green-800` (and a `green-700` bar) for right answers and saved states, which reads at 4.5:1
+  on paper. Buttons say what they do in words, not emoji (*Delete this set*, *Save to My Sets*).
 
 ### Studying flashcards on the desk (desk redesign, phase 2)
 
@@ -553,7 +557,7 @@ as the library (phase 5).
 
 ### Editing a saved study set (#55)
 
-- The set's owner sees **✏️ Edit cards** on `/sets/[id]`. `components/CardEditor.tsx`
+- The set's owner sees **Edit cards** (the pencil on the desk) on `/sets/[id]`. `components/CardEditor.tsx`
   lets them change questions and answers, delete cards, add cards (up to 50) and reorder
   them. For multiple choice they edit the 4 choices and pick the correct one with a radio
   button. Cancel asks first if anything changed.
@@ -596,7 +600,7 @@ as the library (phase 5).
   own page. **Remove** takes one off after asking; the warning says whether it was saved
   (the set stays in My Sets) or will be gone for good.
 - **`/history/[id]`** opens one entry in `StudyViewer` to study again. An unsaved
-  guide has **💾 Save to My Sets**, which saves it with its `historyId` and opens the
+  guide has **Save to My Sets**, which saves it with its `historyId` and opens the
   new set; a saved one links to its set instead. Exit and Done go back to History.
   Scores aren't recorded here, since attempts belong to saved sets (#57).
 - **Only the owner** can read or remove an entry (RLS); nobody else, teachers and admins
@@ -677,7 +681,7 @@ as the library (phase 5).
 
 ### Assigning sets to classes (#56)
 
-- On a set they own, teachers (and admins) get **📌 Assign to class**
+- On a set they own, teachers (and admins) get **Assign to class**
   (`components/AssignPanel.tsx`). It lists their classes, with ones that already have
   the set shown as assigned, and takes an optional due date. A set is assigned to a
   class at most once (unique `class_id, set_id`), so assigning again reports

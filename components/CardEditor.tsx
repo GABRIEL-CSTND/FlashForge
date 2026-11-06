@@ -164,7 +164,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
     <main className="min-h-screen p-6 max-w-2xl mx-auto space-y-6">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Edit cards</h1>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-muted">
           {drafts.length} card{drafts.length === 1 ? '' : 's'}
         </p>
       </div>
@@ -179,12 +179,12 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
             <li
               key={d.key}
               aria-label={label}
-              className={`space-y-3 rounded-xl border p-4 ${cardError ? 'border-red-500' : ''}`}
+              className={`space-y-3 rounded-xl border p-4 ${cardError ? 'border-pencil' : ''}`}
             >
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-medium">
                   {label}
-                  {isMixed && <span className="font-normal text-gray-400"> · {KIND_LABELS[d.kind]}</span>}
+                  {isMixed && <span className="font-normal text-muted"> · {KIND_LABELS[d.kind]}</span>}
                 </h2>
                 <div className="flex items-center gap-1 text-sm">
                   <button
@@ -192,7 +192,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
                     onClick={() => move(i, -1)}
                     disabled={i === 0 || saving}
                     aria-label={`Move ${label} up`}
-                    className="rounded px-2 py-1 hover:bg-gray-500/10 disabled:opacity-30"
+                    className="rounded px-2 py-1 hover:bg-ink/5 disabled:opacity-30"
                   >
                     ↑
                   </button>
@@ -201,7 +201,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
                     onClick={() => move(i, 1)}
                     disabled={i === drafts.length - 1 || saving}
                     aria-label={`Move ${label} down`}
-                    className="rounded px-2 py-1 hover:bg-gray-500/10 disabled:opacity-30"
+                    className="rounded px-2 py-1 hover:bg-ink/5 disabled:opacity-30"
                   >
                     ↓
                   </button>
@@ -211,7 +211,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
                     disabled={drafts.length === 1 || saving}
                     aria-label={`Delete ${label}`}
                     title={drafts.length === 1 ? 'A set needs at least one card' : undefined}
-                    className="rounded px-2 py-1 text-red-500 hover:bg-red-500/10 disabled:opacity-30"
+                    className="rounded px-2 py-1 text-pencil hover:bg-pencil/10 disabled:opacity-30"
                   >
                     Delete
                   </button>
@@ -219,7 +219,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
               </div>
 
               <div className="space-y-1">
-                <label htmlFor={`${idBase}-${i}-question`} className="text-xs uppercase tracking-wide text-gray-400">
+                <label htmlFor={`${idBase}-${i}-question`} className="text-xs uppercase tracking-wide text-muted">
                   {isTrueFalse ? 'Statement' : 'Question'}
                 </label>
                 <textarea
@@ -236,7 +236,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
               {isTrueFalse ? (
                 <>
                   <fieldset className="space-y-2" disabled={saving}>
-                    <legend className="text-xs uppercase tracking-wide text-gray-400">Answer</legend>
+                    <legend className="text-xs uppercase tracking-wide text-muted">Answer</legend>
                     <div className="flex gap-4">
                       {TRUE_FALSE_OPTIONS.map((value) => (
                         <label key={value} className="flex items-center gap-2 text-sm">
@@ -256,7 +256,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
                   <div className="space-y-1">
                     <label
                       htmlFor={`${idBase}-${i}-explanation`}
-                      className="text-xs uppercase tracking-wide text-gray-400"
+                      className="text-xs uppercase tracking-wide text-muted"
                     >
                       Explanation (optional)
                     </label>
@@ -274,7 +274,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
                 </>
               ) : isMultipleChoice ? (
                 <fieldset className="space-y-2" disabled={saving}>
-                  <legend className="text-xs uppercase tracking-wide text-gray-400">
+                  <legend className="text-xs uppercase tracking-wide text-muted">
                     Choices: select the correct one
                   </legend>
                   {d.choices.map((choice, j) => (
@@ -295,7 +295,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
                         maxLength={CARD_LIMITS.choice}
                         aria-label={`${label}: choice ${j + 1}`}
                         className={`min-w-0 flex-1 rounded-lg border bg-transparent px-3 py-1.5 text-sm ${
-                          d.correctIndex === j ? 'border-green-600' : ''
+                          d.correctIndex === j ? 'border-green-800' : ''
                         }`}
                       />
                     </div>
@@ -303,7 +303,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
                 </fieldset>
               ) : (
                 <div className="space-y-1">
-                  <label htmlFor={`${idBase}-${i}-answer`} className="text-xs uppercase tracking-wide text-gray-400">
+                  <label htmlFor={`${idBase}-${i}-answer`} className="text-xs uppercase tracking-wide text-muted">
                     Answer
                   </label>
                   <input
@@ -318,7 +318,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
               )}
 
               {cardError && (
-                <p role="alert" className="text-sm text-red-500">
+                <p role="alert" className="text-sm text-pencil">
                   {cardError}
                 </p>
               )}
@@ -354,7 +354,7 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
       )}
 
       {error && error.cardIndex === null && (
-        <p role="alert" className="text-center text-sm text-red-500">
+        <p role="alert" className="text-center text-sm text-pencil">
           {error.message}
         </p>
       )}

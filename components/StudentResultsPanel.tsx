@@ -38,7 +38,7 @@ type LoadState =
 
 const STATUS_CLASSES: Record<ResultStatus, string> = {
   done: 'bg-green-800/10 text-green-800',
-  late: 'bg-amber-500/10 text-amber-600',
+  late: 'bg-brass/15 text-brass-ink',
   'not-started': 'bg-ink/10 text-muted',
 };
 
@@ -142,7 +142,7 @@ export default function StudentResultsPanel({
                             <span className="text-xs text-muted">{FLASHCARD_MODE_TAGS[t.mode ?? 'flip']}</span>
                           )}
                           {t.late && (
-                            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-600">
+                            <span className="rounded bg-brass/15 px-1.5 py-0.5 text-xs font-medium text-brass-ink">
                               Late
                             </span>
                           )}

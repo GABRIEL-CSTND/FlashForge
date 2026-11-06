@@ -9,6 +9,18 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
 it's ready. It changes how the app looks, not how it works.
 
 ### Changed
+- **The old look is gone** (phase 7, 2026-11-06): the admin pages (users, sets, AI usage),
+  the role chooser, the card editor and the last set and History screens use the desk's
+  colors, and the redesign's seven phases are done.
+  - Tailwind's gray, red and amber classes became the desk's `muted`, `pencil` and
+    `brass-ink` in 16 files. Green stays only as `green-800` for right answers and saved
+    states, which reads at 4.5:1 on paper.
+  - Emoji buttons are words now: *Save this study guide*, *Save to My Sets*, *Assign to
+    class*, *Delete this set*. The tests use the new names.
+  - A class page's loading and not-found states lie on the desk, so the paper sheet doesn't
+    flash in first.
+  - What's next: the team signs off on the printed desk, and `UI_changes` goes to `dev`.
+  - Tests: 845 in all.
 - **The teacher pages are on the desk** (phase 6, 2026-11-06), following the canvas's
   `Desk-Printed-Teacher`.
   - **Your classes** (was *Teacher dashboard*): each class is a kraft folder with its name,

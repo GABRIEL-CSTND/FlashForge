@@ -23,7 +23,7 @@ const BACK_HOME: GateLink = { href: '/', label: '← Back to upload' };
 function GateMessage({ message, link, tone = 'muted' }: { message: string; link: GateLink; tone?: 'muted' | 'error' }) {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-6 text-center">
-      <p className={tone === 'error' ? 'text-red-500' : 'text-gray-500'}>{message}</p>
+      <p className={tone === 'error' ? 'text-pencil' : 'text-muted'}>{message}</p>
       <Link href={link.href} className="text-link hover:underline">
         {link.label}
       </Link>

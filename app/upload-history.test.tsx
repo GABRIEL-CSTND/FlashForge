@@ -64,7 +64,7 @@ async function generateGuide() {
 describe('a new guide and History', () => {
   it('saves the guide with its History entry, so History shows it as saved', async () => {
     await generateGuide();
-    fireEvent.click(screen.getByRole('button', { name: '💾 Save this study guide' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save this study guide' }));
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/sets/${SET}`));
     expect(saves).toEqual([expect.objectContaining({ title: 'notes', studyType: 'flashcard', historyId: ENTRY })]);
   });

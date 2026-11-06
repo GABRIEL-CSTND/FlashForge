@@ -72,7 +72,7 @@ describe('a guide from History', () => {
     addEntry();
     state.apiResult = { ok: true, status: 200, data: { id: SET } };
     render(<HistoryGuidePage />);
-    fireEvent.click(await screen.findByRole('button', { name: '💾 Save to My Sets' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Save to My Sets' }));
     await waitFor(() => expect(state.push).toHaveBeenCalledWith(`/sets/${SET}`));
     expect(state.apiCalls).toEqual([
       {
@@ -89,7 +89,7 @@ describe('a guide from History', () => {
     addEntry();
     state.apiResult = { ok: false, status: 500, data: { error: 'Failed to create set' } };
     render(<HistoryGuidePage />);
-    fireEvent.click(await screen.findByRole('button', { name: '💾 Save to My Sets' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Save to My Sets' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Failed to create set');
     expect(state.push).not.toHaveBeenCalled();
   });
@@ -98,7 +98,7 @@ describe('a guide from History', () => {
     addEntry({ set_id: SET });
     render(<HistoryGuidePage />);
     expect((await screen.findByRole('link', { name: 'Open it in My Sets' })).getAttribute('href')).toBe(`/sets/${SET}`);
-    expect(screen.queryByRole('button', { name: '💾 Save to My Sets' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save to My Sets' })).toBeNull();
   });
 
   it('credits the Wikipedia article it came from', async () => {

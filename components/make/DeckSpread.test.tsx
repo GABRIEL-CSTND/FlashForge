@@ -23,7 +23,7 @@ const spread = (onStart = vi.fn()) =>
       items={ITEMS}
       onStart={onStart}
       onExit={vi.fn()}
-      saveSlot={<button>💾 Save this study guide</button>}
+      saveSlot={<button>Save this study guide</button>}
       savedToHistory
     />
   );
@@ -42,7 +42,7 @@ describe('a new deck on the desk', () => {
       '3Pigment that absorbs light',
     ]);
     expect(screen.getByText('Saved to History')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '💾 Save this study guide' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save this study guide' })).toBeTruthy();
   });
 
   it('gathers the cards before the study screen takes over', () => {
