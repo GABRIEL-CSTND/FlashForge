@@ -379,18 +379,26 @@ export default function UploadPage() {
               <Link href="/history" className="text-link hover:underline">
                 History
               </Link>
+              <Link href="/guide" className="text-link hover:underline">
+                Guide
+              </Link>
               <span className="text-gray-400">{user.email}</span>
               <button onClick={() => signOut()} className="text-gray-500 hover:underline">
                 Sign out
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => signInWithGoogle()}
-              className="text-sm border rounded-lg px-3 py-1.5 font-medium hover:border-accent"
-            >
-              Sign in with Google
-            </button>
+            <div className="flex items-center gap-3 text-sm">
+              <Link href="/guide" className="text-link hover:underline">
+                Guide
+              </Link>
+              <button
+                onClick={() => signInWithGoogle()}
+                className="text-sm border rounded-lg px-3 py-1.5 font-medium hover:border-accent"
+              >
+                Sign in with Google
+              </button>
+            </div>
           )}
         </div>
 
