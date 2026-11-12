@@ -364,6 +364,270 @@ button.desk-spot:not(:disabled) {
   }
 }
 
+/* The deck being made, while the AI writes the guide (components/make/
+   MakingDeck.tsx). One 5.6 s loop: the pencil writes three lines on a card
+   (5-49%), the card goes onto the deck (52-65%), the deck is riffle shuffled
+   (66-86%, each card a little after the one under it) and a fresh card comes up
+   (88-100%). The pencil's tip and the ink are revealed at the same speed, so the
+   pencil writes the line. A scene 532 x 240 px; smaller on a phone. */
+@property --making-wobble {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+.making-scene {
+  position: relative;
+  width: 532px;
+  height: 240px;
+  flex: none;
+}
+@media (max-width: 40rem) {
+  .making-scene {
+    zoom: 0.6;
+  }
+}
+@media (max-width: 23rem) {
+  .making-scene {
+    zoom: 0.54;
+  }
+}
+.making-card {
+  position: absolute;
+  left: 0;
+  top: 30px;
+  z-index: 2;
+  width: 292px;
+  height: 182px;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25), 0 10px 18px -8px rgb(0 0 0 / 0.5);
+  transform-origin: 0 0;
+  animation: making-card 5.6s linear infinite;
+}
+.making-card-label {
+  position: absolute;
+  left: 22px;
+  top: 17px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--brass-ink);
+}
+.making-line {
+  position: absolute;
+  left: 22px;
+  fill: none;
+  stroke: #3d3a33;
+  stroke-opacity: 0.85;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.making-line-1 {
+  top: 64px;
+  animation: making-line-1 5.6s linear infinite;
+}
+.making-line-2 {
+  top: 92px;
+  animation: making-line-2 5.6s linear infinite;
+}
+.making-line-3 {
+  top: 120px;
+  animation: making-line-3 5.6s linear infinite;
+}
+/* The pencil is a point at its tip (moved by translate), drawn tilted from there. */
+.making-pencil {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  translate: 240px 225px;
+  filter: drop-shadow(2px 7px 4px rgb(0 0 0 / 0.38));
+  animation: making-pencil 5.6s linear infinite;
+}
+.making-pencil-body {
+  position: absolute;
+  left: 0;
+  top: -8px;
+  max-width: none;
+  transform-origin: 0 8px;
+  rotate: -55deg;
+  animation: making-wobble 0.13s ease-in-out infinite alternate;
+}
+.making-deck-card {
+  position: absolute;
+  left: 360px;
+  top: 70px;
+  z-index: 1;
+  width: 130px;
+  height: 81px;
+  border-radius: 5px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25), 0 8px 14px -8px rgb(0 0 0 / 0.5);
+  transform-origin: 50% 100%;
+  transform: translate(0, calc(var(--i) * -2.5px)) rotate(var(--r));
+  animation: making-riffle 5.6s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+  animation-delay: calc(var(--i) * 45ms);
+}
+@keyframes making-card {
+  0%,
+  52% {
+    transform: none;
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.55, 0, 0.3, 1);
+  }
+  62% {
+    transform: translate(360px, 30px) rotate(0.5deg) scale(0.445);
+    opacity: 1;
+  }
+  65% {
+    transform: translate(360px, 30px) rotate(0.5deg) scale(0.445);
+    opacity: 0;
+  }
+  88% {
+    transform: translateY(14px);
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes making-line-1 {
+  0%,
+  5% {
+    clip-path: inset(0 100% 0 0);
+  }
+  21%,
+  70% {
+    clip-path: inset(0 0 0 0);
+  }
+  70.1%,
+  100% {
+    clip-path: inset(0 100% 0 0);
+  }
+}
+@keyframes making-line-2 {
+  0%,
+  24% {
+    clip-path: inset(0 100% 0 0);
+  }
+  38%,
+  70% {
+    clip-path: inset(0 0 0 0);
+  }
+  70.1%,
+  100% {
+    clip-path: inset(0 100% 0 0);
+  }
+}
+@keyframes making-line-3 {
+  0%,
+  40.5% {
+    clip-path: inset(0 100% 0 0);
+  }
+  49%,
+  70% {
+    clip-path: inset(0 0 0 0);
+  }
+  70.1%,
+  100% {
+    clip-path: inset(0 100% 0 0);
+  }
+}
+/* Line ends match .making-line-* (left 22 px, 236, 212 and 128 px long, their
+   baselines 105, 133 and 161 px down the scene). It wobbles only while writing. */
+@keyframes making-pencil {
+  0% {
+    translate: 240px 225px;
+    --making-wobble: 0px;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.3, 1);
+  }
+  4.8% {
+    --making-wobble: 0px;
+  }
+  5% {
+    translate: 22px 105px;
+    --making-wobble: 1.4px;
+  }
+  21% {
+    translate: 258px 105px;
+    --making-wobble: 1.4px;
+  }
+  21.4% {
+    --making-wobble: 0px;
+  }
+  22.5% {
+    translate: 140px 112px;
+  }
+  23.8% {
+    --making-wobble: 0px;
+  }
+  24% {
+    translate: 22px 133px;
+    --making-wobble: 1.4px;
+  }
+  38% {
+    translate: 234px 133px;
+    --making-wobble: 1.4px;
+  }
+  38.4% {
+    --making-wobble: 0px;
+  }
+  39.25% {
+    translate: 128px 140px;
+  }
+  40.3% {
+    --making-wobble: 0px;
+  }
+  40.5% {
+    translate: 22px 161px;
+    --making-wobble: 1.4px;
+  }
+  49% {
+    translate: 150px 161px;
+    --making-wobble: 1.4px;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.3, 1);
+  }
+  49.4% {
+    --making-wobble: 0px;
+  }
+  55%,
+  100% {
+    translate: 240px 225px;
+    --making-wobble: 0px;
+  }
+}
+@keyframes making-wobble {
+  from {
+    translate: 0 calc(var(--making-wobble) * -1);
+  }
+  to {
+    translate: 0 var(--making-wobble);
+  }
+}
+@keyframes making-riffle {
+  0%,
+  66% {
+    transform: translate(0, calc(var(--i) * -2.5px)) rotate(var(--r));
+  }
+  73%,
+  78% {
+    transform: translate(calc(var(--side) * 42px), calc(5px + var(--i) * -2.5px)) rotate(calc(var(--side) * 9deg));
+  }
+  86%,
+  100% {
+    transform: translate(0, calc(var(--i) * -2.5px)) rotate(var(--r));
+  }
+}
+/* Reduced motion: the card lies there written, the pencil beside it. */
+@media (prefers-reduced-motion: reduce) {
+  .making-scene,
+  .making-scene * {
+    animation: none !important;
+  }
+}
+
 /* ---- Quizzes (desk redesign, phase 4) ------------------------------------ */
 
 /* Answer slips under a quiz question (components/study/AnswerSlips.tsx). They

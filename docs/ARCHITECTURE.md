@@ -328,6 +328,10 @@ new ones included, gets it without doing anything):
   "Turning pages" in `globals.css`. A deck picked up in the library still morphs on top
   (`DeckMorph`, above). `ViewTransition` is looked up in `components/desk/view-transition.ts`,
   as the tests' React doesn't have it.
+- **Views inside a page** turn the same way with `components/desk/DeskTurn.tsx`, keyed by the
+  view's name, when the change is a transition (`startTransition`). The home page uses it:
+  the notes sheet turns into the deck being made, then into the new cards, or back to the
+  notes sheet with the problem if it failed. Changes outside a transition just swap.
 - **Only navigations turn the page:** `default="none"`, so a state change on a page never
   animates the whole page, and search params don't change the path. The key remounts the page
   tree on each new path, which the App Router does for a new page anyway. (With
@@ -368,7 +372,14 @@ new ones included, gets it without doing anything):
    The **"Make me 10 medium flashcards"** card (`components/make/MakeCard.tsx`) sets how
    many (5, 10, 15, 20 or 30, #65), how hard and what kind (#68, #69): each word opens
    paper slips (`components/desk/SlipMenu.tsx`) with a line saying what each choice is.
-   **Make my deck** sends it. Nothing is saved yet. When the deck arrives, its cards land
+   **Make my deck** sends it. Nothing is saved yet. While the AI works, the notes sheet
+   turns into **the deck being made** (`components/make/MakingDeck.tsx`): a pencil writes
+   a card, the card goes onto a small deck, the deck is riffle shuffled and a fresh card
+   comes up, on one 5.6 s CSS loop (`.making-*` in `globals.css`) until the deck arrives.
+   Under it, what's being made (*Making 10 medium flashcards*, from what) and the steps
+   (step 3 below). The loop shows the work going on, not how far along it is, since the
+   API sends every card at once. It's hidden from screen readers, which follow the steps,
+   and with reduced motion it holds still, the card written. When the deck arrives, its cards land
    one by one, 350 ms apart, in a spread (`components/make/DeckSpread.tsx`; the API sends
    all the cards at once), with Save and the source's credit; **Start studying** gathers
    them and the study screen takes over on the same URL.
@@ -446,7 +457,7 @@ new ones included, gets it without doing anything):
      errors and the usage log work the same either way; a refused or failed request is just
      a `result` event with its usual status. `readGeneration()` reads this on the page and
      falls back to plain JSON, so an older server still works.
-3. **Show it**: while it waits, the upload page shows the steps (`GenerationProgress`):
+3. **Show it**: while it waits, under the deck being made, the page shows the steps (`GenerationProgress`):
    uploading, reading, writing, with what's done, what's under way, and a seconds counter.
    The first two are worded for the source (`progressLabels()`): a link's reading step is
    *Fetching the web page*, a topic's is *Looking it up on Wikipedia* (#79), since the

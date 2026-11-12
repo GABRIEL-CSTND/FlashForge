@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { startTransition, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser, signInWithGoogle } from '@/lib/auth';
@@ -8,12 +8,15 @@ import StudyViewer, { StudyItem } from '@/components/StudyViewer';
 import { generateErrorText } from '@/lib/generation-limits';
 import GenerationProgress from '@/components/GenerationProgress';
 import NotesSheet from '@/components/make/NotesSheet';
-import MakeCard from '@/components/make/MakeCard';
+import MakeCard, { DECK_WORDS } from '@/components/make/MakeCard';
+import MakingDeck from '@/components/make/MakingDeck';
+import DeskTurn from '@/components/desk/DeskTurn';
 import DeckSpread from '@/components/make/DeckSpread';
 import { nextProgress, PROGRESS_MIME, readGeneration, START_PROGRESS, type ProgressState } from '@/lib/generation-progress';
 import {
   DEFAULT_DIFFICULTY,
   DEFAULT_QUESTION_COUNT,
+  DIFFICULTY_LABELS,
   STUDY_TYPE_LABELS,
   type Difficulty,
   type StudyType,
@@ -148,10 +151,19 @@ export default function UploadPage() {
       setStatus('error');
       return;
     }
-    setStatus('generating');
-    setProgress(START_PROGRESS);
-    setPdfRead(null);
-    setErrorMsg('');
+    // The notes sheet turns into the deck being made, and the new cards (or the
+    // notes sheet again, with the problem) turn in after it (DeskTurn).
+    const fail = (message: string) =>
+      startTransition(() => {
+        setErrorMsg(message);
+        setStatus('error');
+      });
+    startTransition(() => {
+      setStatus('generating');
+      setProgress(START_PROGRESS);
+      setPdfRead(null);
+      setErrorMsg('');
+    });
 
     const formData = new FormData();
     if (source === 'file' && file && fileKind(file.name, file.type) === 'pdf') {
@@ -162,8 +174,7 @@ export default function UploadPage() {
       const plan = await planPdfUpload(file, (done, total) => setPdfRead({ done, total }));
       if (plan.kind === 'problem') {
         setPdfRead(null);
-        setErrorMsg(plan.message);
-        setStatus('error');
+        fail(plan.message);
         return;
       }
       if (plan.kind === 'pages') {
@@ -201,8 +212,7 @@ export default function UploadPage() {
       // The answer arrives step by step, so this keeps going until the guide is ready.
       outcome = await readGeneration(res, (step) => setProgress((p) => nextProgress(p, step)));
     } catch {
-      setErrorMsg('Could not reach the server. Check your connection and try again.');
-      setStatus('error');
+      fail('Could not reach the server. Check your connection and try again.');
       return;
     } finally {
       clearTimeout(slowTimer);
@@ -211,14 +221,15 @@ export default function UploadPage() {
     }
 
     if (outcome.status < 200 || outcome.status >= 300) {
-      setErrorMsg(generateErrorText(outcome.status, outcome.body));
-      setStatus('error');
+      fail(generateErrorText(outcome.status, outcome.body));
       return;
     }
 
-    setGenerated(outcome.body as unknown as GeneratedResult);
-    setView('spread');
-    setStatus('idle');
+    startTransition(() => {
+      setGenerated(outcome.body as unknown as GeneratedResult);
+      setView('spread');
+      setStatus('idle');
+    });
   };
 
   const handleSave = async () => {
@@ -348,15 +359,17 @@ export default function UploadPage() {
 
     const n = result.items.length;
     return (
-      <DeckSpread
-        title={result.title}
-        meta={`${STUDY_TYPE_LABELS[result.studyType] ?? 'Flashcards'} · ${n} card${n === 1 ? '' : 's'}`}
-        items={result.items}
-        onStart={() => setView('study')}
-        onExit={handleExit}
-        saveSlot={saveSlot}
-        savedToHistory={!!result.historyId}
-      />
+      <DeskTurn view="spread">
+        <DeckSpread
+          title={result.title}
+          meta={`${STUDY_TYPE_LABELS[result.studyType] ?? 'Flashcards'} · ${n} card${n === 1 ? '' : 's'}`}
+          items={result.items}
+          onStart={() => setView('study')}
+          onExit={handleExit}
+          saveSlot={saveSlot}
+          savedToHistory={!!result.historyId}
+        />
+      </DeskTurn>
     );
   }
 
@@ -376,51 +389,76 @@ export default function UploadPage() {
       ? `${count} cards can take about 30 seconds.`
       : 'This can take about 20 seconds.';
 
+  // While the AI writes the guide: the deck being made, what it's making, and
+  // the steps so far (GenerationProgress, which screen readers follow).
+  if (generating) {
+    return (
+      <DeskTurn view="making">
+        <main className="on-desk w-full pb-10 pt-4 sm:pt-8">
+          <div className="flex flex-col items-center gap-6 text-center">
+            <MakingDeck label={studyType === 'flashcard' ? 'Clue' : STUDY_TYPE_LABELS[studyType]} />
+            <div className="max-w-xl">
+              <h1 className="text-[28px] font-normal leading-tight text-[#f3ecdd]">
+                Making {count} {DIFFICULTY_LABELS[difficulty].toLowerCase()} {DECK_WORDS[studyType]}
+              </h1>
+              <p className="mt-1 break-words text-[14.5px] text-on-desk/85">{sourceLine}</p>
+              <p className="mt-0.5 text-[13px] text-on-desk/80">{waitNote}</p>
+            </div>
+            {source && (
+              <div className="w-full max-w-sm text-left">
+                <GenerationProgress progress={progress} source={source} photo={sendingPhoto} pdfRead={pdfRead} />
+              </div>
+            )}
+            {slowGeneration && progress.attempt <= 1 && (
+              <p className="max-w-sm text-sm text-on-desk/85">
+                Our AI is extra busy right now, so we&apos;re using a slower backup. This can take up to a minute.
+              </p>
+            )}
+          </div>
+        </main>
+      </DeskTurn>
+    );
+  }
+
   return (
-    <main className="on-desk w-full pb-8 pt-1">
-      <h1 className="sr-only">Make a deck</h1>
-      <div className="grid items-start gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-        <div className="paper-shadow rounded-md lg:-rotate-[0.6deg]">
-          <NotesSheet
-            text={notes}
-            onText={editNotes}
-            file={file}
-            onFile={validateAndSetFile}
-            onRemoveFile={() => setFile(null)}
-            detected={detectSource(notes)}
-            asNotes={asNotes}
-            onAsNotes={setAsNotes}
-            disabled={generating}
-          />
+    <DeskTurn view="setup">
+      <main className="on-desk w-full pb-8 pt-1">
+        <h1 className="sr-only">Make a deck</h1>
+        <div className="grid items-start gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+          <div className="paper-shadow rounded-md lg:-rotate-[0.6deg]">
+            <NotesSheet
+              text={notes}
+              onText={editNotes}
+              file={file}
+              onFile={validateAndSetFile}
+              onRemoveFile={() => setFile(null)}
+              detected={detectSource(notes)}
+              asNotes={asNotes}
+              onAsNotes={setAsNotes}
+              disabled={generating}
+            />
+          </div>
+          <div className="flex flex-col gap-5">
+            <aside aria-label="Tip" className="sticky-note paper-shadow hidden max-w-xs rotate-[2.5deg] self-end rounded-sm px-4 py-3 text-[13.5px] leading-snug text-ink lg:block">
+              Drop a PDF, Word file, slides or a photo on the sheet. Or click it and type notes, a link or a topic.
+            </aside>
+            <MakeCard
+              count={count}
+              onCount={setCount}
+              difficulty={difficulty}
+              onDifficulty={setDifficulty}
+              studyType={studyType}
+              onStudyType={setStudyType}
+              sourceLine={sourceLine}
+              canMake={source !== null}
+              making={generating}
+              onMake={handleSubmit}
+              waitNote={waitNote}
+              error={status === 'error' ? errorMsg : ''}
+            />
+          </div>
         </div>
-        <div className="flex flex-col gap-5">
-          <aside aria-label="Tip" className="sticky-note paper-shadow hidden max-w-xs rotate-[2.5deg] self-end rounded-sm px-4 py-3 text-[13.5px] leading-snug text-ink lg:block">
-            {generating
-              ? 'Your cards land on the desk as soon as the deck is ready.'
-              : 'Drop a PDF, Word file, slides or a photo on the sheet. Or click it and type notes, a link or a topic.'}
-          </aside>
-          <MakeCard
-            count={count}
-            onCount={setCount}
-            difficulty={difficulty}
-            onDifficulty={setDifficulty}
-            studyType={studyType}
-            onStudyType={setStudyType}
-            sourceLine={sourceLine}
-            canMake={source !== null}
-            making={generating}
-            onMake={handleSubmit}
-            waitNote={waitNote}
-            error={status === 'error' ? errorMsg : ''}
-          />
-          {generating && source && <GenerationProgress progress={progress} source={source} photo={sendingPhoto} pdfRead={pdfRead} />}
-          {generating && slowGeneration && progress.attempt <= 1 && (
-            <p className="text-sm text-on-desk/85">
-              Our AI is extra busy right now, so we&apos;re using a slower backup. This can take up to a minute.
-            </p>
-          )}
-        </div>
-      </div>
-    </main>
+      </main>
+    </DeskTurn>
   );
 }

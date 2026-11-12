@@ -332,6 +332,25 @@ describe('progress while generating', () => {
     await screen.findByText('Fluid inside the chloroplast');
   });
 
+  it('shows the deck being made in place of the notes sheet until the cards arrive', async () => {
+    const server = serverYouControl();
+    render(<UploadPage />);
+    chooseFile();
+    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+
+    expect(await screen.findByRole('heading', { name: 'Making 10 medium flashcards' })).toBeTruthy();
+    expect(screen.getByText('from notes.txt')).toBeTruthy();
+    // The pencil and the shuffling deck are only for the eyes; the steps are read out.
+    expect(document.querySelector('.making-scene')?.getAttribute('aria-hidden')).toBe('true');
+    expect(screen.getByRole('list', { name: 'Progress' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Make my deck' })).toBeNull();
+
+    server.send(RESULT);
+    server.end();
+    expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
+    expect(document.querySelector('.making-scene')).toBeNull();
+  });
+
   it('shows what went wrong, and clears the steps, when the server fails', async () => {
     const server = serverYouControl();
     render(<UploadPage />);

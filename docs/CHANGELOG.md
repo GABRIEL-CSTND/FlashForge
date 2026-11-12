@@ -9,6 +9,21 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
 2026-11-11. It changes how the app looks, not how it works.
 
 ### Changed
+- **You watch the deck being made** (2026-11-12): while the AI writes the guide, the notes
+  sheet turns into a scene on the desk instead of a checklist under it. A pencil writes a
+  card line by line, the card goes onto a small deck, the deck is riffle shuffled and a fresh
+  card comes up, over and over until the cards arrive (`components/make/MakingDeck.tsx`).
+  - Under it: what's being made (*Making 10 medium flashcards*, from what, how long it can
+    take) and the same steps as before, which screen readers follow.
+  - The notes sheet, the deck being made and the new cards turn into one another like pages
+    (`components/desk/DeskTurn.tsx`). A failed guide turns back to the notes sheet, with the
+    problem on the Make card as before.
+  - It shows the work going on, not how far along it is: the API still sends every card at
+    once. Cards landing as they're written would need the AI to stream.
+  - With reduced motion it holds still: the card written, the pencil beside it.
+  - Tests: one for the scene in place of the notes sheet; 862 in all. Checked in Edge, frame
+    by frame through the loop, on a phone's width, with reduced motion, and on the real page
+    with the AI's answer made up in the browser (no quota used).
 - **Pages turn instead of swapping** (2026-11-07): moving to another page fades the old one
   out as it sinks a little, and the new one rises into place (React's `<ViewTransition>` in
   `components/desk/PageTurn.tsx`, around every page). A deck picked up in the library still

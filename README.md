@@ -142,6 +142,7 @@ components/
   desk/Desk.tsx         The desk around every page: card box and library card on top, the page on a sheet of paper
   desk/PageTurn.tsx     The sheet; turns the page on every navigation (React ViewTransition) and eases it in on Back
   desk/view-transition.ts  React's ViewTransition, looked up, since the tests' React doesn't have it
+  desk/DeskTurn.tsx     Turns one view of a page into another the same way (the home page's notes sheet, deck being made, new cards)
   desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, and a tab for each section the role can open
   desk/LibraryCard.tsx  Library card (top right): name, role and Sign out, or Sign in with Google
   desk/PaperCard.tsx    A card with two faces that turns over
@@ -155,6 +156,7 @@ components/
   desk/SlipMenu.tsx     A word that fans out paper slips to choose from ("Make me [10] [medium] [flashcards]")
   make/NotesSheet.tsx   One sheet for a file, notes, a link or a topic; says what it found
   make/MakeCard.tsx     The "Make me 10 medium flashcards" card and Make my deck
+  make/MakingDeck.tsx   While the AI works: a pencil writes a card, the deck is shuffled, over and over
   make/DeckSpread.tsx   A new deck spread out on the desk; Start studying gathers it
   desk/useDeskLayout.ts Where the deck, the card and the piles lie (laptop and phone), for the card motion
 lib/
