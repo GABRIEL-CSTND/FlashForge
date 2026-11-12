@@ -38,8 +38,8 @@ soon as it's applied.
 | `20261029000100_clear_edited_quotes.sql` | #21 | 2026-10-29 |
 | `20261029000200_guide_history.sql` | History | 2026-10-29 |
 | `20261031000100_limit_failed_guides.sql` | #41 | 2026-10-31 |
-| `20261112000100_server_only_card_writes.sql` | PR #84 | Not yet |
-| `20261112000200_tighten_set_grants.sql` | PR #84 review | Not yet |
+| `20261112000100_server_only_card_writes.sql` | PR #84 | 2026-11-12 |
+| `20261112000200_tighten_set_grants.sql` | PR #84 review | 2026-11-12 |
 
 Add a row here whenever you apply a new migration.
 

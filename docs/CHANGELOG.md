@@ -145,7 +145,7 @@ into `main`. There is only one Supabase database, so changes marked **(live)** a
 already applied there.
 
 ### Security
-- **Browsers can't write cards, even if a policy slips later** (PR #84 and its review):
+- **Browsers can't write cards, even if a policy slips later (live)** (PR #84 and its review):
   RLS already stopped browsers from adding sets or changing cards, but the tables still
   granted them insert, update and delete. Those grants are gone, so the public key can't
   write cards or add sets at all. Signed-in users can still rename and delete their own
