@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ANSWER_LIMITS, generateStudyItems, minValidItems, mixedRequest, requestedCount } from '@/lib/gemini';
+import { ANSWER_LIMITS, createItemScanner, generateStudyItems, minValidItems, mixedRequest, requestedCount } from '@/lib/gemini';
 import { lineUnits, pageUnits } from '@/lib/source-quotes';
 
 // Gemini is never called for real here: fetch is replaced by canned responses.
@@ -500,5 +500,70 @@ describe('whole document coverage (#38)', () => {
     const { items } = await generateStudyItems(text, 'flashcard', { units });
     expect(sent[0].prompt).toContain(text);
     expect(items[0]).toMatchObject({ answer: 'Ribosomes', source: last, sourceLocation: 'Line 399' });
+  });
+});
+
+describe('first cards while the AI is still writing', () => {
+  // A streamed answer: the JSON text cut into chunks, each sent as one event.
+  function streamReply(items: unknown[], chunks = 4) {
+    const text = JSON.stringify(items);
+    const size = Math.ceil(text.length / chunks);
+    const events = Array.from({ length: chunks }, (_, i) => text.slice(i * size, (i + 1) * size))
+      .filter(Boolean)
+      .map((part) => `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: part }] } }] })}\n\n`);
+    return new Response(events.join(''), { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+  }
+
+  it('finds each finished object in a half-written array', () => {
+    const found: unknown[] = [];
+    const scanner = createItemScanner((item) => found.push(item));
+    scanner.push('```json\n[{"question": "A {brace} \\" in text", "answer": "One"}, {"que');
+    expect(found).toEqual([{ question: 'A {brace} " in text', answer: 'One' }]);
+    scanner.push('stion": "Two?", "options": ["a", "b"], "answer": "Two"}');
+    expect(found).toHaveLength(2);
+    scanner.push(']');
+    expect(found).toHaveLength(2);
+  });
+
+  it('sends the cards written so far, growing, and ends with the same cards', async () => {
+    mockModel(() => streamReply(flashcards(11), 5));
+    const seen: number[] = [];
+    const first: unknown[][] = [];
+    const { items } = await generateStudyItems('Some notes about cells.', 'flashcard', {
+      count: 10,
+      onCards: (cards) => {
+        seen.push(cards.length);
+        first.push(cards);
+      },
+    });
+    expect(sent[0].model).toBe('gemini-3.5-flash');
+    expect(seen.length).toBeGreaterThan(1);
+    expect(seen).toEqual([...seen].sort((a, b) => a - b));
+    expect(seen.at(-1)).toBe(10);
+    expect(items).toHaveLength(10);
+    // What was shown first is what the finished deck starts with.
+    expect(items.slice(0, first[0].length)).toEqual(first[0]);
+  });
+
+  it('asks for a stream only when the cards are wanted early', async () => {
+    mockModel(() => reply(flashcards(11)));
+    const urls: string[] = [];
+    const real = globalThis.fetch;
+    vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+      urls.push(url);
+      return real(url, init);
+    });
+    await generateStudyItems('Some notes about cells.', 'flashcard', { count: 10 });
+    expect(urls[0]).toContain(':generateContent');
+    expect(urls[0]).not.toContain('stream');
+  });
+
+  it('does not send true or false cards early: they are shuffled at the end', async () => {
+    mockModel(() =>
+      reply(Array.from({ length: 11 }, (_, i) => ({ question: `Statement number ${i + 1}`, answer: 'True', explanation: '' })))
+    );
+    const onCards = vi.fn();
+    await generateStudyItems('Some notes about cells.', 'true_false', { count: 10, onCards });
+    expect(onCards).not.toHaveBeenCalled();
   });
 });

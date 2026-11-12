@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser, signInWithGoogle } from '@/lib/auth';
@@ -69,6 +69,19 @@ export default function UploadPage() {
   const [status, setStatus] = useState<'idle' | 'generating' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [result, setResult] = useState<GeneratedResult | null>(null);
+  // The first cards, while the AI is still writing the rest. They can be studied
+  // right away; `result` replaces them when the whole deck is ready.
+  const [live, setLive] = useState<GeneratedResult | null>(null);
+  // The cards on the study desk now, and how many of the deck's cards have gone
+  // to it so far. Cards that arrive later go to the desk as a next batch.
+  const [batchCards, setBatchCards] = useState<StudyItem[]>([]);
+  const [served, setServed] = useState(0);
+  const [batchNo, setBatchNo] = useState(0);
+  // The AI stopped before the end, so the deck is what had been written by then.
+  const [cutShort, setCutShort] = useState(false);
+  // Which generation is current, so one the student has left is ignored.
+  const runRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
   // A new deck lies in a spread until Start studying.
   const [view, setView] = useState<'spread' | 'study'>('spread');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'needs-auth'>('idle');
@@ -152,6 +165,16 @@ export default function UploadPage() {
     setProgress(START_PROGRESS);
     setPdfRead(null);
     setErrorMsg('');
+    const run = ++runRef.current;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setLive(null);
+    setBatchCards([]);
+    setServed(0);
+    setCutShort(false);
+    setView('spread');
+    // The first cards sent while the AI is still writing; the rest of the deck follows.
+    const previewed: { current: GeneratedResult | null } = { current: null };
 
     const formData = new FormData();
     if (source === 'file' && file && fileKind(file.name, file.type) === 'pdf') {
@@ -187,6 +210,7 @@ export default function UploadPage() {
     // Photos (#72) take longer to read anyway.
     const slowTimer = setTimeout(() => setSlowGeneration(true), slowNoticeMs(count) + (sendingPhoto ? 15_000 : 0));
     let outcome: { status: number; body: Record<string, unknown> };
+    let unreachable = false;
     try {
       // When signed in, send the session token so the usage log (#62) knows who
       // generated it. Generating still works signed out.
@@ -195,29 +219,66 @@ export default function UploadPage() {
       const res = await fetch('/api/generate', {
         method: 'POST',
         body: formData,
+        signal: controller.signal,
         // Asking for progress: the server then reports each step as it starts.
         headers: { Accept: PROGRESS_MIME, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
       // The answer arrives step by step, so this keeps going until the guide is ready.
-      outcome = await readGeneration(res, (step) => setProgress((p) => nextProgress(p, step)));
+      // The first cards come along the way, so they can be studied while it does.
+      outcome = await readGeneration(
+        res,
+        (step) => setProgress((p) => nextProgress(p, step)),
+        (event) => {
+          if (runRef.current !== run) return;
+          const cards: GeneratedResult = {
+            title: event.title,
+            sourceFilename: event.sourceFilename,
+            source: event.source,
+            studyType: event.studyType as StudyType,
+            items: event.items as unknown as StudyItem[],
+          };
+          previewed.current = cards;
+          setLive(cards);
+        }
+      );
     } catch {
-      setErrorMsg('Could not reach the server. Check your connection and try again.');
-      setStatus('error');
-      return;
+      unreachable = true;
+      outcome = { status: 0, body: {} };
     } finally {
       clearTimeout(slowTimer);
       setSlowGeneration(false);
       setPdfRead(null);
     }
+    // The student left while this was running.
+    if (runRef.current !== run) return;
 
     if (outcome.status < 200 || outcome.status >= 300) {
-      setErrorMsg(generateErrorText(outcome.status, outcome.body));
+      // Cards already on the desk stay: the deck is just shorter than planned.
+      if (previewed.current) {
+        setResult(previewed.current);
+        setLive(null);
+        setCutShort(true);
+        setStatus('idle');
+        return;
+      }
+      setErrorMsg(
+        unreachable
+          ? 'Could not reach the server. Check your connection and try again.'
+          : generateErrorText(outcome.status, outcome.body)
+      );
       setStatus('error');
       return;
     }
 
-    setResult(outcome.body as unknown as GeneratedResult);
-    setView('spread');
+    const final = outcome.body as unknown as GeneratedResult;
+    // The deck the AI ended with starts with the cards already shown, unless it
+    // had to start again; then none of the cards on the desk count as studied.
+    const shown = previewed.current;
+    if (shown && !shown.items.every((card, i) => final.items[i]?.question === card.question && final.items[i]?.answer === card.answer)) {
+      setServed(0);
+    }
+    setResult(final);
+    setLive(null);
     setStatus('idle');
   };
 
@@ -270,7 +331,14 @@ export default function UploadPage() {
     ) {
       return;
     }
+    // Stop a deck that is still being written; its answer is no longer wanted.
+    runRef.current += 1;
+    abortRef.current?.abort();
     setResult(null);
+    setLive(null);
+    setBatchCards([]);
+    setServed(0);
+    setCutShort(false);
     setView('spread');
     setFile(null);
     setSaveStatus('idle');
@@ -289,14 +357,34 @@ export default function UploadPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeAfterAuth, user, result]);
 
-  if (result) {
-    const saveSlot = (
+  // What is on the desk: the whole deck, or the first cards while the rest are written.
+  const deck = result ?? live;
+  if (deck) {
+    const writing = !result;
+    const remaining = deck.items.length - served;
+    // Hands the cards the study desk has not had yet to it, as a new batch.
+    const startBatch = () => {
+      setBatchCards(deck.items.slice(served));
+      setServed(deck.items.length);
+      setBatchNo((k) => k + 1);
+      setView('study');
+    };
+    const saveSlot = writing ? (
+      <p className="text-center text-sm text-muted">
+        The rest of the cards are still being written. You can save the deck when it is done.
+      </p>
+    ) : (
       <div className="text-center space-y-2">
-        {result.source && (
+        {cutShort && (
+          <p className="text-xs text-pencil">
+            We couldn&apos;t write the rest of your cards, so this deck has {deck.items.length}.
+          </p>
+        )}
+        {deck.source && (
           <p className="text-xs text-muted">
             From{' '}
-            <a href={result.source.url} target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
-              {result.source.name}
+            <a href={deck.source.url} target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
+              {deck.source.name}
             </a>
           </p>
         )}
@@ -307,7 +395,7 @@ export default function UploadPage() {
             <p className="text-sm text-brass-ink">Sign in to save this study guide.</p>
             <button
               onClick={() => {
-                sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(result));
+                sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(deck));
                 signInWithGoogle();
               }}
               className="text-sm border rounded-lg px-4 py-2 font-medium hover:border-accent"
@@ -327,30 +415,49 @@ export default function UploadPage() {
         {saveStatus === 'error' && <p className="text-xs text-pencil">Failed to save. Try again.</p>}
       </div>
     );
+    // On the finish screen: the next cards, once they are ready.
+    const continueSlot =
+      remaining > 0 ? (
+        <div className="space-y-2">
+          <p className="text-sm">
+            {served === 0
+              ? `The deck was rewritten: ${remaining} cards.`
+              : `${remaining} more card${remaining === 1 ? ' is' : 's are'} ready${writing ? ', with more on the way' : ''}.`}
+          </p>
+          <button type="button" onClick={startBatch} className="btn btn-primary rounded-full px-5">
+            {served === 0 ? 'Study the whole deck' : 'Keep going'}
+          </button>
+        </div>
+      ) : writing ? (
+        <p className="text-sm">More cards are still being written. They will show up here.</p>
+      ) : null;
 
     if (view === 'study') {
       return (
         <StudyViewer
-          title={result.title}
-          studyType={result.studyType}
-          cards={result.items}
+          key={batchNo}
+          title={deck.title}
+          studyType={deck.studyType}
+          cards={batchCards}
           onExit={handleExit}
           saveSlot={saveSlot}
-          quoteLabel={quoteSourceLabel(result.sourceFilename)}
+          completionSlot={continueSlot}
+          quoteLabel={quoteSourceLabel(deck.sourceFilename)}
         />
       );
     }
 
-    const n = result.items.length;
+    const n = deck.items.length;
     return (
       <DeckSpread
-        title={result.title}
-        meta={`${STUDY_TYPE_LABELS[result.studyType] ?? 'Flashcards'} · ${n} card${n === 1 ? '' : 's'}`}
-        items={result.items}
-        onStart={() => setView('study')}
+        title={deck.title}
+        meta={`${STUDY_TYPE_LABELS[deck.studyType] ?? 'Flashcards'} · ${n} card${n === 1 ? '' : 's'}${writing ? ' so far' : ''}`}
+        items={deck.items}
+        onStart={startBatch}
         onExit={handleExit}
         saveSlot={saveSlot}
-        savedToHistory={!!result.historyId}
+        savedToHistory={!!deck.historyId}
+        writing={writing}
       />
     );
   }

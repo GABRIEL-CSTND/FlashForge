@@ -25,7 +25,13 @@ import {
   type GenerationState,
 } from '@/lib/generation-logs';
 import { limitMessage } from '@/lib/generation-limits';
-import { encodeEvent, PROGRESS_MIME, type ProgressEvent, type StepEvent } from '@/lib/generation-progress';
+import {
+  encodeEvent,
+  PROGRESS_MIME,
+  type CardsEvent,
+  type ProgressEvent,
+  type StepEvent,
+} from '@/lib/generation-progress';
 import { addToHistory } from '@/lib/history';
 
 export const runtime = 'nodejs';
@@ -58,7 +64,12 @@ async function extractText(file: File): Promise<{ text: string; units?: SourceUn
 // The only writes are the usage log (#62), the daily limit check (#63) and, for
 // a signed-in user, the guide's entry in their History (lib/history.ts).
 // `report` is told each step as it starts (see POST below).
-async function generate(req: NextRequest, report: (event: StepEvent) => void = () => {}): Promise<NextResponse> {
+async function generate(
+  req: NextRequest,
+  report: (event: StepEvent | CardsEvent) => void = () => {},
+  // Send the first cards as they are written (only when progress is on).
+  preview = false
+): Promise<NextResponse> {
   const startedAt = Date.now();
   const log: GenerationLog = {
     studyType: 'flashcard',
@@ -252,6 +263,17 @@ async function generate(req: NextRequest, report: (event: StepEvent) => void = (
       difficulty,
       focus,
       units,
+      onCards: preview
+        ? (cards) =>
+            report({
+              type: 'cards',
+              title,
+              sourceFilename,
+              source,
+              studyType,
+              items: cards as unknown as Record<string, unknown>[],
+            })
+        : undefined,
       onRequest: (m) => {
         log.requests[m] = (log.requests[m] ?? 0) + 1;
         attempts += 1;
@@ -336,7 +358,7 @@ export async function POST(req: NextRequest) {
 
   // generate() runs up to its first await right here, inside the request, which is
   // where after() (the usage log) has to be called.
-  generate(req, send)
+  generate(req, send, true)
     .then(async (res) => send({ type: 'result', status: res.status, body: await res.json().catch(() => ({})) }))
     .catch(() =>
       send({

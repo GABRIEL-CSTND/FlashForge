@@ -9,7 +9,17 @@ export const PROGRESS_MIME = 'application/x-ndjson';
 export type ServerStep = 'reading' | 'writing';
 export type StepEvent = { type: 'step'; step: ServerStep; attempt?: number; backup?: boolean };
 export type ResultEvent = { type: 'result'; status: number; body: Record<string, unknown> };
-export type ProgressEvent = StepEvent | ResultEvent;
+// The first cards of the guide, sent while the AI is still writing the rest: the whole
+// list so far each time, with what the guide's page needs to show them.
+export type CardsEvent = {
+  type: 'cards';
+  title: string;
+  sourceFilename: string | null;
+  source: { name: string; url: string } | null;
+  studyType: string;
+  items: Record<string, unknown>[];
+};
+export type ProgressEvent = StepEvent | CardsEvent | ResultEvent;
 
 export const encodeEvent = (event: ProgressEvent) => JSON.stringify(event) + '\n';
 
@@ -28,6 +38,16 @@ export function parseEvent(line: string): ProgressEvent | null {
       step: e.step,
       ...(typeof e.attempt === 'number' ? { attempt: e.attempt } : {}),
       ...(e.backup === true ? { backup: true } : {}),
+    };
+  }
+  if (e.type === 'cards' && typeof e.title === 'string' && typeof e.studyType === 'string' && Array.isArray(e.items)) {
+    return {
+      type: 'cards',
+      title: e.title,
+      sourceFilename: typeof e.sourceFilename === 'string' ? e.sourceFilename : null,
+      source: e.source && typeof e.source === 'object' ? (e.source as CardsEvent['source']) : null,
+      studyType: e.studyType,
+      items: e.items as Record<string, unknown>[],
     };
   }
   if (e.type === 'result' && typeof e.status === 'number' && e.body && typeof e.body === 'object') {
@@ -110,7 +130,11 @@ export const INTERRUPTED = 'The connection was interrupted before your study gui
 
 // Reads the response of /api/generate and reports each step as it arrives. A plain JSON
 // response (an old server, or an answer sent before streaming began) still works.
-export async function readGeneration(res: Response, onStep: (event: StepEvent) => void): Promise<GenerationOutcome> {
+export async function readGeneration(
+  res: Response,
+  onStep: (event: StepEvent) => void,
+  onCards?: (event: CardsEvent) => void
+): Promise<GenerationOutcome> {
   if (!res.headers.get('content-type')?.includes(PROGRESS_MIME) || !res.body) {
     return { status: res.status, body: await res.json().catch(() => ({})) };
   }
@@ -127,6 +151,7 @@ export async function readGeneration(res: Response, onStep: (event: StepEvent) =
       if (!line.trim()) continue;
       const event = parseEvent(line);
       if (event?.type === 'step') onStep(event);
+      else if (event?.type === 'cards') onCards?.(event);
       else if (event?.type === 'result') {
         reader.cancel().catch(() => {});
         return { status: event.status, body: event.body };
