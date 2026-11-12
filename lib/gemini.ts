@@ -62,14 +62,19 @@ const TOTAL_BUDGET_MS = 75_000;
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 // Items that fail validation are dropped, so ask for a few spares to still end
-// up with the count the user chose (#65): 10 flashcards -> 11, 10 multiple
-// choice -> 12. Multiple choice fails validation more often.
+// up with the count the user chose (#65): 10 flashcards -> 12, 10 multiple
+// choice -> 13. Multiple choice fails validation more often. One spare in ten
+// wasn't enough: two dropped cards left a 10-card guide with 9 or fewer.
+// Spares cost output tokens, not requests, so they don't touch the daily quota.
 type SingleType = Exclude<StudyType, 'mixed'>;
-const SPARE_RATIO: Record<SingleType, number> = {
-  flashcard: 0.1,
-  multiple_choice: 0.2,
-  true_false: 0.1,
+// Whole percentages: 10 * 0.3 is 3.0000000000000004 in floating point, which
+// would round up to 4 spares.
+const SPARE_PERCENT: Record<SingleType, number> = {
+  flashcard: 20,
+  multiple_choice: 30,
+  true_false: 20,
 };
+const spares = (count: number, type: SingleType) => Math.ceil((count * SPARE_PERCENT[type]) / 100);
 // A mixed quiz (#69) asks for each part's share plus that kind's spares.
 const PART_TYPE: Record<MixedPartKind, SingleType> = {
   multiple_choice: 'multiple_choice',
@@ -78,12 +83,12 @@ const PART_TYPE: Record<MixedPartKind, SingleType> = {
 };
 export function mixedRequest(count: number): Record<MixedPartKind, number> {
   const split = mixedSplit(count);
-  const ask = (kind: MixedPartKind) => split[kind] + Math.ceil(split[kind] * SPARE_RATIO[PART_TYPE[kind]]);
+  const ask = (kind: MixedPartKind) => split[kind] + spares(split[kind], PART_TYPE[kind]);
   return { multiple_choice: ask('multiple_choice'), true_false: ask('true_false'), identification: ask('identification') };
 }
 export function requestedCount(studyType: StudyType, count: number): number {
   if (studyType === 'mixed') return Object.values(mixedRequest(count)).reduce((a, b) => a + b, 0);
-  return count + Math.ceil(count * SPARE_RATIO[studyType]);
+  return count + spares(count, studyType);
 }
 // A response with fewer usable items than this (6 of 10) counts as a failed
 // attempt, so the next model is tried.
@@ -238,16 +243,28 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 // Catches degenerate model output: HTML, a short chunk repeated 4+ times in a
-// row, slug-like tokens ("status-code-404-not-found"), and long whitespace runs.
+// row, slug-like tokens of 5+ parts ("status-code-404-not-found"), and long
+// whitespace runs. Real study material that looks similar is kept: binary
+// numbers ("11111111.11111111.11111111.11000000" in a subnetting guide) and
+// hyphenated terms like "state-of-the-art".
 function looksBroken(s: string, maxLength: number): boolean {
   return (
     s.length === 0 ||
     s.length > maxLength ||
     /<\/?[a-z][^>]*>/i.test(s) ||
-    /(.{2,30}?)\1{3,}/.test(s) ||
-    /(?:^|\s)[^\s-]+(?:-[^\s-]+){3,}(?:\s|$)/.test(s) ||
+    hasRepeatedChunk(s) ||
+    /(?:^|\s)[^\s-]+(?:-[^\s-]+){4,}(?:\s|$)/.test(s) ||
     /\s{5,}/.test(s)
   );
+}
+
+// "hahahaha", "the the the the ", "--------". A chunk of only digits and the
+// separators between them ("11", "0.") is a number, not a stutter.
+function hasRepeatedChunk(s: string): boolean {
+  for (const [, chunk] of s.matchAll(/(.{2,30}?)\1{3,}/g)) {
+    if (!(/\d/.test(chunk) && /^[\d\s.:,/-]+$/.test(chunk))) return true;
+  }
+  return false;
 }
 
 // The prompt asks for answers of 1 to 4 words. The code allows a little more, so a

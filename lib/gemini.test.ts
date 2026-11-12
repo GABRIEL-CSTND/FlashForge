@@ -52,20 +52,22 @@ afterEach(() => {
 
 describe('question count (#65)', () => {
   it('asks for a few spares and the right minimum', () => {
-    expect(requestedCount('flashcard', 10)).toBe(11);
-    expect(requestedCount('multiple_choice', 10)).toBe(12);
-    expect(requestedCount('flashcard', 30)).toBe(33);
-    expect(requestedCount('multiple_choice', 5)).toBe(6);
+    expect(requestedCount('flashcard', 10)).toBe(12);
+    expect(requestedCount('multiple_choice', 10)).toBe(13);
+    expect(requestedCount('true_false', 10)).toBe(12);
+    expect(requestedCount('flashcard', 30)).toBe(36);
+    expect(requestedCount('multiple_choice', 30)).toBe(39);
+    expect(requestedCount('multiple_choice', 5)).toBe(7);
     expect(minValidItems(10)).toBe(6);
     expect(minValidItems(5)).toBe(3);
     expect(minValidItems(30)).toBe(18);
   });
 
   it('asks the AI for the chosen count plus spares, and returns no more than the count', async () => {
-    mockModel(() => reply(flashcards(22)));
+    mockModel(() => reply(flashcards(24)));
     const { items, model } = await generateStudyItems('Some notes about cells.', 'flashcard', { count: 20 });
     expect(sent).toHaveLength(1);
-    expect(sent[0].prompt).toContain('Produce exactly 22 items.');
+    expect(sent[0].prompt).toContain('Produce exactly 24 items.');
     expect(items).toHaveLength(20);
     expect(items[19]).toEqual({ question: 'Clue number 20', answer: 'Term 20' });
     expect(model).toBe('gemini-3.5-flash');
@@ -98,9 +100,9 @@ describe('question count (#65)', () => {
 
   it('defaults to 10 items and reports every request', async () => {
     const onRequest = vi.fn();
-    mockModel(() => reply(flashcards(11)));
+    mockModel(() => reply(flashcards(12)));
     const { items } = await generateStudyItems('Some notes.', 'flashcard', { onRequest });
-    expect(sent[0].prompt).toContain('Produce exactly 11 items.');
+    expect(sent[0].prompt).toContain('Produce exactly 12 items.');
     expect(items).toHaveLength(10);
     expect(onRequest).toHaveBeenCalledWith('gemini-3.5-flash');
   });
@@ -157,9 +159,9 @@ describe('mixed quiz (#69)', () => {
   it('asks for each part with spares and keeps each part\'s share, in order', async () => {
     mockModel(() => reply([...[1, 2, 3, 4, 5].map(mcItem), ...[1, 2, 3, 4].map(tfItem), ...[1, 2, 3, 4].map(idItem)]));
     const { items } = await generateStudyItems('Notes.', 'mixed', { count: 10 });
-    expect(mixedRequest(10)).toEqual({ multiple_choice: 5, true_false: 4, identification: 4 });
-    expect(sent[0].prompt).toContain('Produce exactly 13 items.');
-    expect(sent[0].prompt).toContain('Part I: exactly 5 items with "type": "multiple_choice".');
+    expect(mixedRequest(10)).toEqual({ multiple_choice: 6, true_false: 4, identification: 4 });
+    expect(sent[0].prompt).toContain('Produce exactly 14 items.');
+    expect(sent[0].prompt).toContain('Part I: exactly 6 items with "type": "multiple_choice".');
     expect(sent[0].prompt).toContain('Part III: exactly 4 items with "type": "identification".');
     expect(kinds(items)).toBe('mc,mc,mc,mc,tf,tf,tf,id,id,id');
     expect(items.slice(0, 4).map((i) => i.answer)).toEqual(['Right 1', 'Right 2', 'Right 3', 'Right 4']);
@@ -282,6 +284,54 @@ describe('short answers', () => {
     mockModel(() => reply([mc(1, ['A', 'B', 'C', 'D']), mc(2, ['A', 'B', 'C', 'D']), mc(3, ['A', 'B', 'C', 'D'])]));
     await generateStudyItems('Some notes.', 'multiple_choice', { count: 5 });
     expect(sent[0].prompt).toContain('Every choice is 1 to 4 words');
+  });
+});
+
+describe('cards that only look broken', () => {
+  it('keeps binary numbers and IP addresses, as in a subnetting guide', async () => {
+    const cards = [
+      { question: 'What is the /26 subnet mask in binary?', answer: '11111111.11111111.11111111.11000000' },
+      { question: 'Convert 11111111.11111111.11111111.11100000 to dotted decimal.', answer: '255.255.255.224' },
+      { question: 'What is 255 as an 8-bit binary number?', answer: '11111111' },
+      { question: 'What is 170 in binary?', answer: '10101010' },
+      { question: 'Which address means every host on every network?', answer: '255.255.255.255' },
+      { question: 'What is the network address of 192.168.10.70/26?', answer: '192.168.10.64' },
+    ];
+    mockModel(() => reply(cards));
+    const { items } = await generateStudyItems('Subnetting notes.', 'flashcard', { count: 6 });
+    expect(items.map((i) => i.answer)).toEqual(cards.map((c) => c.answer));
+  });
+
+  it('keeps binary numbers as multiple-choice choices', async () => {
+    const options = ['11000000', '11100000', '11111111', '10101010'];
+    mockModel(() => reply(Array.from({ length: 5 }, (_, i) => ({ question: `Which byte is mask ${i}?`, options, answer: options[i % 4] }))));
+    const { items } = await generateStudyItems('Subnetting notes.', 'multiple_choice', { count: 5 });
+    expect(items).toHaveLength(5);
+  });
+
+  it('keeps hyphenated terms like state-of-the-art', async () => {
+    mockModel(() => reply([
+      { question: 'Which phrase means the newest and most advanced?', answer: 'state-of-the-art' },
+      { question: 'What is a direct link between two nodes called?', answer: 'point-to-point link' },
+      { question: 'Clue 3', answer: 'Term 3' },
+    ]));
+    const { items } = await generateStudyItems('Notes.', 'flashcard', { count: 3 });
+    expect(items.map((i) => i.answer)).toEqual(['state-of-the-art', 'point-to-point link', 'Term 3']);
+  });
+
+  it('still drops garbled output', async () => {
+    mockModel(() => reply([
+      { question: 'Clue 1', answer: 'hahahahaha' },
+      { question: 'Clue 2', answer: 'the the the the the' },
+      { question: 'Clue 3', answer: 'status-code-404-not-found' },
+      { question: 'Clue 4', answer: 'Taxonomy-set-3-A-R-C' },
+      { question: 'Clue 5', answer: '<b>Term</b>' },
+      { question: 'Clue 6', answer: '--------' },
+      { question: 'What is mask 1a1a1a1a?', answer: 'Term 7' },
+      ...flashcards(3),
+    ]));
+    const { items } = await generateStudyItems('Notes.', 'flashcard', { count: 5 });
+    expect(items.map((i) => i.answer)).toEqual(['Term 1', 'Term 2', 'Term 3']);
   });
 });
 

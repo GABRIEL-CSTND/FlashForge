@@ -422,6 +422,14 @@ already applied there.
 - New README, plus `docs/ARCHITECTURE.md` and this changelog (#47).
 
 ### Fixed
+- **Guides came out a card or two short** (2026-11-12): a 10-card guide made from a
+  subnetting PDF had 8 or 9 cards. The check for garbled AI output took binary numbers
+  ("11111111", "11111111.11111111.11111111.11000000") for a stutter and dropped those
+  cards, along with hyphenated terms of 4 parts like "state-of-the-art". Numbers and
+  4-part terms now pass; real garbage ("hahahaha", "status-code-404-not-found", HTML) is
+  still dropped. The AI is also asked for more spare cards (12 for 10 flashcards, 13 for
+  10 multiple choice, up from 11 and 12), so a dropped card or two no longer shortens the
+  guide. Tests: 4 new in `lib/gemini.test.ts`; 855 in all.
 - On phones, the links at the top of the upload page (My Classes, My Sets, History, the
   email and Sign out) ran off the screen in one line. They now wrap onto a second line.
 - **Quotes under cards** (#21), from the review of PR #80:

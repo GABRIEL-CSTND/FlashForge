@@ -538,10 +538,11 @@ new ones included, gets it without doing anything):
   the other parts as wrong choices.
 - **Focus** (#79): a typed topic is added as "Focus on what the text says about ...",
   with quotes and line breaks taken out first.
-- **Spares:** items that fail validation are dropped, so the prompt asks for 10% more
-  flashcards or true-or-false statements, or 20% more multiple-choice questions, than the
-  user chose (11 or 12 for 10),
-  and the guide keeps the first valid ones up to the chosen count.
+- **Spares:** items that fail validation are dropped, so the prompt asks for 20% more
+  flashcards or true-or-false statements, or 30% more multiple-choice questions, than the
+  user chose (12 or 13 for 10), and the guide keeps the first valid ones up to the chosen
+  count. It used to be 10% and 20%, and two dropped cards left a 10-card guide with 8 or 9
+  (2026-11-12). Spares cost output tokens, not requests, so the daily quota is the same.
 - **Long documents** (#38): the AI gets up to 30,000 characters. A longer PDF is sampled
   by whole pages spread over the whole document (always the first and the last page,
   blank pages left out), a longer TXT file by whole paragraphs, and other long text
@@ -556,8 +557,11 @@ new ones included, gets it without doing anything):
 
 **Validation**, applied to every model's output:
 - Thought parts and ```` ```json ```` fences are stripped before parsing.
-- **Garbage filter:** rejects HTML, a short chunk repeated 4+ times, slug-like tokens,
-  long whitespace runs, and over-long text. **Short answers only:** any answer over 6 words or 60
+- **Garbage filter:** rejects HTML, a short chunk repeated 4+ times, slug-like tokens of
+  5+ parts ("status-code-404-not-found"), long whitespace runs, and over-long text. A
+  chunk of only digits and separators doesn't count as repeated, so binary numbers
+  ("11111111.11111111.11111111.11000000") pass, and so does "state-of-the-art". Before
+  2026-11-12 both were dropped, which cut subnetting guides short. **Short answers only:** any answer over 6 words or 60
   characters is dropped (`ANSWER_LIMITS` in `lib/gemini.ts`). That covers flashcard and
   identification answers and every multiple-choice choice, so a card with one long
   choice is dropped whole. The prompt asks for 1 to 4 words, so this only catches the
