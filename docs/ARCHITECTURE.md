@@ -470,7 +470,11 @@ new ones included, gets it without doing anything):
    400 otherwise, #68) and inserts the set and cards with the **service-role** key. If the
    cards can't be saved, the new set is removed again. If the user signs in
    mid-save, the unsaved result is kept in `sessionStorage` across the Google redirect
-   and saved automatically afterwards. The page sends the guide's `historyId` along, so
+   (`lib/pending-guide.ts`) and saved automatically afterwards, once per page load. The
+   page reads it with `useSyncExternalStore`, so the server render and hydration show
+   nothing and the browser's copy appears right after, with no effect setting state
+   (#89). It stays kept until the guide is saved or left, so a failed automatic save or
+   a reload doesn't lose it; the Save button tries again. The page sends the guide's `historyId` along, so
    History shows it as saved (see "History" below).
 
 ### The AI pipeline (`lib/gemini.ts`)
@@ -1113,7 +1117,7 @@ transaction. Run them after every database change.
     Right / Wrong piles, the Wrong pile again, part cards and focus), `CardEditor`,
     `AssignPanel`, the desk's card box and library card (the tabs each role gets, signing
     in and out), `PageTurn` (the sheet, and the rise after Back and Forward), `PaperCard`, the desk layout at four widths, the
-    set page, My Sets (its decks, best scores, delete), the History pages (saving from a deck too) and the teacher and student pages, in jsdom with React Testing Library.
+    set page, My Sets (its decks, best scores, delete), the History pages (saving from a deck too), saving a guide made while signed out across the Google sign-in (`app/upload-sign-in-save.test.tsx`, #89) and the teacher and student pages, in jsdom with React Testing Library.
     Component tests start with `// @vitest-environment jsdom`.
 - `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and
   classes. Each prints expected vs. actual (10, 10 and 21 cases).

@@ -422,6 +422,14 @@ already applied there.
 - New README, plus `docs/ARCHITECTURE.md` and this changelog (#47).
 
 ### Fixed
+- **Lint passes with no errors** (#89, 2026-11-12): the last 2 errors were in the upload
+  page's "sign in to save" flow, two effects that set state as soon as they ran. A guide
+  made while signed out is now read back from `sessionStorage` with
+  `useSyncExternalStore` (`lib/pending-guide.ts`), and the automatic save after signing in
+  remembers that it ran in a ref. It works as before, with two small fixes: if the
+  automatic save fails, the guide is kept instead of being lost on the next reload, and
+  leftover data that isn't a guide is ignored instead of crashing the page. Tests: 6 new
+  in `app/upload-sign-in-save.test.tsx` (the flow had none); 861 in all.
 - **Guides came out a card or two short** (2026-11-12): a 10-card guide made from a
   subnetting PDF had 8 or 9 cards. The check for garbled AI output took binary numbers
   ("11111111", "11111111.11111111.11111111.11000000") for a stutter and dropped those

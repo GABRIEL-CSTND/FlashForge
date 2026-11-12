@@ -79,7 +79,7 @@ Open http://localhost:3000.
 | `npm run dev` | Start the dev server |
 | `npm run build` | Production build (also type-checks) |
 | `npm start` | Run the production build |
-| `npm run lint` | ESLint (2 known errors in `app/page.tsx`, unrelated to recent work) |
+| `npm run lint` | ESLint (no errors) |
 | `npm test` | Unit, API-route and component tests (Vitest + React Testing Library) |
 
 ## Project structure
@@ -170,6 +170,7 @@ lib/
   source-quotes.ts      Checks each card's quote against the notes, finds its page or line, samples long documents
   office-text.ts        Text from Word (.docx) and PowerPoint (.pptx) files, with zip-bomb limits (server-only)
   shrink-image.ts       Shrinks photos to 1,600 pixels before upload (browser-only)
+  pending-guide.ts      Keeps an unsaved guide across the Google sign-in redirect (browser-only)
   speech.ts             Reading cards aloud with the browser's built-in speech, and the Auto setting (browser-only)
   web-page.ts           Fetches a linked web page safely (no private addresses) and keeps its main text (server-only)
   topic.ts              Looks a typed topic up on Wikipedia and returns the best article's text (server-only)

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser, signInWithGoogle } from '@/lib/auth';
@@ -19,6 +19,7 @@ import {
   type StudyType,
 } from '@/lib/study-types';
 import { shrinkImage } from '@/lib/shrink-image';
+import { keepPendingGuide, pendingGuideJson, serverPendingGuideJson, subscribePendingGuide } from '@/lib/pending-guide';
 import { planPdfUpload } from '@/lib/prepare-pdf';
 import {
   detectSource,
@@ -45,7 +46,17 @@ interface GeneratedResult {
   historyId?: string | null;
 }
 
-const PENDING_RESULT_KEY = 'flashforge_pending_result';
+// The guide kept across the sign-in redirect (lib/pending-guide.ts), or null when
+// there is none or it can't be read.
+function parsePendingGuide(json: string | null): GeneratedResult | null {
+  if (!json) return null;
+  try {
+    const guide = JSON.parse(json);
+    return guide && Array.isArray(guide.items) ? guide : null;
+  } catch {
+    return null;
+  }
+}
 // Gemini normally writes 10 questions in under ~12s; longer usually means the
 // Gemma backup. Bigger guides (#65) take longer, so wait a second more for
 // each question over 10.
@@ -68,30 +79,19 @@ export default function UploadPage() {
   const [count, setCount] = useState<number>(DEFAULT_QUESTION_COUNT);
   const [status, setStatus] = useState<'idle' | 'generating' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
-  const [result, setResult] = useState<GeneratedResult | null>(null);
+  // The guide just made here, or else one made before signing in to save it,
+  // brought back after the Google redirect reloaded the page.
+  const [generated, setGenerated] = useState<GeneratedResult | null>(null);
+  const pendingJson = useSyncExternalStore(subscribePendingGuide, pendingGuideJson, serverPendingGuideJson);
+  const pending = useMemo(() => parsePendingGuide(pendingJson), [pendingJson]);
+  const result = generated ?? pending;
   // A new deck lies in a spread until Start studying.
   const [view, setView] = useState<'spread' | 'study'>('spread');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'needs-auth'>('idle');
-  const [resumeAfterAuth, setResumeAfterAuth] = useState(false);
   const [slowGeneration, setSlowGeneration] = useState(false);
   const [progress, setProgress] = useState<ProgressState>(START_PROGRESS);
   // How far the browser has got reading a PDF (#44); null when it isn't.
   const [pdfRead, setPdfRead] = useState<{ done: number; total: number } | null>(null);
-
-  // Restore a generated-but-unsaved result after a Google sign-in redirect,
-  // since the OAuth flow does a full page reload and would otherwise lose it.
-  useEffect(() => {
-    const pending = sessionStorage.getItem(PENDING_RESULT_KEY);
-    if (pending) {
-      sessionStorage.removeItem(PENDING_RESULT_KEY);
-      try {
-        setResult(JSON.parse(pending));
-        setResumeAfterAuth(true);
-      } catch {
-        // ignore malformed/stale data
-      }
-    }
-  }, []);
 
   const validateAndSetFile = async (chosen: File) => {
     // Photos (#72) are shrunk first, so a big phone photo still fits.
@@ -216,7 +216,7 @@ export default function UploadPage() {
       return;
     }
 
-    setResult(outcome.body as unknown as GeneratedResult);
+    setGenerated(outcome.body as unknown as GeneratedResult);
     setView('spread');
     setStatus('idle');
   };
@@ -256,6 +256,10 @@ export default function UploadPage() {
       return;
     }
 
+    // Hold on to it (a guide brought back after signing in, too) so the page
+    // shows Saved until the set page opens.
+    setGenerated(result);
+    keepPendingGuide(null);
     setSaveStatus('saved');
     router.push(`/sets/${body.id}`);
   };
@@ -270,7 +274,8 @@ export default function UploadPage() {
     ) {
       return;
     }
-    setResult(null);
+    setGenerated(null);
+    keepPendingGuide(null);
     setView('spread');
     setFile(null);
     setSaveStatus('idle');
@@ -278,16 +283,16 @@ export default function UploadPage() {
     setErrorMsg('');
   };
 
-  // If we restored a pending result after an auth redirect and the user is
-  // now signed in, finish the save automatically instead of making them
-  // click twice.
+  // A guide brought back after signing in to save it: once the user is signed
+  // in, save it without making them click Save again. Once per page load; if it
+  // fails, the Save button is there to try again.
+  const autoSaveTried = useRef(false);
   useEffect(() => {
-    if (resumeAfterAuth && user && result) {
-      setResumeAfterAuth(false);
-      handleSave();
-    }
+    if (!pending || generated || !user || autoSaveTried.current) return;
+    autoSaveTried.current = true;
+    handleSave();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resumeAfterAuth, user, result]);
+  }, [pending, generated, user]);
 
   if (result) {
     const saveSlot = (
@@ -307,7 +312,7 @@ export default function UploadPage() {
             <p className="text-sm text-brass-ink">Sign in to save this study guide.</p>
             <button
               onClick={() => {
-                sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(result));
+                keepPendingGuide(JSON.stringify(result));
                 signInWithGoogle();
               }}
               className="text-sm border rounded-lg px-4 py-2 font-medium hover:border-accent"
