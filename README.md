@@ -54,7 +54,7 @@ Create `.env.local` in the project root. It's gitignored; never commit it.
 | Variable | Where to find it | Used by |
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API → Project URL | Browser and server |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → `anon` key | Browser (safe to expose; RLS protects the data) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → `anon` key | Browser (safe to expose; RLS and table grants protect the data) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → `service_role` key | **Server only.** It bypasses RLS, so never use it in client code |
 | `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) | Server only (`lib/gemini.ts`) |
 | `IP_HASH_SECRET` | Optional: any long random string | Server only. Key for hashing signed-out visitors' IPs for the daily limits (#63); defaults to the service-role key |

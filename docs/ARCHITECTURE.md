@@ -1062,12 +1062,12 @@ The plan for teacher and admin features is tracked in #50.
 
 | Table | Who | Can |
 |---|---|---|
-| `flashcard_sets` | Owner | Read, rename, delete their own sets |
+| `flashcard_sets` | Owner | Read, rename, delete their own sets. Renaming is the only change they can make: signed-in users may update the `title` column only (PR #84) |
 | `flashcard_sets` | Anyone | Read legacy sets with no owner |
 | `flashcard_sets` | Students in a class | Read a set while it's assigned to a class they're in (#56) |
 | `flashcard_sets` | Admins | Read every set, and so its cards (#61); no extra write rights |
-| `flashcard_sets` | Anyone | **Insert: nobody** (saves go through `/api/save-set`) |
-| `flashcards` | Anyone | Read a card exactly when they can read its set (the policy checks the set through the set's own RLS); no direct writes (edits go through `replace_set_cards()`, server-only) |
+| `flashcard_sets` | Anyone | **Insert: nobody** (saves go through `/api/save-set`); browsers have no insert grant either (PR #84) |
+| `flashcards` | Anyone | Read a card exactly when they can read its set (the policy checks the set through the set's own RLS); no direct writes, and no insert, update or delete grants for browsers (edits go through `replace_set_cards()`, server-only; PR #84) |
 | `profiles` | The user | Read their own row and update `display_name` only; anon has no access |
 | `classes` | Teacher / members | The teacher reads their own classes; members read classes they joined; no direct writes |
 | `class_members` | Student / teacher | A student reads their own memberships; the teacher reads their roster; no direct writes (joining and leaving go through the server) |
@@ -1087,6 +1087,13 @@ security-definer helpers in a schema the API doesn't expose. The `attempts` poli
 **Two holes fixed on 2026-10-20 (#46):**
 - An anon policy exposed **every** card, including private ones.
 - An insert policy allowed **anyone** to insert sets with any `user_id`.
+
+**Grants, not only policies (PR #84):** Supabase gives `anon` and `authenticated` every
+privilege on existing tables, and RLS is the only thing in the way. For `flashcards` and
+`flashcard_sets` the grants themselves are now cut back to what the browser uses, so a
+policy added by mistake later still can't open them up: no insert, truncate, trigger or
+references on either table, no update or delete on cards, and on sets an update grant for
+the `title` column only (anon has no update or delete).
 
 `supabase/tests/*.sql` re-checks these rules by simulating users inside a rolled-back
 transaction. Run them after every database change.
@@ -1135,6 +1142,11 @@ transaction. Run them after every database change.
   real edit, kept ids, each kind of refused save, that a refused save changes nothing,
   that browsers can't call it, and that a rewritten card loses its quote while a moved
   one keeps it (#21).
+- `supabase/tests/server-only-card-writes-check.sql` (10 cases, PR #84): browsers have no
+  write grants on cards and can't insert sets (column-level grants count too); anon can't
+  update or delete sets; signed-in users can update only a set's title and can still read
+  sets and cards and delete sets; an owner can rename their set but not change its study
+  type, add a card or edit one, and deleting the set takes its cards with it.
 - `supabase/tests/history-rls-check.sql` (13 cases): the server adds entries; `item_count`
   counts the cards; empty or non-list cards and unknown study types are refused; owners
   read and remove only their own entries and can't add or edit any; anon can't read;

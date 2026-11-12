@@ -3,10 +3,10 @@
 Notable changes to FlashForge, newest first. Issue and PR numbers refer to
 [GABRIEL-CSTND/FlashForge](https://github.com/GABRIEL-CSTND/FlashForge).
 
-## Desk redesign (on `UI_changes`, not on `dev` yet)
+## Desk redesign (on `dev`, not on the live site yet)
 
-The new look, built in 7 phases on the `UI_changes` branch and merged into `dev` when
-it's ready. It changes how the app looks, not how it works.
+The new look, built in 7 phases on the `UI_changes` branch and merged into `dev` on
+2026-11-11. It changes how the app looks, not how it works.
 
 ### Changed
 - **Pages turn instead of swapping** (2026-11-07): moving to another page fades the old one
@@ -145,6 +145,16 @@ into `main`. There is only one Supabase database, so changes marked **(live)** a
 already applied there.
 
 ### Security
+- **Browsers can't write cards, even if a policy slips later** (PR #84 and its review):
+  RLS already stopped browsers from adding sets or changing cards, but the tables still
+  granted them insert, update and delete. Those grants are gone, so the public key can't
+  write cards or add sets at all. Signed-in users can still rename and delete their own
+  sets, but renaming is now the only change they can make: before, an owner could change
+  a set's study type straight through the database, leaving, say, a "multiple choice" set
+  whose cards have no choices. Unused truncate, trigger and references grants were
+  removed too. (Migrations `20261112000100_server_only_card_writes.sql` and
+  `20261112000200_tighten_set_grants.sql`, checked by
+  `supabase/tests/server-only-card-writes-check.sql`.)
 - **Failed guides can't be repeated all day** (#41): a guide that failed after the AI was
   asked didn't count toward the daily limit, so someone could keep sending, say, a photo
   with nothing to study in it, and about 20 tries used up the AI quota everyone shares.
