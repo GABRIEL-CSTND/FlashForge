@@ -30,13 +30,25 @@ describe('card box', () => {
   it('gives students My Sets, History and My Classes', () => {
     signIn('student');
     render(<CardBox />);
-    expect(links()).toEqual(['My Sets -> /my-sets', 'History -> /history', 'My Classes -> /classes', 'FlashForge -> /']);
+    expect(links()).toEqual([
+      'My Sets -> /my-sets',
+      'History -> /history',
+      'My Classes -> /classes',
+      'Guide -> /guide',
+      'FlashForge -> /',
+    ]);
   });
 
   it('gives teachers Classes instead of My Classes', () => {
     signIn('teacher');
     render(<CardBox />);
-    expect(links()).toEqual(['My Sets -> /my-sets', 'History -> /history', 'Classes -> /teacher', 'FlashForge -> /']);
+    expect(links()).toEqual([
+      'My Sets -> /my-sets',
+      'History -> /history',
+      'Classes -> /teacher',
+      'Guide -> /guide',
+      'FlashForge -> /',
+    ]);
   });
 
   it('gives admins Classes and the Admin pages', () => {
@@ -47,6 +59,7 @@ describe('card box', () => {
       'History -> /history',
       'Classes -> /teacher',
       'Admin -> /admin',
+      'Guide -> /guide',
       'FlashForge -> /',
     ]);
   });
@@ -54,14 +67,14 @@ describe('card box', () => {
   it('shows My Sets and History while the profile is still loading', () => {
     signIn(null);
     render(<CardBox />);
-    expect(links()).toEqual(['My Sets -> /my-sets', 'History -> /history', 'FlashForge -> /']);
+    expect(links()).toEqual(['My Sets -> /my-sets', 'History -> /history', 'Guide -> /guide', 'FlashForge -> /']);
   });
 
-  it('shows only the FlashForge plate when signed out', () => {
+  it('shows the Guide tab and FlashForge plate when signed out', () => {
     state.user = null;
     state.profile = null;
     render(<CardBox />);
-    expect(links()).toEqual(['FlashForge -> /']);
+    expect(links()).toEqual(['Guide -> /guide', 'FlashForge -> /']);
   });
 
   it('marks the tab of the page you are on, including the pages below it', () => {

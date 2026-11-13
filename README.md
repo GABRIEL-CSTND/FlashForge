@@ -95,6 +95,7 @@ app/
   my-sets/page.tsx      My Sets: the saved sets as decks on the desk, each with its best score; delete one
   history/page.tsx      History: every guide made while signed in, as decks; save one to My Sets or remove it
   history/[id]/page.tsx One guide from History: study it again, or save it to My Sets
+  guide/page.tsx        User Guide (#25): how to make, study and save decks, and the teacher tools (static)
   sets/[id]/page.tsx    A saved set: study and save the score; the owner can edit cards, rename, delete
   teacher/page.tsx      Your classes (teachers): each class a kraft folder with its join code; make a new one
   teacher/classes/[id]/ One class on the desk: join-code plate, assigned decks, roster on paper, rename, delete

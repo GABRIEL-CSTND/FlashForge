@@ -1,6 +1,7 @@
 'use client';
 
 import { startTransition, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser, signInWithGoogle } from '@/lib/auth';
@@ -440,7 +441,13 @@ export default function UploadPage() {
           </div>
           <div className="flex flex-col gap-5">
             <aside aria-label="Tip" className="sticky-note paper-shadow hidden max-w-xs rotate-[2.5deg] self-end rounded-sm px-4 py-3 text-[13.5px] leading-snug text-ink lg:block">
-              Drop a PDF, Word file, slides or a photo on the sheet. Or click it and type notes, a link or a topic.
+              <p>Drop a PDF, Word file, slides or a photo on the sheet. Or click it and type notes, a link or a topic.</p>
+              <p className="mt-2 border-t border-ink/10 pt-1.5 text-xs">
+                New here?{' '}
+                <Link href="/guide" className="font-semibold text-brass-ink hover:underline">
+                  Read the User Guide →
+                </Link>
+              </p>
             </aside>
             <MakeCard
               count={count}
