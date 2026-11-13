@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser, signInWithGoogle } from '@/lib/auth';
@@ -46,6 +46,8 @@ interface GeneratedResult {
 }
 
 const PENDING_RESULT_KEY = 'flashforge_pending_result';
+// How long between one new card and the next landing on the desk.
+const CARD_GAP_MS = 300;
 // Gemini normally writes 10 questions in under ~12s; longer usually means the
 // Gemma backup. Bigger guides (#65) take longer, so wait a second more for
 // each question over 10.
@@ -73,6 +75,8 @@ export default function UploadPage() {
   // right away, and the study desk takes each new card as it arrives; `result`
   // replaces them when the whole deck is ready.
   const [live, setLive] = useState<GeneratedResult | null>(null);
+  // How many of the deck's cards are on the desk so far (they land one at a time).
+  const [shown, setShown] = useState(0);
   // Changes when the finished deck is not the one that was on the desk (the AI had
   // to start again), so the study desk starts over with the new cards.
   const [batchNo, setBatchNo] = useState(0);
@@ -98,6 +102,8 @@ export default function UploadPage() {
       sessionStorage.removeItem(PENDING_RESULT_KEY);
       try {
         setResult(JSON.parse(pending));
+        // A deck that was already finished is not laid out card by card.
+        setShown(Number.MAX_SAFE_INTEGER);
         setResumeAfterAuth(true);
       } catch {
         // ignore malformed/stale data
@@ -168,6 +174,7 @@ export default function UploadPage() {
     const controller = new AbortController();
     abortRef.current = controller;
     setLive(null);
+    setShown(0);
     setCutShort(false);
     setView('spread');
     // The first cards sent while the AI is still writing; the rest of the deck follows.
@@ -333,6 +340,7 @@ export default function UploadPage() {
     abortRef.current?.abort();
     setResult(null);
     setLive(null);
+    setShown(0);
     setCutShort(false);
     setView('spread');
     setFile(null);
@@ -353,9 +361,23 @@ export default function UploadPage() {
   }, [resumeAfterAuth, user, result]);
 
   // What is on the desk: the whole deck, or the first cards while the rest are written.
-  const deck = result ?? live;
+  // Cards arrive in quick bursts, so they are put on the desk one at a time, a
+  // moment apart, and the count goes up 4, 5, 6… instead of jumping.
+  const full = result ?? live;
+  const target = full?.items.length ?? 0;
+  useEffect(() => {
+    if (shown >= target) return;
+    const id = setTimeout(() => setShown((n) => n + 1), shown === 0 ? 0 : CARD_GAP_MS);
+    return () => clearTimeout(id);
+  }, [shown, target]);
+  const visible = Math.min(shown, target);
+  const deck = useMemo(
+    () => (full && visible > 0 ? { ...full, items: full.items.slice(0, visible) } : null),
+    [full, visible]
+  );
   if (deck) {
-    const writing = !result;
+    // Still being written, or still being put on the desk one card at a time.
+    const writing = !result || visible < target;
     const startStudying = () => setView('study');
     const saveSlot = writing ? (
       <p className="text-center text-sm text-muted">
@@ -415,6 +437,7 @@ export default function UploadPage() {
           title={deck.title}
           studyType={deck.studyType}
           cards={deck.items}
+          expected={writing ? count : undefined}
           onExit={handleExit}
           saveSlot={saveSlot}
           completionSlot={continueSlot}
@@ -427,13 +450,14 @@ export default function UploadPage() {
     return (
       <DeckSpread
         title={deck.title}
-        meta={`${STUDY_TYPE_LABELS[deck.studyType] ?? 'Flashcards'} · ${n} card${n === 1 ? '' : 's'}${writing ? ' so far' : ''}`}
+        meta={`${STUDY_TYPE_LABELS[deck.studyType] ?? 'Flashcards'} · ${writing && count > n ? `${n} of ${count} cards` : `${n} card${n === 1 ? '' : 's'}`}`}
         items={deck.items}
         onStart={startStudying}
         onExit={handleExit}
         saveSlot={saveSlot}
         savedToHistory={!!deck.historyId}
         writing={writing}
+        expected={writing ? count : undefined}
       />
     );
   }

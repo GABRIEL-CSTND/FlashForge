@@ -86,6 +86,9 @@ export interface QuizDeskProps {
   quoteLabel?: string;
   // Fade and rise in on mount (StudyViewer).
   arrive?: boolean;
+  // How many questions the quiz will have, while the AI is still writing it, so the
+  // count can read "4 of 10" and go up as each question is written.
+  expected?: number;
 }
 
 // Quizzes on the desk (desk redesign, phase 4): multiple choice, true or false
@@ -107,6 +110,7 @@ export default function QuizDesk({
   saveSlot,
   quoteLabel = 'From the document',
   arrive = false,
+  expected,
 }: QuizDeskProps) {
   const mixed = studyType === 'mixed';
   // A mixed quiz goes part by part (#69), keeping the saved order within each.
@@ -524,13 +528,13 @@ export default function QuizDesk({
     ? 'All done'
     : sheet?.kind === 'part'
       ? `Part ${sheet.part.numeral} · ${sheet.part.label}`
-      : `Question ${passDone + 1} of ${passCount}`;
+      : `Question ${passDone + 1} of ${Math.max(passCount, expected ?? 0)}`;
   const header = <DeskHeader onExit={onExit} progress={progress} tally={`. Right ${right}, Wrong ${wrong}.`} />;
 
   const label = (
     <div className="paper paper-shadow -rotate-1 rounded px-4 py-2.5 text-ink">
       <h1 className="text-[19px] leading-tight">{title}</h1>
-      <p className="mt-0.5 text-[12.5px] text-muted">{`${STUDY_TYPE_LABELS[studyType]} · ${questionsWord(total)}`}</p>
+      <p className="mt-0.5 text-[12.5px] text-muted">{expected !== undefined && expected > total ? `${STUDY_TYPE_LABELS[studyType]} · ${total} of ${expected} questions written` : `${STUDY_TYPE_LABELS[studyType]} · ${questionsWord(total)}`}</p>
     </div>
   );
   const notes = saveSlot ? <div className="paper paper-shadow rounded px-4 py-3 text-sm text-ink">{saveSlot}</div> : null;

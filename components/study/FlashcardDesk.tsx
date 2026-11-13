@@ -52,6 +52,9 @@ export interface FlashcardDeskProps {
   quoteLabel?: string;
   // Fade and rise in on mount (StudyViewer).
   arrive?: boolean;
+  // How many cards the deck will have, while the AI is still writing it, so the
+  // count can read "4 of 10" and go up as each card is written.
+  expected?: number;
 }
 
 // Flashcards on the desk (desk redesign, phase 2): the deck on the left, the
@@ -71,6 +74,7 @@ export default function FlashcardDesk({
   saveSlot,
   quoteLabel = 'From the document',
   arrive = false,
+  expected,
 }: FlashcardDeskProps) {
   const count = cards.length;
   const [mode, setMode] = useState<FlashcardMode>('flip');
@@ -491,14 +495,14 @@ export default function FlashcardDesk({
     ? 'All done'
     : roundIndex >= 0
       ? `Round ${roundIndex + 1} of ${rounds.length}`
-      : `Card ${deck.pos + 1} of ${deck.order.length}`;
+      : `Card ${deck.pos + 1} of ${Math.max(deck.order.length, expected ?? 0)}`;
   const header = <DeskHeader onExit={onExit} progress={progress} tally={`. Got it ${got}, Missed it ${missed}.`} />;
 
   const toGo = deck.order.length - deck.pos;
   const label = (
     <div className="paper paper-shadow -rotate-1 rounded px-4 py-2.5 text-ink">
       <h1 className="text-[19px] leading-tight">{title}</h1>
-      <p className="mt-0.5 text-[12.5px] text-muted">{finished ? `All done · ${cardsWord(count)}` : `${toGo} to go · ${cardsWord(count)}`}</p>
+      <p className="mt-0.5 text-[12.5px] text-muted">{expected !== undefined && expected > count ? `${toGo} to go · ${count} of ${expected} cards written` : finished ? `All done · ${cardsWord(count)}` : `${toGo} to go · ${cardsWord(count)}`}</p>
     </div>
   );
   const notes = saveSlot ? <div className="paper paper-shadow rounded px-4 py-3 text-sm text-ink">{saveSlot}</div> : null;

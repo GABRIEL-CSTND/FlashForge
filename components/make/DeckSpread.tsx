@@ -24,6 +24,7 @@ export default function DeckSpread({
   saveSlot,
   savedToHistory,
   writing = false,
+  expected,
 }: {
   title: string;
   // e.g. "10 flashcards · medium".
@@ -35,6 +36,8 @@ export default function DeckSpread({
   savedToHistory: boolean;
   // The AI is still writing: more cards will land, and you can start studying now.
   writing?: boolean;
+  // How many cards the deck will have, so the count reads "4 of 10" and goes up.
+  expected?: number;
 }) {
   const [landed, setLanded] = useState(0);
   const [gather, setGather] = useState<{ x: number; y: number }[] | null>(null);
@@ -82,7 +85,9 @@ export default function DeckSpread({
         <p aria-live="polite" className="inline-flex items-center gap-2 text-sm font-medium text-on-desk/85">
           <span aria-hidden="true" className={`h-2 w-2 rounded-full bg-brass ${ready ? '' : 'animate-pulse'}`} />
           {writing
-            ? `${items.length} card${items.length === 1 ? ' is' : 's are'} ready, writing more…`
+            ? expected !== undefined && expected > items.length
+              ? `${items.length} of ${expected} cards written…`
+              : `${items.length} card${items.length === 1 ? '' : 's'} written…`
             : ready
               ? `All ${items.length} cards are ready`
               : `Laying out card ${landed + 1} of ${items.length}`}
