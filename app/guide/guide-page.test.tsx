@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import GuidePage from '@/app/guide/page';
+import { normalizeJoinCode } from '@/lib/classes-shared';
 
 afterEach(cleanup);
 
@@ -74,6 +75,21 @@ describe('user guide page (#25)', () => {
     expect(screen.getByRole('heading', { name: 'For Students' })).toBeTruthy();
     expect(screen.getByText(/Most-missed questions/)).toBeTruthy();
     expect(screen.getByText(/Grade Book/)).toBeTruthy();
+  });
+
+  // These were wrong in earlier versions of the guide (PR #83 and #93 reviews).
+  it('gives a join code example the join form accepts', () => {
+    render(<GuidePage />);
+    const example = document.body.textContent!.match(/join code \(e\.g\. “([^”]+)”\)/)![1];
+    expect(normalizeJoinCode(example)).not.toBeNull();
+  });
+
+  it('says when the daily limit resets and what Auto read-aloud does, without promising what the app lacks', () => {
+    render(<GuidePage />);
+    const text = document.body.textContent!;
+    expect(text).toContain('resets at midnight Pacific time (3 PM in the Philippines)');
+    expect(text).toContain('Turn on Auto to have each card read aloud as it comes up');
+    expect(text).not.toMatch(/spaced repetition|every 24 hours|hands-free|cookie banners/i);
   });
 
   it('has a bottom call-to-action button to make a study deck', () => {

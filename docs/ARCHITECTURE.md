@@ -114,9 +114,14 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
   (to `/`, a new study guide), and a paper divider tab sticks up for each section the user
   can open (`cardBoxTabs()`): *My Sets* and *History* when signed in, then *My Classes*
   (`/classes`) for students, *Classes* (`/teacher`) for teachers and admins, and *Admin*
-  for admins. The role's tabs appear once the profile has loaded. The open section's tab
-  stands tallest and has a brass edge (`aria-current="page"`). Signed out, there are no
-  tabs.
+  for admins, then *Guide* (`/guide`, #25) for everyone. The role's tabs appear once the
+  profile has loaded. The open section's tab stands tallest and has a brass edge
+  (`aria-current="page"`). Signed out, *Guide* is the only tab.
+- **User Guide** (`app/guide/page.tsx`, #25): one static page (a server component) on how to
+  make a deck, the study formats and modes, the library and the teacher tools, with a
+  table of contents. The home page's tip note links to it on large screens. It describes
+  what the app really does, so check it when a feature changes; its tests pin the facts
+  earlier drafts got wrong (the join code format, when the daily limit resets).
 - **Library card** (`components/desk/LibraryCard.tsx`), at the top right: the user's name
   (or email, without a name), role and *Sign out*; signed out, *Sign in with Google*.
   While the session loads it keeps its height, so the desk doesn't jump.
@@ -1128,7 +1133,7 @@ transaction. Run them after every database change.
     Right / Wrong piles, the Wrong pile again, part cards and focus), `CardEditor`,
     `AssignPanel`, the desk's card box and library card (the tabs each role gets, signing
     in and out), `PageTurn` (the sheet, and the rise after Back and Forward), `PaperCard`, the desk layout at four widths, the
-    set page, My Sets (its decks, best scores, delete), the History pages (saving from a deck too), saving a guide made while signed out across the Google sign-in (`app/upload-sign-in-save.test.tsx`, #89) and the teacher and student pages, in jsdom with React Testing Library.
+    set page, My Sets (its decks, best scores, delete), the History pages (saving from a deck too), the User Guide, saving a guide made while signed out across the Google sign-in (`app/upload-sign-in-save.test.tsx`, #89) and the teacher and student pages, in jsdom with React Testing Library.
     Component tests start with `// @vitest-environment jsdom`.
 - `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and
   classes. Each prints expected vs. actual (10, 10 and 21 cases).

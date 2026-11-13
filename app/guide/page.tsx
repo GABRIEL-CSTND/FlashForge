@@ -1,7 +1,13 @@
-'use client';
-
+import type { Metadata } from 'next';
 import Link from 'next/link';
 
+export const metadata: Metadata = {
+  title: 'User Guide',
+  description:
+    'How to use FlashForge: making decks from files, notes, web links and topics, study modes on the desk, saving sets, and teacher tools.',
+};
+
+// A static page with no state or handlers, so it's a server component (no 'use client').
 export default function GuidePage() {
   return (
     <main className="min-h-screen w-full max-w-4xl mx-auto p-4 sm:p-8 space-y-10 text-ink">
@@ -130,7 +136,7 @@ export default function GuidePage() {
           <div className="paper rounded-lg p-3.5 space-y-1 border border-ink/10">
             <h3 className="font-medium text-sm text-ink">🌐 Web Page Links (HTTP / HTTPS)</h3>
             <p className="text-xs text-muted leading-relaxed">
-              Paste an article link. FlashForge strips out advertisements, cookie banners, navigation menus, and sidebars to extract the core learning material safely.
+              Paste an article link. FlashForge keeps the page&apos;s main text and leaves out menus, headers, footers and sidebars, so the questions come from the article itself.
             </p>
           </div>
 
@@ -159,7 +165,7 @@ export default function GuidePage() {
           <div className="paper rounded-lg p-3.5 space-y-1 border border-ink/10">
             <h3 className="font-medium text-sm text-ink">🃏 Identification Flashcards</h3>
             <p className="text-xs text-muted leading-relaxed">
-              A clear clue on the front and a concise 1–4 word term on the back. Designed specifically for active recall and rapid spaced repetition without bloated sentences.
+              A clear clue on the front and a concise 1–4 word term on the back, so you practise recalling the term rather than rereading long sentences.
             </p>
           </div>
 
@@ -205,7 +211,7 @@ export default function GuidePage() {
           <div className="paper rounded-lg p-3.5 space-y-1 border border-ink/10">
             <h3 className="font-medium text-sm text-ink">⌨️ Type the Answer</h3>
             <p className="text-xs text-muted leading-relaxed">
-              Practice exact recall by typing your answer directly onto the card line. Intelligent fuzzy matching accepts minor misspellings and provides immediate feedback.
+              Practice exact recall by typing your answer directly onto the card line. Capitals, accents and punctuation don&apos;t matter, and one small typo (a wrong, missing, extra or swapped letter) still counts for answers of five letters or more without numbers.
             </p>
           </div>
 
@@ -219,7 +225,7 @@ export default function GuidePage() {
           <div className="paper rounded-lg p-3.5 space-y-1 border border-ink/10">
             <h3 className="font-medium text-sm text-ink">🔊 Read Aloud & Auto</h3>
             <p className="text-xs text-muted leading-relaxed">
-              Use the brass Read Aloud button to listen to clues and answers using browser speech synthesis. Enable Auto to advance through the deck hands-free.
+              Use the brass Read Aloud button to listen to clues and answers using your browser&apos;s speech. Turn on Auto to have each card read aloud as it comes up, and the answer when you turn it over.
             </p>
           </div>
 
@@ -240,7 +246,7 @@ export default function GuidePage() {
           <div className="paper rounded-lg p-3.5 space-y-1 border border-ink/10">
             <h3 className="font-medium text-sm text-ink">📖 Source Quotes</h3>
             <p className="text-xs text-muted leading-relaxed">
-              Each card references the exact excerpt from your uploaded notes or document where the fact was derived, verifying credibility.
+              When a card comes from a sentence in your notes, document or web page, that sentence is shown with the card, with its page or line when known. A quote is only shown if it&apos;s really in your text, and cards made from photos or scanned pages don&apos;t have one.
             </p>
           </div>
         </div>
@@ -257,7 +263,7 @@ export default function GuidePage() {
           </p>
           <ul className="list-disc pl-5 space-y-2 text-xs text-muted">
             <li>
-              <strong className="text-ink">Card Box Tabs:</strong> Sticking up from the wooden box are divider tabs for quick navigation: <em>My Sets</em>, <em>History</em>, <em>My Classes</em> (or <em>Classes</em> for teachers), and <em>Guide</em>.
+              <strong className="text-ink">Card Box Tabs:</strong> Sticking up from the wooden box are divider tabs for quick navigation: <em>My Sets</em>, <em>History</em>, <em>My Classes</em> (or <em>Classes</em> for teachers), <em>Admin</em> for admins, and <em>Guide</em>, which everyone sees, signed in or not.
             </li>
             <li>
               <strong className="text-ink">My Sets:</strong> Each saved set is displayed as a real deck on the green leather desk, tagged with your best score (e.g. <em>Best 9 of 10</em>) or <em>Not studied yet</em>. Picking up a deck morphs smoothly into your study session.
@@ -282,7 +288,7 @@ export default function GuidePage() {
             <h3 className="font-medium text-sm text-ink">For Teachers</h3>
             <ul className="list-disc pl-5 space-y-1.5 text-xs text-muted leading-relaxed">
               <li>Manage your classes using kraft folders with brass join-code plates.</li>
-              <li>Share clean join codes (e.g. &ldquo;ABC-123&rdquo;) with students.</li>
+              <li>Share each class&apos;s join code (e.g. &ldquo;K7M-2QX&rdquo;) with students.</li>
               <li>Assign study decks to your classes with optional due dates.</li>
               <li>Open the <strong>Grade Book</strong> to see student attempts, class averages, and export CSV reports.</li>
               <li>Review <strong>Most-missed questions</strong> to pinpoint difficult concepts before tests.</li>
@@ -309,7 +315,7 @@ export default function GuidePage() {
           <div className="paper rounded-lg p-3.5 space-y-1 border border-ink/10">
             <h3 className="font-medium text-sm text-ink">Is FlashForge free?</h3>
             <p className="text-xs text-muted leading-relaxed">
-              Yes! FlashForge is completely free to use. Daily study guide generation quotas reset automatically every 24 hours.
+              Yes! FlashForge is completely free to use. There is a daily limit on new study guides; it resets at midnight Pacific time (3 PM in the Philippines), and the message you see when you reach it says when.
             </p>
           </div>
           <div className="paper rounded-lg p-3.5 space-y-1 border border-ink/10">
@@ -321,7 +327,7 @@ export default function GuidePage() {
           <div className="paper rounded-lg p-3.5 space-y-1 border border-ink/10">
             <h3 className="font-medium text-sm text-ink">Are there keyboard shortcuts for studying?</h3>
             <p className="text-xs text-muted leading-relaxed">
-              Yes! Press Space or Enter to flip a card, → for Got it / Right, ← for Missed it / Wrong, and Esc to dismiss menus and dialogs.
+              Yes, for flashcards: press Space or Enter to flip a card, → for Got it and ← for Missed it. In quizzes, use Tab to move between the choices and Enter to pick one. Esc closes the choices on the Make card.
             </p>
           </div>
         </div>

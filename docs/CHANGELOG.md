@@ -210,6 +210,15 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **User Guide** (#25, PR #93): a *Guide* page at `/guide`, reached from a new *Guide* tab
+  in the card box (shown to everyone, signed in or not) and from the home page's tip note.
+  It covers making a deck (the notes sheet, the Make card, watching the deck being made,
+  the spread), each kind of source, the study formats and modes, the library and History,
+  classes for teachers and students, and an FAQ. From the review: facts the app doesn't
+  back up were corrected (the join code format, when the daily limit resets, what Auto
+  read-aloud does, keyboard keys, typo tolerance, which cards have quotes, no spaced
+  repetition), and the page is a static server component. Tests: 10 for the page, 6 for
+  the card box; 872 in all.
 - **History (live)**: signed in, every study guide you make is kept on a new **History** page
   (linked next to My Sets), saved or not: newest first, with its type, number of
   questions, date and a *Saved* badge. Open one to study it again, or save it to My Sets
