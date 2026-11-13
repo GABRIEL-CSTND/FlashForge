@@ -75,6 +75,14 @@ export default function FlashcardDesk({
   const count = cards.length;
   const [mode, setMode] = useState<FlashcardMode>('flip');
   const [deck, setDeck] = useState<DeckState>(() => freshDeck(count));
+  // Cards can arrive while the student is already studying (the AI is still writing
+  // the deck): each new one goes to the back of the deck, so the session just gets
+  // longer. Done during render, so the new card is never drawn without its place.
+  const [seen, setSeen] = useState(count);
+  if (count > seen) {
+    setSeen(count);
+    setDeck((d) => ({ ...d, order: [...d.order, ...Array.from({ length: count - seen }, (_, k) => seen + k)] }));
+  }
   // The first time through: what was done with each card, for the score.
   const [answers, setAnswers] = useState<Record<number, CardAnswer>>({});
   const [flipped, setFlipped] = useState(false);
@@ -458,7 +466,7 @@ export default function FlashcardDesk({
     doneNote
   ) : roundIndex >= 0 ? (
     <MatchBoard
-      key={`${run}-${roundIndex}`}
+      key={`${run}-${roundIndex}-${round.length}`}
       cards={round.map((index) => ({ card: cards[index], index }))}
       isLastRound={roundIndex === rounds.length - 1}
       onDone={finishRound}

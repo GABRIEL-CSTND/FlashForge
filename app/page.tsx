@@ -70,12 +70,11 @@ export default function UploadPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [result, setResult] = useState<GeneratedResult | null>(null);
   // The first cards, while the AI is still writing the rest. They can be studied
-  // right away; `result` replaces them when the whole deck is ready.
+  // right away, and the study desk takes each new card as it arrives; `result`
+  // replaces them when the whole deck is ready.
   const [live, setLive] = useState<GeneratedResult | null>(null);
-  // The cards on the study desk now, and how many of the deck's cards have gone
-  // to it so far. Cards that arrive later go to the desk as a next batch.
-  const [batchCards, setBatchCards] = useState<StudyItem[]>([]);
-  const [served, setServed] = useState(0);
+  // Changes when the finished deck is not the one that was on the desk (the AI had
+  // to start again), so the study desk starts over with the new cards.
   const [batchNo, setBatchNo] = useState(0);
   // The AI stopped before the end, so the deck is what had been written by then.
   const [cutShort, setCutShort] = useState(false);
@@ -169,8 +168,6 @@ export default function UploadPage() {
     const controller = new AbortController();
     abortRef.current = controller;
     setLive(null);
-    setBatchCards([]);
-    setServed(0);
     setCutShort(false);
     setView('spread');
     // The first cards sent while the AI is still writing; the rest of the deck follows.
@@ -272,10 +269,10 @@ export default function UploadPage() {
 
     const final = outcome.body as unknown as GeneratedResult;
     // The deck the AI ended with starts with the cards already shown, unless it
-    // had to start again; then none of the cards on the desk count as studied.
+    // had to start again; then the study desk starts over with the new deck.
     const shown = previewed.current;
     if (shown && !shown.items.every((card, i) => final.items[i]?.question === card.question && final.items[i]?.answer === card.answer)) {
-      setServed(0);
+      setBatchNo((k) => k + 1);
     }
     setResult(final);
     setLive(null);
@@ -336,8 +333,6 @@ export default function UploadPage() {
     abortRef.current?.abort();
     setResult(null);
     setLive(null);
-    setBatchCards([]);
-    setServed(0);
     setCutShort(false);
     setView('spread');
     setFile(null);
@@ -361,14 +356,7 @@ export default function UploadPage() {
   const deck = result ?? live;
   if (deck) {
     const writing = !result;
-    const remaining = deck.items.length - served;
-    // Hands the cards the study desk has not had yet to it, as a new batch.
-    const startBatch = () => {
-      setBatchCards(deck.items.slice(served));
-      setServed(deck.items.length);
-      setBatchNo((k) => k + 1);
-      setView('study');
-    };
+    const startStudying = () => setView('study');
     const saveSlot = writing ? (
       <p className="text-center text-sm text-muted">
         The rest of the cards are still being written. You can save the deck when it is done.
@@ -415,22 +403,10 @@ export default function UploadPage() {
         {saveStatus === 'error' && <p className="text-xs text-pencil">Failed to save. Try again.</p>}
       </div>
     );
-    // On the finish screen: the next cards, once they are ready.
-    const continueSlot =
-      remaining > 0 ? (
-        <div className="space-y-2">
-          <p className="text-sm">
-            {served === 0
-              ? `The deck was rewritten: ${remaining} cards.`
-              : `${remaining} more card${remaining === 1 ? ' is' : 's are'} ready${writing ? ', with more on the way' : ''}.`}
-          </p>
-          <button type="button" onClick={startBatch} className="btn btn-primary rounded-full px-5">
-            {served === 0 ? 'Study the whole deck' : 'Keep going'}
-          </button>
-        </div>
-      ) : writing ? (
-        <p className="text-sm">More cards are still being written. They will show up here.</p>
-      ) : null;
+    // On the finish screen, if the student got through every card written so far.
+    const continueSlot = writing ? (
+      <p className="text-sm">More cards are still being written. They will show up here as soon as they are ready.</p>
+    ) : null;
 
     if (view === 'study') {
       return (
@@ -438,7 +414,7 @@ export default function UploadPage() {
           key={batchNo}
           title={deck.title}
           studyType={deck.studyType}
-          cards={batchCards}
+          cards={deck.items}
           onExit={handleExit}
           saveSlot={saveSlot}
           completionSlot={continueSlot}
@@ -453,7 +429,7 @@ export default function UploadPage() {
         title={deck.title}
         meta={`${STUDY_TYPE_LABELS[deck.studyType] ?? 'Flashcards'} · ${n} card${n === 1 ? '' : 's'}${writing ? ' so far' : ''}`}
         items={deck.items}
-        onStart={startBatch}
+        onStart={startStudying}
         onExit={handleExit}
         saveSlot={saveSlot}
         savedToHistory={!!deck.historyId}

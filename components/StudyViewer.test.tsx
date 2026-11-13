@@ -740,3 +740,39 @@ describe('where a card came from', () => {
     expect(screen.getAllByText(FROM)).toHaveLength(2);
   });
 });
+
+describe('cards that arrive while studying', () => {
+  it('a flashcard session takes new cards on, even after the first ones are all done', () => {
+    const { rerender } = render(<StudyViewer title="Plants" studyType="flashcard" cards={FLASH_CARDS.slice(0, 2)} />);
+    expect(screen.getByText('Card 1 of 2')).toBeTruthy();
+    flip();
+    sortTo('Got it');
+    // The AI wrote a third card while the student was on the first.
+    rerender(<StudyViewer title="Plants" studyType="flashcard" cards={FLASH_CARDS} />);
+    expect(screen.getByText('Card 2 of 3')).toBeTruthy();
+    flip();
+    sortTo('Missed it');
+    // Up to the card that arrived: the session carries on rather than ending.
+    expect(screen.getByText('Card 3 of 3')).toBeTruthy();
+    expect(screen.getByText('Pigment that absorbs light')).toBeTruthy();
+  });
+
+  it('keeps going when cards arrive just after the last one was done', () => {
+    const { rerender } = render(<StudyViewer title="Plants" studyType="flashcard" cards={FLASH_CARDS.slice(0, 1)} />);
+    flip();
+    sortTo('Got it');
+    expect(screen.getByText('All done')).toBeTruthy();
+    rerender(<StudyViewer title="Plants" studyType="flashcard" cards={FLASH_CARDS.slice(0, 2)} />);
+    expect(screen.getByText('Card 2 of 2')).toBeTruthy();
+  });
+
+  it('a quiz takes new questions on too', () => {
+    const { rerender } = render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS.slice(0, 1)} />);
+    expect(screen.getByText('Question 1 of 1')).toBeTruthy();
+    rerender(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
+    click('Network');
+    expect(screen.getByText('Question 1 of 2')).toBeTruthy();
+    click('Next question →');
+    expect(screen.getByText('Question 2 of 2')).toBeTruthy();
+  });
+});

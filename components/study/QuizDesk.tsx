@@ -115,6 +115,18 @@ export default function QuizDesk({
   const total = cards.length;
 
   const [deck, setDeck] = useState<QuizDeck>(() => freshDeck(sheets.length));
+  // Questions can arrive while the student is already answering (the AI is still
+  // writing the quiz): each new one goes to the back of the deck. Done during
+  // render, so a new sheet is never drawn without its place. (A mixed quiz always
+  // arrives whole.)
+  const [seenSheets, setSeenSheets] = useState(sheets.length);
+  if (sheets.length > seenSheets) {
+    setSeenSheets(sheets.length);
+    setDeck((d) => ({
+      ...d,
+      order: [...d.order, ...Array.from({ length: sheets.length - seenSheets }, (_, k) => seenSheets + k)],
+    }));
+  }
   // The first time through: the answer to each question (by position in
   // `cards`), for the score.
   const [answers, setAnswers] = useState<Record<number, CardAnswer>>({});
