@@ -100,9 +100,10 @@ describe('History page', () => {
     expect(screen.getByRole('button', { name: 'Save to My Sets' })).toBeTruthy();
   });
 
-  it('says when there are no guides yet', async () => {
+  it('says when there are no guides yet and offers to make one', async () => {
     render(<HistoryPage />);
     expect(await screen.findByText('No study guides yet. The ones you make while signed in will show up here.')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Make a deck' }).getAttribute('href')).toBe('/');
   });
 
   it('removes a guide after asking, saying whether it was saved', async () => {
