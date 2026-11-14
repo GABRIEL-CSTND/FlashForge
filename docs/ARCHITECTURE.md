@@ -114,9 +114,14 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
   (to `/`, a new study guide), and a paper divider tab sticks up for each section the user
   can open (`cardBoxTabs()`): *My Sets* and *History* when signed in, then *My Classes*
   (`/classes`) for students, *Classes* (`/teacher`) for teachers and admins, and *Admin*
-  for admins. The role's tabs appear once the profile has loaded. The open section's tab
-  stands tallest and has a brass edge (`aria-current="page"`). Signed out, there are no
-  tabs.
+  for admins, then *Guide* (`/guide`, #25) for everyone. The role's tabs appear once the
+  profile has loaded. The open section's tab stands tallest and has a brass edge
+  (`aria-current="page"`). Signed out, *Guide* is the only tab.
+- **User Guide** (`app/guide/page.tsx`, #25): one static page (a server component) on how to
+  make a deck, the study formats and modes, the library and the teacher tools, with a
+  table of contents. The home page's tip note links to it on large screens. It describes
+  what the app really does, so check it when a feature changes; its tests pin the facts
+  earlier drafts got wrong (the join code format, when the daily limit resets).
 - **Library card** (`components/desk/LibraryCard.tsx`), at the top right: the user's name
   (or email, without a name), role and *Sign out*; signed out, *Sign in with Google*.
   While the session loads it keeps its height, so the desk doesn't jump.
@@ -328,6 +333,10 @@ new ones included, gets it without doing anything):
   "Turning pages" in `globals.css`. A deck picked up in the library still morphs on top
   (`DeckMorph`, above). `ViewTransition` is looked up in `components/desk/view-transition.ts`,
   as the tests' React doesn't have it.
+- **Views inside a page** turn the same way with `components/desk/DeskTurn.tsx`, keyed by the
+  view's name, when the change is a transition (`startTransition`). The home page uses it:
+  the notes sheet turns into the deck being made, then into the new cards, or back to the
+  notes sheet with the problem if it failed. Changes outside a transition just swap.
 - **Only navigations turn the page:** `default="none"`, so a state change on a page never
   animates the whole page, and search params don't change the path. The key remounts the page
   tree on each new path, which the App Router does for a new page anyway. (With
@@ -368,7 +377,14 @@ new ones included, gets it without doing anything):
    The **"Make me 10 medium flashcards"** card (`components/make/MakeCard.tsx`) sets how
    many (5, 10, 15, 20 or 30, #65), how hard and what kind (#68, #69): each word opens
    paper slips (`components/desk/SlipMenu.tsx`) with a line saying what each choice is.
-   **Make my deck** sends it. Nothing is saved yet. When the deck arrives, its cards land
+   **Make my deck** sends it. Nothing is saved yet. While the AI works, the notes sheet
+   turns into **the deck being made** (`components/make/MakingDeck.tsx`): a pencil writes
+   a card, the card goes onto a small deck, the deck is riffle shuffled and a fresh card
+   comes up, on one 5.6 s CSS loop (`.making-*` in `globals.css`) until the deck arrives.
+   Under it, what's being made (*Making 10 medium flashcards*, from what) and the steps
+   (step 3 below). The loop shows the work going on, not how far along it is, since the
+   API sends every card at once. It's hidden from screen readers, which follow the steps,
+   and with reduced motion it holds still, the card written. When the deck arrives, its cards land
    one by one, 350 ms apart, in a spread (`components/make/DeckSpread.tsx`; the API sends
    all the cards at once), with Save and the source's credit; **Start studying** gathers
    them and the study screen takes over on the same URL.
@@ -446,7 +462,7 @@ new ones included, gets it without doing anything):
      errors and the usage log work the same either way; a refused or failed request is just
      a `result` event with its usual status. `readGeneration()` reads this on the page and
      falls back to plain JSON, so an older server still works.
-3. **Show it**: while it waits, the upload page shows the steps (`GenerationProgress`):
+3. **Show it**: while it waits, under the deck being made, the page shows the steps (`GenerationProgress`):
    uploading, reading, writing, with what's done, what's under way, and a seconds counter.
    The first two are worded for the source (`progressLabels()`): a link's reading step is
    *Fetching the web page*, a topic's is *Looking it up on Wikipedia* (#79), since the
@@ -470,7 +486,11 @@ new ones included, gets it without doing anything):
    400 otherwise, #68) and inserts the set and cards with the **service-role** key. If the
    cards can't be saved, the new set is removed again. If the user signs in
    mid-save, the unsaved result is kept in `sessionStorage` across the Google redirect
-   and saved automatically afterwards. The page sends the guide's `historyId` along, so
+   (`lib/pending-guide.ts`) and saved automatically afterwards, once per page load. The
+   page reads it with `useSyncExternalStore`, so the server render and hydration show
+   nothing and the browser's copy appears right after, with no effect setting state
+   (#89). It stays kept until the guide is saved or left, so a failed automatic save or
+   a reload doesn't lose it; the Save button tries again. The page sends the guide's `historyId` along, so
    History shows it as saved (see "History" below).
 
 ### The AI pipeline (`lib/gemini.ts`)
@@ -538,10 +558,11 @@ new ones included, gets it without doing anything):
   the other parts as wrong choices.
 - **Focus** (#79): a typed topic is added as "Focus on what the text says about ...",
   with quotes and line breaks taken out first.
-- **Spares:** items that fail validation are dropped, so the prompt asks for 10% more
-  flashcards or true-or-false statements, or 20% more multiple-choice questions, than the
-  user chose (11 or 12 for 10),
-  and the guide keeps the first valid ones up to the chosen count.
+- **Spares:** items that fail validation are dropped, so the prompt asks for 20% more
+  flashcards or true-or-false statements, or 30% more multiple-choice questions, than the
+  user chose (12 or 13 for 10), and the guide keeps the first valid ones up to the chosen
+  count. It used to be 10% and 20%, and two dropped cards left a 10-card guide with 8 or 9
+  (2026-11-12). Spares cost output tokens, not requests, so the daily quota is the same.
 - **Long documents** (#38): the AI gets up to 30,000 characters. A longer PDF is sampled
   by whole pages spread over the whole document (always the first and the last page,
   blank pages left out), a longer TXT file by whole paragraphs, and other long text
@@ -556,8 +577,11 @@ new ones included, gets it without doing anything):
 
 **Validation**, applied to every model's output:
 - Thought parts and ```` ```json ```` fences are stripped before parsing.
-- **Garbage filter:** rejects HTML, a short chunk repeated 4+ times, slug-like tokens,
-  long whitespace runs, and over-long text. **Short answers only:** any answer over 6 words or 60
+- **Garbage filter:** rejects HTML, a short chunk repeated 4+ times, slug-like tokens of
+  5+ parts ("status-code-404-not-found"), long whitespace runs, and over-long text. A
+  chunk of only digits and separators doesn't count as repeated, so binary numbers
+  ("11111111.11111111.11111111.11000000") pass, and so does "state-of-the-art". Before
+  2026-11-12 both were dropped, which cut subnetting guides short. **Short answers only:** any answer over 6 words or 60
   characters is dropped (`ANSWER_LIMITS` in `lib/gemini.ts`). That covers flashcard and
   identification answers and every multiple-choice choice, so a card with one long
   choice is dropped whole. The prompt asks for 1 to 4 words, so this only catches the
@@ -1062,12 +1086,12 @@ The plan for teacher and admin features is tracked in #50.
 
 | Table | Who | Can |
 |---|---|---|
-| `flashcard_sets` | Owner | Read, rename, delete their own sets |
+| `flashcard_sets` | Owner | Read, rename, delete their own sets. Renaming is the only change they can make: signed-in users may update the `title` column only (PR #84) |
 | `flashcard_sets` | Anyone | Read legacy sets with no owner |
 | `flashcard_sets` | Students in a class | Read a set while it's assigned to a class they're in (#56) |
 | `flashcard_sets` | Admins | Read every set, and so its cards (#61); no extra write rights |
-| `flashcard_sets` | Anyone | **Insert: nobody** (saves go through `/api/save-set`) |
-| `flashcards` | Anyone | Read a card exactly when they can read its set (the policy checks the set through the set's own RLS); no direct writes (edits go through `replace_set_cards()`, server-only) |
+| `flashcard_sets` | Anyone | **Insert: nobody** (saves go through `/api/save-set`); browsers have no insert grant either (PR #84) |
+| `flashcards` | Anyone | Read a card exactly when they can read its set (the policy checks the set through the set's own RLS); no direct writes, and no insert, update or delete grants for browsers (edits go through `replace_set_cards()`, server-only; PR #84) |
 | `profiles` | The user | Read their own row and update `display_name` only; anon has no access |
 | `classes` | Teacher / members | The teacher reads their own classes; members read classes they joined; no direct writes |
 | `class_members` | Student / teacher | A student reads their own memberships; the teacher reads their roster; no direct writes (joining and leaving go through the server) |
@@ -1088,6 +1112,13 @@ security-definer helpers in a schema the API doesn't expose. The `attempts` poli
 - An anon policy exposed **every** card, including private ones.
 - An insert policy allowed **anyone** to insert sets with any `user_id`.
 
+**Grants, not only policies (PR #84):** Supabase gives `anon` and `authenticated` every
+privilege on existing tables, and RLS is the only thing in the way. For `flashcards` and
+`flashcard_sets` the grants themselves are now cut back to what the browser uses, so a
+policy added by mistake later still can't open them up: no insert, truncate, trigger or
+references on either table, no update or delete on cards, and on sets an update grant for
+the `title` column only (anon has no update or delete).
+
 `supabase/tests/*.sql` re-checks these rules by simulating users inside a rolled-back
 transaction. Run them after every database change.
 
@@ -1102,7 +1133,7 @@ transaction. Run them after every database change.
     Right / Wrong piles, the Wrong pile again, part cards and focus), `CardEditor`,
     `AssignPanel`, the desk's card box and library card (the tabs each role gets, signing
     in and out), `PageTurn` (the sheet, and the rise after Back and Forward), `PaperCard`, the desk layout at four widths, the
-    set page, My Sets (its decks, best scores, delete), the History pages (saving from a deck too) and the teacher and student pages, in jsdom with React Testing Library.
+    set page, My Sets (its decks, best scores, delete), the History pages (saving from a deck too), the User Guide, saving a guide made while signed out across the Google sign-in (`app/upload-sign-in-save.test.tsx`, #89) and the teacher and student pages, in jsdom with React Testing Library.
     Component tests start with `// @vitest-environment jsdom`.
 - `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and
   classes. Each prints expected vs. actual (10, 10 and 21 cases).
@@ -1135,6 +1166,11 @@ transaction. Run them after every database change.
   real edit, kept ids, each kind of refused save, that a refused save changes nothing,
   that browsers can't call it, and that a rewritten card loses its quote while a moved
   one keeps it (#21).
+- `supabase/tests/server-only-card-writes-check.sql` (10 cases, PR #84): browsers have no
+  write grants on cards and can't insert sets (column-level grants count too); anon can't
+  update or delete sets; signed-in users can update only a set's title and can still read
+  sets and cards and delete sets; an owner can rename their set but not change its study
+  type, add a card or edit one, and deleting the set takes its cards with it.
 - `supabase/tests/history-rls-check.sql` (13 cases): the server adds entries; `item_count`
   counts the cards; empty or non-list cards and unknown study types are refused; owners
   read and remove only their own entries and can't add or edit any; anon can't read;

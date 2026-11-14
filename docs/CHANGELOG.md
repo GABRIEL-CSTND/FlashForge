@@ -3,12 +3,27 @@
 Notable changes to FlashForge, newest first. Issue and PR numbers refer to
 [GABRIEL-CSTND/FlashForge](https://github.com/GABRIEL-CSTND/FlashForge).
 
-## Desk redesign (on `UI_changes`, not on `dev` yet)
+## Desk redesign (on `dev`, not on the live site yet)
 
-The new look, built in 7 phases on the `UI_changes` branch and merged into `dev` when
-it's ready. It changes how the app looks, not how it works.
+The new look, built in 7 phases on the `UI_changes` branch and merged into `dev` on
+2026-11-11. It changes how the app looks, not how it works.
 
 ### Changed
+- **You watch the deck being made** (2026-11-12): while the AI writes the guide, the notes
+  sheet turns into a scene on the desk instead of a checklist under it. A pencil writes a
+  card line by line, the card goes onto a small deck, the deck is riffle shuffled and a fresh
+  card comes up, over and over until the cards arrive (`components/make/MakingDeck.tsx`).
+  - Under it: what's being made (*Making 10 medium flashcards*, from what, how long it can
+    take) and the same steps as before, which screen readers follow.
+  - The notes sheet, the deck being made and the new cards turn into one another like pages
+    (`components/desk/DeskTurn.tsx`). A failed guide turns back to the notes sheet, with the
+    problem on the Make card as before.
+  - It shows the work going on, not how far along it is: the API still sends every card at
+    once. Cards landing as they're written would need the AI to stream.
+  - With reduced motion it holds still: the card written, the pencil beside it.
+  - Tests: one for the scene in place of the notes sheet; 862 in all. Checked in Edge, frame
+    by frame through the loop, on a phone's width, with reduced motion, and on the real page
+    with the AI's answer made up in the browser (no quota used).
 - **Pages turn instead of swapping** (2026-11-07): moving to another page fades the old one
   out as it sinks a little, and the new one rises into place (React's `<ViewTransition>` in
   `components/desk/PageTurn.tsx`, around every page). A deck picked up in the library still
@@ -145,6 +160,16 @@ into `main`. There is only one Supabase database, so changes marked **(live)** a
 already applied there.
 
 ### Security
+- **Browsers can't write cards, even if a policy slips later (live)** (PR #84 and its review):
+  RLS already stopped browsers from adding sets or changing cards, but the tables still
+  granted them insert, update and delete. Those grants are gone, so the public key can't
+  write cards or add sets at all. Signed-in users can still rename and delete their own
+  sets, but renaming is now the only change they can make: before, an owner could change
+  a set's study type straight through the database, leaving, say, a "multiple choice" set
+  whose cards have no choices. Unused truncate, trigger and references grants were
+  removed too. (Migrations `20261112000100_server_only_card_writes.sql` and
+  `20261112000200_tighten_set_grants.sql`, checked by
+  `supabase/tests/server-only-card-writes-check.sql`.)
 - **Failed guides can't be repeated all day** (#41): a guide that failed after the AI was
   asked didn't count toward the daily limit, so someone could keep sending, say, a photo
   with nothing to study in it, and about 20 tries used up the AI quota everyone shares.
@@ -185,6 +210,15 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **User Guide** (#25, PR #93): a *Guide* page at `/guide`, reached from a new *Guide* tab
+  in the card box (shown to everyone, signed in or not) and from the home page's tip note.
+  It covers making a deck (the notes sheet, the Make card, watching the deck being made,
+  the spread), each kind of source, the study formats and modes, the library and History,
+  classes for teachers and students, and an FAQ. From the review: facts the app doesn't
+  back up were corrected (the join code format, when the daily limit resets, what Auto
+  read-aloud does, keyboard keys, typo tolerance, which cards have quotes, no spaced
+  repetition), and the page is a static server component. Tests: 10 for the page, 6 for
+  the card box; 872 in all.
 - **History (live)**: signed in, every study guide you make is kept on a new **History** page
   (linked next to My Sets), saved or not: newest first, with its type, number of
   questions, date and a *Saved* badge. Open one to study it again, or save it to My Sets
@@ -412,6 +446,22 @@ already applied there.
 - New README, plus `docs/ARCHITECTURE.md` and this changelog (#47).
 
 ### Fixed
+- **Lint passes with no errors** (#89, 2026-11-12): the last 2 errors were in the upload
+  page's "sign in to save" flow, two effects that set state as soon as they ran. A guide
+  made while signed out is now read back from `sessionStorage` with
+  `useSyncExternalStore` (`lib/pending-guide.ts`), and the automatic save after signing in
+  remembers that it ran in a ref. It works as before, with two small fixes: if the
+  automatic save fails, the guide is kept instead of being lost on the next reload, and
+  leftover data that isn't a guide is ignored instead of crashing the page. Tests: 6 new
+  in `app/upload-sign-in-save.test.tsx` (the flow had none); 861 in all.
+- **Guides came out a card or two short** (2026-11-12): a 10-card guide made from a
+  subnetting PDF had 8 or 9 cards. The check for garbled AI output took binary numbers
+  ("11111111", "11111111.11111111.11111111.11000000") for a stutter and dropped those
+  cards, along with hyphenated terms of 4 parts like "state-of-the-art". Numbers and
+  4-part terms now pass; real garbage ("hahahaha", "status-code-404-not-found", HTML) is
+  still dropped. The AI is also asked for more spare cards (12 for 10 flashcards, 13 for
+  10 multiple choice, up from 11 and 12), so a dropped card or two no longer shortens the
+  guide. Tests: 4 new in `lib/gemini.test.ts`; 855 in all.
 - On phones, the links at the top of the upload page (My Classes, My Sets, History, the
   email and Sign out) ran off the screen in one line. They now wrap onto a second line.
 - **Quotes under cards** (#21), from the review of PR #80:

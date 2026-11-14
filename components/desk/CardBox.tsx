@@ -11,11 +11,10 @@ export interface CardBoxTab {
   href: string;
 }
 
-// The divider tabs that stick up out of the card box. Everyone signed in gets
-// My Sets and History, then the pages for their role; the role's tabs appear
-// once the profile has loaded. Signed out, the box shows no tabs.
+// The divider tabs that stick up out of the card box. Everyone gets the Guide tab;
+// signed in, users also get My Sets, History, and the pages for their role.
 export function cardBoxTabs(signedIn: boolean, role: Role | null | undefined): CardBoxTab[] {
-  if (!signedIn) return [];
+  if (!signedIn) return [{ label: 'Guide', href: '/guide' }];
   const tabs: CardBoxTab[] = [
     { label: 'My Sets', href: '/my-sets' },
     { label: 'History', href: '/history' },
@@ -23,6 +22,7 @@ export function cardBoxTabs(signedIn: boolean, role: Role | null | undefined): C
   if (role === 'student') tabs.push({ label: 'My Classes', href: '/classes' });
   if (canUseTeacherTools(role)) tabs.push({ label: 'Classes', href: '/teacher' });
   if (role === 'admin') tabs.push({ label: 'Admin', href: '/admin' });
+  tabs.push({ label: 'Guide', href: '/guide' });
   return tabs;
 }
 

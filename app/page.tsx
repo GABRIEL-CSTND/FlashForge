@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { startTransition, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser, signInWithGoogle } from '@/lib/auth';
@@ -8,17 +9,21 @@ import StudyViewer, { StudyItem } from '@/components/StudyViewer';
 import { generateErrorText } from '@/lib/generation-limits';
 import GenerationProgress from '@/components/GenerationProgress';
 import NotesSheet from '@/components/make/NotesSheet';
-import MakeCard from '@/components/make/MakeCard';
+import MakeCard, { DECK_WORDS } from '@/components/make/MakeCard';
+import MakingDeck from '@/components/make/MakingDeck';
+import DeskTurn from '@/components/desk/DeskTurn';
 import DeckSpread from '@/components/make/DeckSpread';
 import { nextProgress, PROGRESS_MIME, readGeneration, START_PROGRESS, type ProgressState } from '@/lib/generation-progress';
 import {
   DEFAULT_DIFFICULTY,
   DEFAULT_QUESTION_COUNT,
+  DIFFICULTY_LABELS,
   STUDY_TYPE_LABELS,
   type Difficulty,
   type StudyType,
 } from '@/lib/study-types';
 import { shrinkImage } from '@/lib/shrink-image';
+import { keepPendingGuide, pendingGuideJson, serverPendingGuideJson, subscribePendingGuide } from '@/lib/pending-guide';
 import { planPdfUpload } from '@/lib/prepare-pdf';
 import {
   detectSource,
@@ -45,8 +50,20 @@ interface GeneratedResult {
   historyId?: string | null;
 }
 
-const PENDING_RESULT_KEY = 'flashforge_pending_result';
-// How long between one new card and the next landing on the desk.
+// The guide kept across the sign-in redirect (lib/pending-guide.ts), or null when
+// there is none or it can't be read.
+function parsePendingGuide(json: string | null): GeneratedResult | null {
+  if (!json) return null;
+  try {
+    const guide = JSON.parse(json);
+    return guide && Array.isArray(guide.items) ? guide : null;
+  } catch {
+    return null;
+  }
+}
+
+// How long between one new card and the next landing on the desk while the AI
+// sends them.
 const CARD_GAP_MS = 300;
 // Gemini normally writes 10 questions in under ~12s; longer usually means the
 // Gemma backup. Bigger guides (#65) take longer, so wait a second more for
@@ -70,12 +87,20 @@ export default function UploadPage() {
   const [count, setCount] = useState<number>(DEFAULT_QUESTION_COUNT);
   const [status, setStatus] = useState<'idle' | 'generating' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
-  const [result, setResult] = useState<GeneratedResult | null>(null);
+  // The guide just made here, or else one made before signing in to save it,
+  // brought back after the Google redirect reloaded the page.
+  const [generated, setGenerated] = useState<GeneratedResult | null>(null);
+  const pendingJson = useSyncExternalStore(subscribePendingGuide, pendingGuideJson, serverPendingGuideJson);
+  const pending = useMemo(() => parsePendingGuide(pendingJson), [pendingJson]);
+  const result = generated ?? pending;
   // The first cards, while the AI is still writing the rest. They can be studied
-  // right away, and the study desk takes each new card as it arrives; `result`
+  // right away, and the study desk takes each new card as it arrives; `generated`
   // replaces them when the whole deck is ready.
   const [live, setLive] = useState<GeneratedResult | null>(null);
-  // How many of the deck's cards are on the desk so far (they land one at a time).
+  // Cards the AI sends while it writes are put on the desk one at a time (`shown` so
+  // far). A deck that arrives whole, or comes back after signing in, is all there
+  // at once, and DeckSpread lays it out.
+  const [paced, setPaced] = useState(false);
   const [shown, setShown] = useState(0);
   // Changes when the finished deck is not the one that was on the desk (the AI had
   // to start again), so the study desk starts over with the new cards.
@@ -88,28 +113,10 @@ export default function UploadPage() {
   // A new deck lies in a spread until Start studying.
   const [view, setView] = useState<'spread' | 'study'>('spread');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error' | 'needs-auth'>('idle');
-  const [resumeAfterAuth, setResumeAfterAuth] = useState(false);
   const [slowGeneration, setSlowGeneration] = useState(false);
   const [progress, setProgress] = useState<ProgressState>(START_PROGRESS);
   // How far the browser has got reading a PDF (#44); null when it isn't.
   const [pdfRead, setPdfRead] = useState<{ done: number; total: number } | null>(null);
-
-  // Restore a generated-but-unsaved result after a Google sign-in redirect,
-  // since the OAuth flow does a full page reload and would otherwise lose it.
-  useEffect(() => {
-    const pending = sessionStorage.getItem(PENDING_RESULT_KEY);
-    if (pending) {
-      sessionStorage.removeItem(PENDING_RESULT_KEY);
-      try {
-        setResult(JSON.parse(pending));
-        // A deck that was already finished is not laid out card by card.
-        setShown(Number.MAX_SAFE_INTEGER);
-        setResumeAfterAuth(true);
-      } catch {
-        // ignore malformed/stale data
-      }
-    }
-  }, []);
 
   const validateAndSetFile = async (chosen: File) => {
     // Photos (#72) are shrunk first, so a big phone photo still fits.
@@ -166,17 +173,27 @@ export default function UploadPage() {
       setStatus('error');
       return;
     }
-    setStatus('generating');
-    setProgress(START_PROGRESS);
-    setPdfRead(null);
-    setErrorMsg('');
+    // The notes sheet turns into the deck being made, and the new cards (or the
+    // notes sheet again, with the problem) turn in after it (DeskTurn).
+    const fail = (message: string) =>
+      startTransition(() => {
+        setErrorMsg(message);
+        setStatus('error');
+      });
     const run = ++runRef.current;
     const controller = new AbortController();
     abortRef.current = controller;
-    setLive(null);
-    setShown(0);
-    setCutShort(false);
-    setView('spread');
+    startTransition(() => {
+      setStatus('generating');
+      setProgress(START_PROGRESS);
+      setPdfRead(null);
+      setErrorMsg('');
+      setLive(null);
+      setPaced(false);
+      setShown(0);
+      setCutShort(false);
+      setView('spread');
+    });
     // The first cards sent while the AI is still writing; the rest of the deck follows.
     const previewed: { current: GeneratedResult | null } = { current: null };
 
@@ -189,8 +206,7 @@ export default function UploadPage() {
       const plan = await planPdfUpload(file, (done, total) => setPdfRead({ done, total }));
       if (plan.kind === 'problem') {
         setPdfRead(null);
-        setErrorMsg(plan.message);
-        setStatus('error');
+        fail(plan.message);
         return;
       }
       if (plan.kind === 'pages') {
@@ -241,8 +257,16 @@ export default function UploadPage() {
             studyType: event.studyType as StudyType,
             items: event.items as unknown as StudyItem[],
           };
+          const first = previewed.current === null;
           previewed.current = cards;
-          setLive(cards);
+          // The first cards turn the deck being made into the spread (DeskTurn).
+          startTransition(() => {
+            setLive(cards);
+            if (first) {
+              setPaced(true);
+              setShown(1);
+            }
+          });
         }
       );
     } catch {
@@ -258,32 +282,37 @@ export default function UploadPage() {
 
     if (outcome.status < 200 || outcome.status >= 300) {
       // Cards already on the desk stay: the deck is just shorter than planned.
-      if (previewed.current) {
-        setResult(previewed.current);
-        setLive(null);
-        setCutShort(true);
-        setStatus('idle');
+      const kept = previewed.current;
+      if (kept) {
+        startTransition(() => {
+          setGenerated(kept);
+          setLive(null);
+          setCutShort(true);
+          setStatus('idle');
+        });
         return;
       }
-      setErrorMsg(
+      fail(
         unreachable
           ? 'Could not reach the server. Check your connection and try again.'
           : generateErrorText(outcome.status, outcome.body)
       );
-      setStatus('error');
       return;
     }
 
     const final = outcome.body as unknown as GeneratedResult;
     // The deck the AI ended with starts with the cards already shown, unless it
     // had to start again; then the study desk starts over with the new deck.
-    const shown = previewed.current;
-    if (shown && !shown.items.every((card, i) => final.items[i]?.question === card.question && final.items[i]?.answer === card.answer)) {
-      setBatchNo((k) => k + 1);
-    }
-    setResult(final);
-    setLive(null);
-    setStatus('idle');
+    const before = previewed.current;
+    const restarted =
+      before !== null &&
+      !before.items.every((card, i) => final.items[i]?.question === card.question && final.items[i]?.answer === card.answer);
+    startTransition(() => {
+      if (restarted) setBatchNo((k) => k + 1);
+      setGenerated(final);
+      setLive(null);
+      setStatus('idle');
+    });
   };
 
   const handleSave = async () => {
@@ -321,6 +350,10 @@ export default function UploadPage() {
       return;
     }
 
+    // Hold on to it (a guide brought back after signing in, too) so the page
+    // shows Saved until the set page opens.
+    setGenerated(result);
+    keepPendingGuide(null);
     setSaveStatus('saved');
     router.push(`/sets/${body.id}`);
   };
@@ -338,8 +371,10 @@ export default function UploadPage() {
     // Stop a deck that is still being written; its answer is no longer wanted.
     runRef.current += 1;
     abortRef.current?.abort();
-    setResult(null);
+    setGenerated(null);
+    keepPendingGuide(null);
     setLive(null);
+    setPaced(false);
     setShown(0);
     setCutShort(false);
     setView('spread');
@@ -349,16 +384,16 @@ export default function UploadPage() {
     setErrorMsg('');
   };
 
-  // If we restored a pending result after an auth redirect and the user is
-  // now signed in, finish the save automatically instead of making them
-  // click twice.
+  // A guide brought back after signing in to save it: once the user is signed
+  // in, save it without making them click Save again. Once per page load; if it
+  // fails, the Save button is there to try again.
+  const autoSaveTried = useRef(false);
   useEffect(() => {
-    if (resumeAfterAuth && user && result) {
-      setResumeAfterAuth(false);
-      handleSave();
-    }
+    if (!pending || generated || !user || autoSaveTried.current) return;
+    autoSaveTried.current = true;
+    handleSave();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resumeAfterAuth, user, result]);
+  }, [pending, generated, user]);
 
   // What is on the desk: the whole deck, or the first cards while the rest are written.
   // Cards arrive in quick bursts, so they are put on the desk one at a time, a
@@ -366,11 +401,12 @@ export default function UploadPage() {
   const full = result ?? live;
   const target = full?.items.length ?? 0;
   useEffect(() => {
-    if (shown >= target) return;
+    if (!paced || shown >= target) return;
     const id = setTimeout(() => setShown((n) => n + 1), shown === 0 ? 0 : CARD_GAP_MS);
     return () => clearTimeout(id);
-  }, [shown, target]);
-  const visible = Math.min(shown, target);
+  }, [paced, shown, target]);
+  // A deck that arrived whole, or came back after signing in, is all there at once.
+  const visible = paced ? Math.min(shown, target) : target;
   const deck = useMemo(
     () => (full && visible > 0 ? { ...full, items: full.items.slice(0, visible) } : null),
     [full, visible]
@@ -405,7 +441,7 @@ export default function UploadPage() {
             <p className="text-sm text-brass-ink">Sign in to save this study guide.</p>
             <button
               onClick={() => {
-                sessionStorage.setItem(PENDING_RESULT_KEY, JSON.stringify(deck));
+                keepPendingGuide(JSON.stringify(result));
                 signInWithGoogle();
               }}
               className="text-sm border rounded-lg px-4 py-2 font-medium hover:border-accent"
@@ -448,17 +484,19 @@ export default function UploadPage() {
 
     const n = deck.items.length;
     return (
-      <DeckSpread
-        title={deck.title}
-        meta={`${STUDY_TYPE_LABELS[deck.studyType] ?? 'Flashcards'} · ${writing && count > n ? `${n} of ${count} cards` : `${n} card${n === 1 ? '' : 's'}`}`}
-        items={deck.items}
-        onStart={startStudying}
-        onExit={handleExit}
-        saveSlot={saveSlot}
-        savedToHistory={!!deck.historyId}
-        writing={writing}
-        expected={writing ? count : undefined}
-      />
+      <DeskTurn view="spread">
+        <DeckSpread
+          title={deck.title}
+          meta={`${STUDY_TYPE_LABELS[deck.studyType] ?? 'Flashcards'} · ${writing && count > n ? `${n} of ${count} cards` : `${n} card${n === 1 ? '' : 's'}`}`}
+          items={deck.items}
+          onStart={startStudying}
+          onExit={handleExit}
+          saveSlot={saveSlot}
+          savedToHistory={!!deck.historyId}
+          writing={writing}
+          expected={writing ? count : undefined}
+        />
+      </DeskTurn>
     );
   }
 
@@ -478,51 +516,82 @@ export default function UploadPage() {
       ? `${count} cards can take about 30 seconds.`
       : 'This can take about 20 seconds.';
 
+  // While the AI writes the guide: the deck being made, what it's making, and
+  // the steps so far (GenerationProgress, which screen readers follow).
+  if (generating) {
+    return (
+      <DeskTurn view="making">
+        <main className="on-desk w-full pb-10 pt-4 sm:pt-8">
+          <div className="flex flex-col items-center gap-6 text-center">
+            <MakingDeck label={studyType === 'flashcard' ? 'Clue' : STUDY_TYPE_LABELS[studyType]} />
+            <div className="max-w-xl">
+              <h1 className="text-[28px] font-normal leading-tight text-[#f3ecdd]">
+                Making {count} {DIFFICULTY_LABELS[difficulty].toLowerCase()} {DECK_WORDS[studyType]}
+              </h1>
+              <p className="mt-1 break-words text-[14.5px] text-on-desk/85">{sourceLine}</p>
+              <p className="mt-0.5 text-[13px] text-on-desk/80">{waitNote}</p>
+            </div>
+            {source && (
+              <div className="w-full max-w-sm text-left">
+                <GenerationProgress progress={progress} source={source} photo={sendingPhoto} pdfRead={pdfRead} />
+              </div>
+            )}
+            {slowGeneration && progress.attempt <= 1 && (
+              <p className="max-w-sm text-sm text-on-desk/85">
+                Our AI is extra busy right now, so we&apos;re using a slower backup. This can take up to a minute.
+              </p>
+            )}
+          </div>
+        </main>
+      </DeskTurn>
+    );
+  }
+
   return (
-    <main className="on-desk w-full pb-8 pt-1">
-      <h1 className="sr-only">Make a deck</h1>
-      <div className="grid items-start gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-        <div className="paper-shadow rounded-md lg:-rotate-[0.6deg]">
-          <NotesSheet
-            text={notes}
-            onText={editNotes}
-            file={file}
-            onFile={validateAndSetFile}
-            onRemoveFile={() => setFile(null)}
-            detected={detectSource(notes)}
-            asNotes={asNotes}
-            onAsNotes={setAsNotes}
-            disabled={generating}
-          />
+    <DeskTurn view="setup">
+      <main className="on-desk w-full pb-8 pt-1">
+        <h1 className="sr-only">Make a deck</h1>
+        <div className="grid items-start gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+          <div className="paper-shadow rounded-md lg:-rotate-[0.6deg]">
+            <NotesSheet
+              text={notes}
+              onText={editNotes}
+              file={file}
+              onFile={validateAndSetFile}
+              onRemoveFile={() => setFile(null)}
+              detected={detectSource(notes)}
+              asNotes={asNotes}
+              onAsNotes={setAsNotes}
+              disabled={generating}
+            />
+          </div>
+          <div className="flex flex-col gap-5">
+            <aside aria-label="Tip" className="sticky-note paper-shadow hidden max-w-xs rotate-[2.5deg] self-end rounded-sm px-4 py-3 text-[13.5px] leading-snug text-ink lg:block">
+              <p>Drop a PDF, Word file, slides or a photo on the sheet. Or click it and type notes, a link or a topic.</p>
+              <p className="mt-2 border-t border-ink/10 pt-1.5 text-xs">
+                New here?{' '}
+                <Link href="/guide" className="font-semibold text-brass-ink hover:underline">
+                  Read the User Guide →
+                </Link>
+              </p>
+            </aside>
+            <MakeCard
+              count={count}
+              onCount={setCount}
+              difficulty={difficulty}
+              onDifficulty={setDifficulty}
+              studyType={studyType}
+              onStudyType={setStudyType}
+              sourceLine={sourceLine}
+              canMake={source !== null}
+              making={generating}
+              onMake={handleSubmit}
+              waitNote={waitNote}
+              error={status === 'error' ? errorMsg : ''}
+            />
+          </div>
         </div>
-        <div className="flex flex-col gap-5">
-          <aside aria-label="Tip" className="sticky-note paper-shadow hidden max-w-xs rotate-[2.5deg] self-end rounded-sm px-4 py-3 text-[13.5px] leading-snug text-ink lg:block">
-            {generating
-              ? 'Your cards land on the desk as soon as the deck is ready.'
-              : 'Drop a PDF, Word file, slides or a photo on the sheet. Or click it and type notes, a link or a topic.'}
-          </aside>
-          <MakeCard
-            count={count}
-            onCount={setCount}
-            difficulty={difficulty}
-            onDifficulty={setDifficulty}
-            studyType={studyType}
-            onStudyType={setStudyType}
-            sourceLine={sourceLine}
-            canMake={source !== null}
-            making={generating}
-            onMake={handleSubmit}
-            waitNote={waitNote}
-            error={status === 'error' ? errorMsg : ''}
-          />
-          {generating && source && <GenerationProgress progress={progress} source={source} photo={sendingPhoto} pdfRead={pdfRead} />}
-          {generating && slowGeneration && progress.attempt <= 1 && (
-            <p className="text-sm text-on-desk/85">
-              Our AI is extra busy right now, so we&apos;re using a slower backup. This can take up to a minute.
-            </p>
-          )}
-        </div>
-      </div>
-    </main>
+      </main>
+    </DeskTurn>
   );
 }

@@ -38,6 +38,8 @@ soon as it's applied.
 | `20261029000100_clear_edited_quotes.sql` | #21 | 2026-10-29 |
 | `20261029000200_guide_history.sql` | History | 2026-10-29 |
 | `20261031000100_limit_failed_guides.sql` | #41 | 2026-10-31 |
+| `20261112000100_server_only_card_writes.sql` | PR #84 | 2026-11-12 |
+| `20261112000200_tighten_set_grants.sql` | PR #84 review | 2026-11-12 |
 
 Add a row here whenever you apply a new migration.
 
@@ -62,6 +64,9 @@ npx supabase db query --linked --project-ref <ref> -f supabase/migrations/<file>
 2. Make it safe to re-run where possible (`if not exists`, `drop policy if exists`).
 3. New tables get RLS turned on automatically (Supabase's `ensure_rls` event
    trigger), but you still have to add policies and grants, or nobody can read them.
+   Existing tables already grant everything (insert, update, delete, truncate…) to
+   `anon` and `authenticated`, so revoke what browsers don't need. Grant updates by
+   column (`grant update (title) …`) when the browser changes only some columns.
 4. Never let users change their own `profiles.role`. Role changes go through
    server routes using the service-role key (`lib/roles.ts`).
 5. After applying, run every `tests/*.sql` file and check that every row matches

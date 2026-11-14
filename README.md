@@ -54,7 +54,7 @@ Create `.env.local` in the project root. It's gitignored; never commit it.
 | Variable | Where to find it | Used by |
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API → Project URL | Browser and server |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → `anon` key | Browser (safe to expose; RLS protects the data) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → `anon` key | Browser (safe to expose; RLS and table grants protect the data) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → `service_role` key | **Server only.** It bypasses RLS, so never use it in client code |
 | `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) | Server only (`lib/gemini.ts`) |
 | `IP_HASH_SECRET` | Optional: any long random string | Server only. Key for hashing signed-out visitors' IPs for the daily limits (#63); defaults to the service-role key |
@@ -79,7 +79,7 @@ Open http://localhost:3000.
 | `npm run dev` | Start the dev server |
 | `npm run build` | Production build (also type-checks) |
 | `npm start` | Run the production build |
-| `npm run lint` | ESLint (2 known errors in `app/page.tsx`, unrelated to recent work) |
+| `npm run lint` | ESLint (no errors) |
 | `npm test` | Unit, API-route and component tests (Vitest + React Testing Library) |
 
 ## Project structure
@@ -95,6 +95,7 @@ app/
   my-sets/page.tsx      My Sets: the saved sets as decks on the desk, each with its best score; delete one
   history/page.tsx      History: every guide made while signed in, as decks; save one to My Sets or remove it
   history/[id]/page.tsx One guide from History: study it again, or save it to My Sets
+  guide/page.tsx        User Guide (#25): how to make, study and save decks, and the teacher tools (static)
   sets/[id]/page.tsx    A saved set: study and save the score; the owner can edit cards, rename, delete
   teacher/page.tsx      Your classes (teachers): each class a kraft folder with its join code; make a new one
   teacher/classes/[id]/ One class on the desk: join-code plate, assigned decks, roster on paper, rename, delete
@@ -142,6 +143,7 @@ components/
   desk/Desk.tsx         The desk around every page: card box and library card on top, the page on a sheet of paper
   desk/PageTurn.tsx     The sheet; turns the page on every navigation (React ViewTransition) and eases it in on Back
   desk/view-transition.ts  React's ViewTransition, looked up, since the tests' React doesn't have it
+  desk/DeskTurn.tsx     Turns one view of a page into another the same way (the home page's notes sheet, deck being made, new cards)
   desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, and a tab for each section the role can open
   desk/LibraryCard.tsx  Library card (top right): name, role and Sign out, or Sign in with Google
   desk/PaperCard.tsx    A card with two faces that turns over
@@ -155,6 +157,7 @@ components/
   desk/SlipMenu.tsx     A word that fans out paper slips to choose from ("Make me [10] [medium] [flashcards]")
   make/NotesSheet.tsx   One sheet for a file, notes, a link or a topic; says what it found
   make/MakeCard.tsx     The "Make me 10 medium flashcards" card and Make my deck
+  make/MakingDeck.tsx   While the AI works: a pencil writes a card, the deck is shuffled, over and over
   make/DeckSpread.tsx   A new deck spread out on the desk; Start studying gathers it
   desk/useDeskLayout.ts Where the deck, the card and the piles lie (laptop and phone), for the card motion
 lib/
@@ -170,6 +173,7 @@ lib/
   source-quotes.ts      Checks each card's quote against the notes, finds its page or line, samples long documents
   office-text.ts        Text from Word (.docx) and PowerPoint (.pptx) files, with zip-bomb limits (server-only)
   shrink-image.ts       Shrinks photos to 1,600 pixels before upload (browser-only)
+  pending-guide.ts      Keeps an unsaved guide across the Google sign-in redirect (browser-only)
   speech.ts             Reading cards aloud with the browser's built-in speech, and the Auto setting (browser-only)
   web-page.ts           Fetches a linked web page safely (no private addresses) and keeps its main text (server-only)
   topic.ts              Looks a typed topic up on Wikipedia and returns the best article's text (server-only)
