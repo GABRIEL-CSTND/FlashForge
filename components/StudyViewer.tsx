@@ -32,6 +32,8 @@ interface StudyViewerProps {
   // after the deck that opened it. Not on the home page, where the new cards
   // gather into the deck first.
   arrive?: boolean;
+  // How many cards the deck will have, while the AI is still writing it.
+  expected?: number;
 }
 
 // The study screen, on the desk: flashcards in components/study/

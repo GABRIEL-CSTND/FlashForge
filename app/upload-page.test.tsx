@@ -351,6 +351,87 @@ describe('progress while generating', () => {
     expect(document.querySelector('.making-scene')).toBeNull();
   });
 
+  // Cards the AI sends while it writes (#94): a "cards" event carries the deck so far.
+  const CARD_LIST = [
+    { question: 'Fluid inside the chloroplast', answer: 'Stroma' },
+    { question: 'Green pigment that absorbs light', answer: 'Chlorophyll' },
+    { question: 'Pores that let gases in and out of a leaf', answer: 'Stomata' },
+  ];
+  const cardsSoFar = (n: number): ProgressEvent => ({
+    type: 'cards',
+    title: 'notes',
+    sourceFilename: 'notes.txt',
+    source: null,
+    studyType: 'flashcard',
+    items: CARD_LIST.slice(0, n),
+  });
+  const WHOLE_DECK: ProgressEvent = {
+    type: 'result',
+    status: 200,
+    body: { title: 'notes', sourceFilename: 'notes.txt', studyType: 'flashcard', items: CARD_LIST, historyId: null },
+  };
+
+  it('puts the first cards on the desk while the AI writes the rest (#94)', async () => {
+    const server = serverYouControl();
+    render(<UploadPage />);
+    chooseFile();
+    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+    await screen.findByRole('heading', { name: 'Making 10 medium flashcards' });
+
+    // The first cards turn the deck being made into the spread, landing one at a time.
+    server.send(cardsSoFar(2));
+    expect(await screen.findByText(CARD_LIST[0].question)).toBeTruthy();
+    expect(await screen.findByText(CARD_LIST[1].question)).toBeTruthy();
+    expect(document.querySelector('.making-scene')).toBeNull();
+    expect(screen.getByText('2 of 10 cards written…')).toBeTruthy();
+    // A deck still being written can be studied, not saved yet.
+    expect(screen.getByText(/still being written/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save this study guide' })).toBeNull();
+
+    // The whole deck arrives: the rest of the cards land, and it can be saved.
+    server.send(WHOLE_DECK);
+    server.end();
+    expect(await screen.findByText(CARD_LIST[2].question)).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Save this study guide' })).toBeTruthy();
+  });
+
+  it('keeps the cards already on the desk when the AI stops partway (#94)', async () => {
+    const server = serverYouControl();
+    render(<UploadPage />);
+    chooseFile();
+    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+    server.send(cardsSoFar(2));
+    await screen.findByText(CARD_LIST[1].question);
+
+    server.send({ type: 'result', status: 503, body: { error: 'The AI is busy right now. Please try again.' } });
+    server.end();
+    expect(await screen.findByText(/so this deck has 2/)).toBeTruthy();
+    expect(screen.queryByText('The AI is busy right now. Please try again.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save this study guide' })).toBeTruthy();
+  });
+
+  it('stops a deck still being written when the student leaves it (#94)', async () => {
+    const server = serverYouControl();
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    render(<UploadPage />);
+    chooseFile();
+    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+    server.send(cardsSoFar(1));
+    await screen.findByText(CARD_LIST[0].question);
+
+    fireEvent.click(screen.getByRole('button', { name: '← Exit' }));
+    const init = (server.fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(init.signal?.aborted).toBe(true);
+    expect(await screen.findByRole('button', { name: 'Make my deck' })).toBeTruthy();
+
+    // Its answer, if it still comes, is ignored.
+    server.send(WHOLE_DECK);
+    server.end();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(CARD_LIST[2].question)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Make my deck' })).toBeTruthy();
+  });
+
   it('shows what went wrong, and clears the steps, when the server fails', async () => {
     const server = serverYouControl();
     render(<UploadPage />);

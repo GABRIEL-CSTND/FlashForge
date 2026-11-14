@@ -392,14 +392,25 @@ new ones included, gets it without doing anything):
    **Make my deck** sends it. Nothing is saved yet. While the AI works, the notes sheet
    turns into **the deck being made** (`components/make/MakingDeck.tsx`): a pencil writes
    a card, the card goes onto a small deck, the deck is riffle shuffled and a fresh card
-   comes up, on one 5.6 s CSS loop (`.making-*` in `globals.css`) until the deck arrives.
-   Under it, what's being made (*Making 10 medium flashcards*, from what) and the steps
-   (step 3 below). The loop shows the work going on, not how far along it is, since the
-   API sends every card at once. It's hidden from screen readers, which follow the steps,
-   and with reduced motion it holds still, the card written. When the deck arrives, its cards land
-   one by one, 350 ms apart, in a spread (`components/make/DeckSpread.tsx`; the API sends
-   all the cards at once), with Save and the source's credit; **Start studying** gathers
-   them and the study screen takes over on the same URL.
+   comes up, on one 5.6 s CSS loop (`.making-*` in `globals.css`) until the first cards
+   arrive. Under it, what's being made (*Making 10 medium flashcards*, from what) and the
+   steps (step 3 below). It's hidden from screen readers, which follow the steps, and with
+   reduced motion it holds still, the card written.
+   - **Cards as they're written** (#94): for flashcards and multiple choice the API sends
+     the first cards while the AI writes the rest (a `cards` event, step 2). They turn the
+     scene into a spread (`components/make/DeckSpread.tsx`, in a transition, so it turns
+     like a page) and land one at a time, 300 ms apart (`CARD_GAP_MS`), under *4 of 10
+     cards written…*. **Start studying** works at once: the study desk puts each new card
+     at the back of the deck. Save waits for the whole deck.
+   - A deck that arrives whole (true or false, mixed, the backup model, or one brought back
+     after signing in) is all there at once, and its cards land 350 ms apart.
+   - If the AI stops partway, the cards already on the desk stay as a shorter deck (*We
+     couldn't write the rest of your cards…*). If it had to start again with another
+     model, the finished deck replaces them and the study desk starts over. Leaving a deck
+     that's still being written stops the request, and an answer that still comes is
+     ignored.
+   - The spread has Save and the source's credit; **Start studying** gathers the cards and
+     the study screen takes over on the same URL.
 2. **`POST /api/generate`** (`app/api/generate/route.ts`, `maxDuration = 90`):
    - Checks the caller's **daily limit** first (#63). Over it, the answer is 429 and the AI
      isn't called. See "Daily generation limits" below.
@@ -472,7 +483,9 @@ new ones included, gets it without doing anything):
      `attempt` and `backup` for every retry or switch to the backup model), then one
      `result` event holding the status and body the JSON answer would have had. Limits,
      errors and the usage log work the same either way; a refused or failed request is just
-     a `result` event with its usual status. `readGeneration()` reads this on the page and
+     a `result` event with its usual status. While a Gemini model writes flashcards or
+     multiple choice, `cards` events come in between (#94): each holds the deck so far
+     (`title`, `sourceFilename`, `source`, `studyType`, `items`), checked like the final deck. `readGeneration()` reads this on the page and
      falls back to plain JSON, so an older server still works.
 3. **Show it**: while it waits, under the deck being made, the page shows the steps (`GenerationProgress`):
    uploading, reading, writing, with what's done, what's under way, and a seconds counter.
@@ -521,6 +534,16 @@ new ones included, gets it without doing anything):
   exponential backoff plus jitter.
 - **Other 4xx errors** (bad request, bad key) fail immediately.
 - Users only ever see "The AI is busy right now…" or a generic error message.
+
+**Streaming the first cards (#94).** For flashcards and multiple choice, when the route asks
+for them (`onCards`, only with progress on), the Gemini models are called with
+`streamGenerateContent?alt=sse`. `createItemScanner()` picks each finished card out of the
+JSON array while it's still being written, and each is validated and its quote checked at
+once. The deck so far, up to the chosen count, goes to `onCards`. The final deck is those
+same cards in the same order: validate and keep the first N, as `finalItems()` does. Once a
+request that showed cards fails, later requests stay quiet, so the cards on screen never
+change under the student. True or false (shuffled at the end), mixed quizzes (assembled by
+part) and Gemma (no streaming) are sent whole.
 
 **Why Gemma needs a different request.** We tested this on 2026-10-20:
 

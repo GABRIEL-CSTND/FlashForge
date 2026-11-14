@@ -465,22 +465,139 @@ function withSourceField(schema: object): object {
   };
 }
 
+// Picks each complete top-level object out of a JSON array that is still being
+// written, e.g. `[{"question": ...}, {"question": ...` -> the first object as soon
+// as its closing brace arrives. Used to show the first cards while the AI is still
+// writing the rest. Text before the first "[" (a code fence) is skipped.
+export function createItemScanner(onItem: (item: GeneratedItem) => void) {
+  let buf = '';
+  let pos = 0;
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  let inArray = false;
+  return {
+    push(chunk: string) {
+      buf += chunk;
+      for (; pos < buf.length; pos++) {
+        const c = buf[pos];
+        if (!inArray) {
+          if (c === '[') inArray = true;
+          continue;
+        }
+        if (inString) {
+          if (escaped) escaped = false;
+          else if (c === '\\') escaped = true;
+          else if (c === '"') inString = false;
+          continue;
+        }
+        if (c === '"') inString = true;
+        else if (c === '{') {
+          if (depth === 0) start = pos;
+          depth++;
+        } else if (c === '}' && depth > 0) {
+          depth--;
+          if (depth === 0 && start >= 0) {
+            try {
+              onItem(JSON.parse(buf.slice(start, pos + 1)) as GeneratedItem);
+            } catch {
+              // a broken object is left for the final parse to deal with
+            }
+            start = -1;
+          }
+        }
+      }
+    },
+  };
+}
+
+const cleanJsonText = (text: string) =>
+  text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '');
+
+// Reads a streamed answer (server-sent events), handing each finished item to
+// `onItem` as it arrives. Returns the whole text and token count like the
+// plain request does.
+async function readStream(
+  res: Response,
+  onItem: (item: GeneratedItem) => void
+): Promise<{ text: string; finishReason?: string; outputTokens?: number }> {
+  if (!res.body) throw new GeminiError('no response body', { retryable: true });
+  const scanner = createItemScanner(onItem);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  let text = '';
+  let finishReason: string | undefined;
+  let outputTokens: number | undefined;
+
+  const handle = (line: string) => {
+    if (!line.startsWith('data:')) return;
+    let data: {
+      candidates?: { finishReason?: string; content?: { parts?: { text?: string; thought?: boolean }[] } }[];
+      usageMetadata?: { candidatesTokenCount?: number };
+    };
+    try {
+      data = JSON.parse(line.slice(5).trim());
+    } catch {
+      return;
+    }
+    const delta = (data.candidates?.[0]?.content?.parts ?? [])
+      .filter((p) => !p.thought && typeof p.text === 'string')
+      .map((p) => p.text)
+      .join('');
+    if (delta) {
+      text += delta;
+      scanner.push(delta);
+    }
+    finishReason = data.candidates?.[0]?.finishReason ?? finishReason;
+    outputTokens = data.usageMetadata?.candidatesTokenCount ?? outputTokens;
+  };
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      pending += done ? decoder.decode() : decoder.decode(value, { stream: true });
+      const lines = pending.split('\n');
+      pending = lines.pop() ?? '';
+      for (const line of lines) handle(line.trim());
+      if (done) {
+        handle(pending.trim());
+        break;
+      }
+    }
+  } catch (err) {
+    if (err instanceof GeminiError) throw err;
+    const timedOut = err instanceof Error && err.name === 'TimeoutError';
+    throw new GeminiError(timedOut ? 'timed out while streaming' : `network error: ${String(err)}`, { retryable: true });
+  }
+  return { text: cleanJsonText(text), finishReason, outputTokens };
+}
+
 async function callModel(
   model: string,
   apiKey: string,
   body: string,
   timeoutMs: number,
   // For an attachment, an empty list means the AI found nothing to study.
-  attachment?: Attachment
+  attachment?: Attachment,
+  // When given, the answer is streamed and each finished item is passed on at once.
+  onItem?: (item: GeneratedItem) => void
 ): Promise<{ items: GeneratedItem[]; outputTokens?: number }> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}/${model}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body,
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    res = await fetch(
+      onItem ? `${API_BASE}/${model}:streamGenerateContent?alt=sse` : `${API_BASE}/${model}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body,
+        signal: AbortSignal.timeout(timeoutMs),
+      }
+    );
   } catch (err) {
     const timedOut = err instanceof Error && err.name === 'TimeoutError';
     throw new GeminiError(
@@ -498,13 +615,19 @@ async function callModel(
   }
 
   // Empty or malformed output is usually a one-off, so it's worth retrying.
-  const data = await res.json();
-  const text = extractResponseText(data);
+  let text: string;
+  let finishReason: string | undefined;
+  let outputTokens: number | undefined;
+  if (onItem) {
+    ({ text, finishReason, outputTokens } = await readStream(res, onItem));
+  } else {
+    const data = await res.json();
+    text = extractResponseText(data);
+    finishReason = data.candidates?.[0]?.finishReason;
+    outputTokens = data.usageMetadata?.candidatesTokenCount;
+  }
   if (!text) {
-    throw new GeminiError(
-      `no content (finishReason: ${data.candidates?.[0]?.finishReason ?? 'unknown'})`,
-      { retryable: true }
-    );
+    throw new GeminiError(`no content (finishReason: ${finishReason ?? 'unknown'})`, { retryable: true });
   }
 
   let items: unknown;
@@ -524,7 +647,7 @@ async function callModel(
     throw new GeminiError('response contained no study items', { retryable: true });
   }
 
-  return { items: items as GeneratedItem[], outputTokens: data.usageMetadata?.candidatesTokenCount };
+  return { items: items as GeneratedItem[], outputTokens };
 }
 
 export async function generateStudyItems(
@@ -537,6 +660,7 @@ export async function generateStudyItems(
     difficulty = DEFAULT_DIFFICULTY,
     focus,
     units,
+    onCards,
   }: {
     // How many items the guide should have (#65); callers check the range.
     count?: number;
@@ -551,6 +675,12 @@ export async function generateStudyItems(
     // How `sourceText` splits into PDF pages or text lines, so a card's quote can
     // say where it is (lib/source-quotes.ts).
     units?: SourceUnits;
+    // Called with the cards finished so far (the whole list each time) while the
+    // AI is still writing, so the first ones can be studied at once. Only for
+    // flashcards and multiple choice, whose cards keep the order they are written
+    // in, and only for a Gemini model, which can stream. The list a successful
+    // request ends with starts with the cards sent here.
+    onCards?: (items: GeneratedItem[]) => void;
   } = {}
 ): Promise<{ items: GeneratedItem[]; model: string }> {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -612,6 +742,10 @@ ${sampledText}
   let lastError: GeminiError | undefined;
 
   const minValid = minValidItems(count);
+  const incremental = !!onCards && (studyType === 'flashcard' || studyType === 'multiple_choice');
+  // Once cards have been shown from a request that then failed, later requests
+  // stay quiet: the cards on screen must not change under the student.
+  let previewOpen = incremental;
 
   for (const { id: model, family, attempts, timeoutMs, perExtraItemMs } of MODEL_CHAIN) {
     const modelTimeoutMs =
@@ -621,29 +755,57 @@ ${sampledText}
       if (remaining < 2_000) break;
 
       const startedAt = Date.now();
+      let shown = 0;
       try {
         onRequest?.(model);
-        const { items: rawItems, outputTokens } = await callModel(
-          model,
-          apiKey,
-          bodies[family],
-          Math.min(modelTimeoutMs, remaining),
-          attachment
-        );
-        const valid = finalItems(studyType, rawItems, count);
-        if (valid.length < minValid) {
-          throw new GeminiError(`only ${valid.length}/${rawItems.length} items passed validation`, {
-            retryable: true,
-          });
-        }
 
         // Each card's quote is checked against the real text, so one is only shown
         // when it is really in the document. A photo has no text to check against,
         // so its cards never carry one. The card itself always stays.
         const checker = withSource ? createSourceChecker(sampledText, MAX_SOURCE_CHARS, units) : undefined;
-        const items = valid.map((item) =>
-          checker ? checker.check(item) : { ...item, source: undefined, sourceLocation: undefined }
+        const accepted: GeneratedItem[] = [];
+        let streamed = 0;
+        const accept = (raw: GeneratedItem) => {
+          const item = VALIDATORS[studyType as SingleType](raw);
+          if (!item) return;
+          accepted.push(checker ? checker.check(item) : { ...item, source: undefined, sourceLocation: undefined });
+        };
+        const streaming = incremental && family === 'gemini';
+
+        const { items: rawItems, outputTokens } = await callModel(
+          model,
+          apiKey,
+          bodies[family],
+          Math.min(modelTimeoutMs, remaining),
+          attachment,
+          streaming
+            ? (raw) => {
+                streamed += 1;
+                accept(raw);
+                const ready = Math.min(accepted.length, count);
+                if (previewOpen && ready > shown) {
+                  shown = ready;
+                  onCards?.(accepted.slice(0, ready));
+                }
+              }
+            : undefined
         );
+
+        let items: GeneratedItem[];
+        if (incremental) {
+          // Cards the stream missed are checked now, in order.
+          rawItems.slice(streamed).forEach(accept);
+          items = accepted.slice(0, count);
+        } else {
+          items = finalItems(studyType, rawItems, count).map((item) =>
+            checker ? checker.check(item) : { ...item, source: undefined, sourceLocation: undefined }
+          );
+        }
+        if (items.length < minValid) {
+          throw new GeminiError(`only ${items.length}/${rawItems.length} items passed validation`, {
+            retryable: true,
+          });
+        }
 
         // Counts only: the document's own text never goes in the log.
         const quotes = checker
@@ -655,6 +817,8 @@ ${sampledText}
         );
         return { items, model };
       } catch (err) {
+        if (shown > 0) previewOpen = false;
+
         const error =
           err instanceof GeminiError ? err : new GeminiError(String(err), { retryable: false });
         console.error(

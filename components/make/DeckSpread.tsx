@@ -4,9 +4,9 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import type { StudyItem } from '@/components/study/logic';
 import { ExitButton } from '@/components/study/parts';
 
-// The API sends every card at once (it streams only its progress steps), so the
-// cards land one after another, this far apart, once the deck has arrived.
-// Landing each card the moment it's written needs streaming from the AI.
+// The API sends the first cards while the AI is still writing the rest, so each
+// card lands as it arrives; a whole deck that arrives at once lands one after
+// another, this far apart.
 export const LAND_GAP_MS = 350;
 const GATHER_MS = 600;
 const TILTS = [-6, 4, -3, 7, 3, -5, 2, -4, 5, -2];
@@ -23,6 +23,8 @@ export default function DeckSpread({
   onExit,
   saveSlot,
   savedToHistory,
+  writing = false,
+  expected,
 }: {
   title: string;
   // e.g. "10 flashcards · medium".
@@ -32,6 +34,10 @@ export default function DeckSpread({
   onExit: () => void;
   saveSlot: ReactNode;
   savedToHistory: boolean;
+  // The AI is still writing: more cards will land, and you can start studying now.
+  writing?: boolean;
+  // How many cards the deck will have, so the count reads "4 of 10" and goes up.
+  expected?: number;
 }) {
   const [landed, setLanded] = useState(0);
   const [gather, setGather] = useState<{ x: number; y: number }[] | null>(null);
@@ -70,7 +76,7 @@ export default function DeckSpread({
     startTimer.current = setTimeout(onStart, GATHER_MS);
   };
 
-  const ready = landed >= items.length;
+  const ready = landed >= items.length && !writing;
 
   return (
     <main className="on-desk w-full pb-8">
@@ -78,9 +84,16 @@ export default function DeckSpread({
         <ExitButton onExit={onExit} className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-on-desk/80 hover:text-on-desk" />
         <p aria-live="polite" className="inline-flex items-center gap-2 text-sm font-medium text-on-desk/85">
           <span aria-hidden="true" className={`h-2 w-2 rounded-full bg-brass ${ready ? '' : 'animate-pulse'}`} />
-          {ready ? `All ${items.length} cards are ready` : `Laying out card ${landed + 1} of ${items.length}`}
+          {writing
+            ? expected !== undefined && expected > items.length
+              ? `${items.length} of ${expected} cards written…`
+              : `${items.length} card${items.length === 1 ? '' : 's'} written…`
+            : ready
+              ? `All ${items.length} cards are ready`
+              : `Laying out card ${landed + 1} of ${items.length}`}
         </p>
       </div>
+
 
       <div className="mt-4 flex flex-wrap items-start gap-x-6 gap-y-4">
         <div className="paper paper-shadow -rotate-1 rounded px-4 py-2.5 text-ink">
