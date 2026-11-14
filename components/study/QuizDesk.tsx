@@ -261,6 +261,39 @@ export default function QuizDesk({
     if (nextPos >= deck.order.length) report(nextAnswers);
   };
 
+  // Keyboard shortcuts: 1-4 for multiple-choice answers, ArrowRight/Enter for Next, Escape to exit.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Don't intercept when user is typing into an input or textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.key === 'Escape' && onExit) {
+        e.preventDefault();
+        onExit();
+        return;
+      }
+
+      if (interaction === 'choice' && !answer && card?.options) {
+        const num = parseInt(e.key, 10);
+        if (num >= 1 && num <= card.options.length) {
+          e.preventDefault();
+          pick(card.options[num - 1]);
+          return;
+        }
+      }
+
+      if (answer && (e.key === 'ArrowRight' || e.key === 'Enter')) {
+        e.preventDefault();
+        next();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interaction, answer, card?.options, onExit]);
+
   // The Wrong pile, dealt again: those questions go back into the deck and the
   // Right pile stays where it is.
   const goOverWrong = () => {
@@ -531,6 +564,12 @@ export default function QuizDesk({
       : `Question ${passDone + 1} of ${Math.max(passCount, expected ?? 0)}`;
   const header = <DeskHeader onExit={onExit} progress={progress} tally={`. Right ${right}, Wrong ${wrong}.`} />;
 
+  const feedbackAnnouncement = answer && card
+    ? isCorrect(interaction, card, answer)
+      ? `Correct! Answer: ${card.answer}`
+      : `Incorrect. The correct answer is: ${card.answer}`
+    : '';
+
   const label = (
     <div className="paper paper-shadow -rotate-1 rounded px-4 py-2.5 text-ink">
       <h1 className="text-[19px] leading-tight">{title}</h1>
@@ -547,6 +586,9 @@ export default function QuizDesk({
   if (kind === 'phone') {
     return (
       <main className={`on-desk w-full pb-4${arrive ? ' desk-arrive' : ''}`}>
+        <div aria-live="assertive" className="sr-only">
+          {feedbackAnnouncement}
+        </div>
         <div ref={stageRef} className="relative mx-auto w-full">
           {header}
           <div className="mt-2">{label}</div>
@@ -572,6 +614,9 @@ export default function QuizDesk({
 
   return (
     <main className={`on-desk w-full pb-6${arrive ? ' desk-arrive' : ''}`}>
+      <div aria-live="assertive" className="sr-only">
+        {feedbackAnnouncement}
+      </div>
       <div ref={stageRef} className="relative mx-auto w-full">
         {header}
         <div className="mt-3 grid items-start gap-x-6 gap-y-7" style={{ gridTemplateColumns: `minmax(0, 1fr) ${size.w}px minmax(0, 1fr)` }}>

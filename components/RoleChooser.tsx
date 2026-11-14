@@ -31,11 +31,12 @@ export default function RoleChooser() {
   const [selected, setSelected] = useState<SelfSelectableRole | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [dismissed, setDismissed] = useState(false);
 
   // Only default students who haven't chosen. Never shown to admins or to
   // anyone whose role an admin already set.
   const needsChoice = profile?.role === 'student' && profile.roleChosenAt === null;
-  if (!needsChoice) return null;
+  if (!needsChoice || dismissed) return null;
 
   const handleContinue = async () => {
     if (!selected) return;
@@ -75,6 +76,10 @@ export default function RoleChooser() {
       role="dialog"
       aria-modal="true"
       aria-labelledby="role-chooser-title"
+      tabIndex={-1}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') setDismissed(true);
+      }}
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-6"
     >
       <div className="w-full max-w-md space-y-5 rounded-xl border bg-background p-6 shadow-xl">

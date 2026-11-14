@@ -16,11 +16,11 @@ export default function Desk({ children }: { children: ReactNode }) {
         <CardBox />
         <LibraryCard />
       </header>
-      <div className="flex flex-1 flex-col px-2 pb-6 pt-5 sm:px-6 sm:pb-10 sm:pt-7">
+      <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col px-2 pb-6 pt-5 sm:px-6 sm:pb-10 sm:pt-7 outline-none">
         <PageTurn className="desk-sheet sheet mx-auto flex w-full max-w-5xl flex-1 flex-col rounded-md text-foreground">
           {children}
         </PageTurn>
-      </div>
+      </main>
     </div>
   );
 }

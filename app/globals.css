@@ -30,6 +30,29 @@
   color-scheme: light;
 }
 
+/* Dark mode theme: rich midnight slate/emerald desk with deep warm charcoal paper and warm high-contrast text. */
+:root.dark,
+[data-theme="dark"] {
+  --desk: #0e1c15;
+  --sheet: #171b18;
+  --paper: #1d231f;
+  --ink: #f2ede4;
+  --muted: #a69e90;
+  --brass: #d4b36a;
+  --brass-hover: #e0c27e;
+  --brass-ink: #f0cb76;
+  --pencil: #f26b5d;
+  --on-desk: #ede6d6;
+
+  --background: var(--sheet);
+  --foreground: var(--ink);
+  --border: #333d36;
+  --accent: var(--brass);
+  --accent-hover: var(--brass-hover);
+  --link: var(--brass-ink);
+  color-scheme: dark;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -93,6 +116,12 @@
     background-image: url("/textures/paper.png");
     background-size: 256px 256px;
     background-blend-mode: multiply;
+  }
+  .dark .paper,
+  .dark .sheet,
+  [data-theme="dark"] .paper,
+  [data-theme="dark"] .sheet {
+    background-blend-mode: overlay;
   }
   .paper {
     background-color: var(--paper);
@@ -175,7 +204,11 @@ body {
   box-shadow: none;
 }
 
-/* Focus rings that show on the dark leather, and in brass ink on paper. */
+/* Focus rings that show clearly on both themes, on the leather desk, and on paper. */
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
 .on-desk :focus-visible {
   outline: 2px solid #e7c97e;
   outline-offset: 3px;

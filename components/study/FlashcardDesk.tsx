@@ -217,12 +217,26 @@ export default function FlashcardDesk({
     land([{ index: current, pile, answer: { result: pile } }], deck.pos + 1);
   };
 
-  // ← and → sort the card while the card or a pile has focus.
+  // Space or Enter flips the card. ← and → sort to Missed / Got it. Escape exits if onExit provided.
   const onDeskKey = (e: React.KeyboardEvent) => {
-    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-    if (!finished && mode !== 'flip') return;
-    e.preventDefault();
-    sortTo(e.key === 'ArrowRight' ? 'got' : 'missed');
+    if (e.key === ' ' || e.key === 'Enter') {
+      if (!finished && mode === 'flip') {
+        e.preventDefault();
+        flip();
+        return;
+      }
+    }
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      if (!finished && mode !== 'flip') return;
+      e.preventDefault();
+      sortTo(e.key === 'ArrowRight' ? 'got' : 'missed');
+      return;
+    }
+    if (e.key === 'Escape' && onExit) {
+      e.preventDefault();
+      onExit();
+      return;
+    }
   };
 
   const checkTyped = (typed: string | null) => {
@@ -498,6 +512,12 @@ export default function FlashcardDesk({
       : `Card ${deck.pos + 1} of ${Math.max(deck.order.length, expected ?? 0)}`;
   const header = <DeskHeader onExit={onExit} progress={progress} tally={`. Got it ${got}, Missed it ${missed}.`} />;
 
+  const flipAnnouncement = current !== undefined
+    ? flipped
+      ? `Flipped to answer: ${cards[current].answer}`
+      : `Flipped to clue: ${cards[current].question}`
+    : '';
+
   const toGo = deck.order.length - deck.pos;
   const label = (
     <div className="paper paper-shadow -rotate-1 rounded px-4 py-2.5 text-ink">
@@ -514,6 +534,9 @@ export default function FlashcardDesk({
   if (kind === 'phone') {
     return (
       <main className={`on-desk w-full pb-4${arrive ? ' desk-arrive' : ''}`}>
+        <div aria-live="assertive" className="sr-only">
+          {flipAnnouncement}
+        </div>
         <div ref={stageRef} className="relative mx-auto w-full">
           {header}
           <div className="mt-2">{label}</div>
@@ -538,6 +561,9 @@ export default function FlashcardDesk({
 
   return (
     <main className={`on-desk w-full pb-6${arrive ? ' desk-arrive' : ''}`}>
+      <div aria-live="assertive" className="sr-only">
+        {flipAnnouncement}
+      </div>
       <div ref={stageRef} className="relative mx-auto w-full">
         {header}
         <div className="mt-3 grid items-start gap-x-6 gap-y-7" style={{ gridTemplateColumns: `minmax(0, 1fr) ${size.w}px minmax(0, 1fr)` }}>

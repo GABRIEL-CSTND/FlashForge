@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Fraunces, Geist_Mono, Instrument_Sans } from "next/font/google";
 import "./globals.css";
 import { ProfileProvider } from "@/components/ProfileProvider";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import RoleChooser from "@/components/RoleChooser";
 import Desk from "@/components/desk/Desk";
 
@@ -39,10 +40,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       {/* Every page sits on the desk: the card box and library card at the top,
           the page itself on a sheet of paper (components/desk/Desk.tsx). */}
       <body className="desk min-h-full flex flex-col">
-        <ProfileProvider>
-          <Desk>{children}</Desk>
-          <RoleChooser />
-        </ProfileProvider>
+        <ThemeProvider>
+          <ProfileProvider>
+            <Desk>{children}</Desk>
+            <RoleChooser />
+          </ProfileProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

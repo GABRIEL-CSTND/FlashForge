@@ -52,7 +52,7 @@ describe('library card', () => {
   it('shows no sign-in button while the session is loading', () => {
     state.loading = true;
     render(<LibraryCard />);
-    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sign in with Google' })).toBeNull();
   });
 
   it('links to the privacy page', () => {
