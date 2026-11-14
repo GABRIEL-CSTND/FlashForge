@@ -9,6 +9,11 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
 2026-11-11. It changes how the app looks, not how it works.
 
 ### Changed
+- **Friendly error and 404 pages** (2026-11-14, #91): a page that breaks shows *Something
+  went wrong* on the desk sheet, with *Try again* and *Back to desk* (`app/error.tsx`), and an
+  address that isn't a page shows a 404 on the desk with links to make a deck or open My Sets
+  (`app/not-found.tsx`), instead of Next's plain ones. History's empty note now links to
+  *Make a deck*. *Try again* uses `retry()`, which loads the page again. Tests: 2 new.
 - **You watch the deck being made** (2026-11-12): while the AI writes the guide, the notes
   sheet turns into a scene on the desk instead of a checklist under it. A pencil writes a
   card line by line, the card goes onto a small deck, the deck is riffle shuffled and a fresh

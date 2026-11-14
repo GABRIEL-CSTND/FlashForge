@@ -134,6 +134,12 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
   long (`truncate`) add `w-full` to it, or a long title makes the page wider than a phone
   screen instead of shortening with "…". Pages built to fill the window (`min-h-screen`)
   only fill the sheet (`.desk-sheet .min-h-screen` in `globals.css`).
+- **When something goes wrong** (#91): `app/error.tsx` catches a page that throws and shows
+  *Something went wrong* on the sheet, with *Try again* (`retry()`, which loads the page
+  again, not `reset()`, which only draws it again) and *Back to desk*. `app/not-found.tsx` is
+  the 404 for an address that isn't a page. An error in the root layout itself would need a
+  `global-error.tsx`, which there isn't. A set, guide or class that doesn't exist still shows
+  its own page's "not found" line, not this 404.
 - Studying flashcards (phase 2), making a deck (phase 3), taking quizzes (phase 4), the
   library (phase 5: My Sets, History, My Classes) and the teacher pages (phase 6) happen on
   the desk itself (below). Phase 7 put the admin pages, the role chooser and the card editor

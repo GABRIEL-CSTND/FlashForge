@@ -145,7 +145,12 @@ export default function HistoryPage() {
       {loadFailed ? (
         <DeskNote role="alert">Couldn&apos;t load your history. Please try again.</DeskNote>
       ) : entries.length === 0 ? (
-        <DeskNote>No study guides yet. The ones you make while signed in will show up here.</DeskNote>
+        <DeskNote>
+          <p>No study guides yet. The ones you make while signed in will show up here.</p>
+          <Link href="/" className="mt-2 inline-block font-semibold text-link hover:underline">
+            Make a deck
+          </Link>
+        </DeskNote>
       ) : (
         <ul aria-label="Your study guides" className="grid gap-x-10 gap-y-12 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
           {entries.map((e, i) => (
