@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { signInWithGoogle, signOut, useUser } from '@/lib/auth';
 import { useProfile } from '@/components/ProfileProvider';
 import type { Role } from '@/lib/role-types';
@@ -22,7 +23,16 @@ export default function LibraryCard() {
       // ml-auto keeps it on the right when a long row of tabs pushes it onto its own line.
       className="paper paper-shadow ml-auto w-48 rotate-[1.5deg] rounded-md px-4 pb-1 pt-3 text-ink sm:w-60"
     >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brass-ink">Library card</p>
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brass-ink">Library card</p>
+        {/* A 44 px tall tap target; the negative margins keep the card's header its size. */}
+        <Link
+          href="/privacy"
+          className="-my-3.5 -mr-2 inline-flex min-h-11 items-center px-2 text-[11px] text-muted hover:text-ink hover:underline"
+        >
+          Privacy
+        </Link>
+      </div>
       {user ? (
         <>
           <p

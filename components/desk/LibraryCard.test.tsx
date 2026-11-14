@@ -54,4 +54,10 @@ describe('library card', () => {
     render(<LibraryCard />);
     expect(screen.queryByRole('button')).toBeNull();
   });
+
+  it('links to the privacy page', () => {
+    render(<LibraryCard />);
+    const link = screen.getByRole('link', { name: 'Privacy' });
+    expect(link.getAttribute('href')).toBe('/privacy');
+  });
 });

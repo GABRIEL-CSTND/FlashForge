@@ -215,6 +215,17 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **Privacy page and deleting your account** (2026-11-14, #88, PR #96): a *Privacy* page at
+  `/privacy`, linked from the library card, says what's kept, who can see it (classmates,
+  teachers, admins, and Google on the Gemini free tier) and how long. Signed in, *Delete my
+  account and data* deletes the account through Supabase Auth, and the database removes
+  everything tied to it in the same step (`DELETE /api/profile/data`, `lib/user-data.ts`).
+  - A teacher's account takes their classes and assigned sets along, and so their students'
+    scores on those sets. Records of AI use and admin actions stay, without the person.
+  - The last admin can't delete their account. A failed delete is reported as one: the
+    account isn't left alive behind a "deleted" message.
+  - Tests: the delete route, `deleteUserData()` and the page, including the facts its text
+    must keep right.
 - **User Guide** (#25, PR #93): a *Guide* page at `/guide`, reached from a new *Guide* tab
   in the card box (shown to everyone, signed in or not) and from the home page's tip note.
   It covers making a deck (the notes sheet, the Make card, watching the deck being made,
