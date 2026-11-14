@@ -11,6 +11,7 @@ soon as it's applied.
 |---|---|
 | `migrations/` | SQL changes, applied in filename order |
 | `seed-admins.sql` | One-time script that makes the first admins (by Google email) |
+| `seed-demo.sql` | Demo accounts, sample sets across all study types, class, and attempts (#92) |
 | `tests/*.sql` | RLS checks that simulate anonymous and signed-in users; everything is rolled back |
 
 ## Migration log

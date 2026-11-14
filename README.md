@@ -165,6 +165,7 @@ components/
   make/DeckSpread.tsx   A new deck spread out on the desk, card by card as they're written; Start studying gathers it
   desk/useDeskLayout.ts Where the deck, the card and the piles lie (laptop and phone), for the card motion
 lib/
+  demo-data.ts          Pre-seeded demo datasets, accounts, sets across all 4 study types (#92)
   gemini.ts             AI model chain, prompts, retries, output validation, streaming the first cards
   roles.ts              getAuthedUser / requireRole / chooseOwnRole (server-only)
   role-types.ts         Role types and helpers shared by server and client
@@ -211,9 +212,11 @@ supabase/
   migrations/           Database schema and RLS policies (see supabase/README.md)
   tests/                SQL checks that simulate users; always rolled back
   seed-admins.sql       Makes the first admins
+  seed-demo.sql         Pre-seeded demo accounts, class, and sample sets across all study types (#92)
 docs/
   ARCHITECTURE.md       How the app works
   CHANGELOG.md          What changed and when
+  DEMO_SCRIPT.md        Demo day presentation script, speaker notes, and sample data catalog (#92)
 ```
 
 ## Database
@@ -243,5 +246,6 @@ admins can bypass it with the **"Merge without waiting for requirements"** check
 ## More documentation
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): request flow, AI pipeline, auth and roles, data model, security
+- [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md): presentation demo run-through, speaker script, and contingency fallback
 - [docs/CHANGELOG.md](docs/CHANGELOG.md): history of changes
 - [supabase/README.md](supabase/README.md): database migrations and checks

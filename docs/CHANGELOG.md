@@ -9,7 +9,20 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
 2026-11-11. It changes how the app looks, not how it works.
 
 ### Changed
-- **Friendly error and 404 pages** (2026-11-14, #91): a page that breaks shows *Something
+- **Demo accounts, sample data and presentation script** (2026-11-14, #92): pre-seeded demo
+  accounts (teacher, two students, admin), sample study sets covering all 4 study types
+  (flashcards, multiple choice, true/false, mixed quiz), an active class with enrollments, an
+  assignment, and student score attempts (`supabase/seed-demo.sql`, `lib/demo-data.ts`).
+  Provides a step-by-step presentation walkthrough (`docs/DEMO_SCRIPT.md`) with speaker
+  assignments, timing guide, hardest-questions analytics highlights, and an AI quota contingency
+  plan so demo day presentations never stall or depend on live Gemini quota. Tests: 8 new (893
+  in all).
+- **Privacy and data deletion** (2026-11-14, #88): dedicated Privacy page (`/privacy`) on the
+  desk, explaining what data FlashForge stores (Google account details, sets/cards, generation
+  history, score attempts, class memberships), visibility boundaries, and retention policy.
+  Provides a self-serve account and data deletion button with confirmation requirement that
+  permanently wipes user data while preserving last-admin safeguards. Added persistent Privacy
+  link in the LibraryCard header. Tests: 13 new.
   went wrong* on the desk sheet, with *Try again* and *Back to desk* (`app/error.tsx`), and an
   address that isn't a page shows a 404 on the desk with links to make a deck or open My Sets
   (`app/not-found.tsx`), instead of Next's plain ones. History's empty note now links to
