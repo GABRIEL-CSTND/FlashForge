@@ -18,12 +18,27 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
   - The notes sheet, the deck being made and the new cards turn into one another like pages
     (`components/desk/DeskTurn.tsx`). A failed guide turns back to the notes sheet, with the
     problem on the Make card as before.
-  - It shows the work going on, not how far along it is: the API still sends every card at
-    once. Cards landing as they're written would need the AI to stream.
+  - It shows the work going on until the first cards arrive. Since #94 (below), flashcards
+    and multiple choice stream their cards, so the scene gives way to the spread early.
   - With reduced motion it holds still: the card written, the pencil beside it.
   - Tests: one for the scene in place of the notes sheet; 862 in all. Checked in Edge, frame
     by frame through the loop, on a phone's width, with reduced motion, and on the real page
     with the AI's answer made up in the browser (no quota used).
+- **Cards land as they're written** (2026-11-14, #94): for flashcards and multiple choice,
+  the API sends the first cards while the AI writes the rest, so the deck being made turns
+  into the spread as soon as they're written, and the cards land one at a time (*4 of 10
+  cards written…*). **Start studying** works straight away: new cards join the back of the
+  deck. Save waits for the whole deck.
+  - Gemini streams its answer, and `createItemScanner()` in `lib/gemini.ts` picks out each
+    card as soon as it's complete. Each is checked like the final deck, which keeps the same
+    cards in the same order.
+  - If the AI stops partway, the cards on the desk stay as a shorter deck. If it had to
+    start again, the study desk starts over with the new deck. Leaving a deck that's still
+    being written stops it.
+  - True or false, mixed quizzes and the backup model still arrive whole, as does a deck
+    brought back after signing in (#89's sign-in save, merged in).
+  - Tests: streaming in `lib/gemini.ts`, the study desks taking new cards, and the home page
+    (the first cards, a deck cut short, leaving mid-way).
 - **Pages turn instead of swapping** (2026-11-07): moving to another page fades the old one
   out as it sinks a little, and the new one rises into place (React's `<ViewTransition>` in
   `components/desk/PageTurn.tsx`, around every page). A deck picked up in the library still

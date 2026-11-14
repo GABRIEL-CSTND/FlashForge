@@ -106,7 +106,7 @@ app/
   admin/users/          Users and roles: search users, change roles
   admin/sets/           Study sets: open or delete any set
   admin/usage/          AI usage: guides per day, models used, today's quota, top users
-  api/generate/         POST: extract text from the file, generate items with AI, keep the guide in History
+  api/generate/         POST: extract text from the file, generate items with AI (sending the first cards as they're written), keep the guide in History
   api/save-set/         POST: save a generated guide or one from History (signed-in users only)
   api/sets/[id]/cards/  PUT: save the owner's edited cards, all at once
   api/attempts/         POST: save a finished study session (scored on the server); GET: my recent scores
@@ -158,10 +158,10 @@ components/
   make/NotesSheet.tsx   One sheet for a file, notes, a link or a topic; says what it found
   make/MakeCard.tsx     The "Make me 10 medium flashcards" card and Make my deck
   make/MakingDeck.tsx   While the AI works: a pencil writes a card, the deck is shuffled, over and over
-  make/DeckSpread.tsx   A new deck spread out on the desk; Start studying gathers it
+  make/DeckSpread.tsx   A new deck spread out on the desk, card by card as they're written; Start studying gathers it
   desk/useDeskLayout.ts Where the deck, the card and the piles lie (laptop and phone), for the card motion
 lib/
-  gemini.ts             AI model chain, prompts, retries, output validation
+  gemini.ts             AI model chain, prompts, retries, output validation, streaming the first cards
   roles.ts              getAuthedUser / requireRole / chooseOwnRole (server-only)
   role-types.ts         Role types and helpers shared by server and client
   admin.ts              Admin tools: users and roles, sets, AI usage (server-only)
