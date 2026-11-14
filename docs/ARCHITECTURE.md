@@ -72,6 +72,7 @@ writes with the service-role key. Browsers read only what RLS allows (section 4)
 | `POST /api/save-set` | Signed in | Save a generated study guide, or one from History, to the user's account; with `historyId`, that History entry is marked saved |
 | `PUT /api/sets/[id]/cards` | The set's owner | Save edited cards: `{ cards: [{ id?, question, answer, options? }] }` in display order (#55) |
 | `POST /api/profile/role` | Signed in, not chosen yet | One-time choice: `{ role: 'student' \| 'teacher' }` (#52) |
+| `DELETE /api/profile/data` | Signed in | Permanently delete the caller's account, sets, history, attempts and class memberships (#88) |
 | `GET /api/teacher/classes` | Teacher, admin | The caller's classes, newest first, with student counts |
 | `POST /api/teacher/classes` | Teacher, admin | Create a class: `{ name }` → the class with its join code |
 | `GET /api/teacher/classes/[id]` | The class's teacher | Class details, roster (names, emails, join dates) and assignments (#56) |

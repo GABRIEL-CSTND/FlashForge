@@ -9,6 +9,10 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
 2026-11-11. It changes how the app looks, not how it works.
 
 ### Changed
+- **Privacy and data deletion** (2026-11-14, #88): a dedicated Privacy page (`/privacy`) on the
+  desk explains what data is kept and who can see it, and lets signed-in users permanently delete
+  their account and all associated study sets, cards, history, attempts, and class memberships
+  (`DELETE /api/profile/data`).
 - **You watch the deck being made** (2026-11-12): while the AI writes the guide, the notes
   sheet turns into a scene on the desk instead of a checklist under it. A pencil writes a
   card line by line, the card goes onto a small deck, the deck is riffle shuffled and a fresh
