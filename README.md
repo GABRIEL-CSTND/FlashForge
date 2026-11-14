@@ -96,6 +96,7 @@ app/
   history/page.tsx      History: every guide made while signed in, as decks; save one to My Sets or remove it
   history/[id]/page.tsx One guide from History: study it again, or save it to My Sets
   guide/page.tsx        User Guide (#25): how to make, study and save decks, and the teacher tools (static)
+  privacy/page.tsx      Privacy (#88): what's kept, who can see it, and deleting your account
   sets/[id]/page.tsx    A saved set: study and save the score; the owner can edit cards, rename, delete
   teacher/page.tsx      Your classes (teachers): each class a kraft folder with its join code; make a new one
   teacher/classes/[id]/ One class on the desk: join-code plate, assigned decks, roster on paper, rename, delete
@@ -111,6 +112,7 @@ app/
   api/sets/[id]/cards/  PUT: save the owner's edited cards, all at once
   api/attempts/         POST: save a finished study session (scored on the server); GET: my recent scores
   api/profile/role/     POST: one-time student/teacher choice at sign-up
+  api/profile/data/     DELETE: delete the caller's account, and with it all their data (#88)
   api/admin/users/      Admin API: list users (GET), change a role (PATCH [id])
   api/admin/sets/       Admin API: list sets (GET), delete one (DELETE [id])
   api/admin/usage/      Admin API: generation usage for the last 14 days, and the daily limits
@@ -164,6 +166,7 @@ lib/
   gemini.ts             AI model chain, prompts, retries, output validation
   roles.ts              getAuthedUser / requireRole / chooseOwnRole (server-only)
   role-types.ts         Role types and helpers shared by server and client
+  user-data.ts          Deleting an account: one Supabase Auth delete; the database removes the rest (server-only)
   admin.ts              Admin tools: users and roles, sets, AI usage (server-only)
   generation-logs.ts    Usage log and daily limit check for /api/generate (server-only)
   generation-limits.ts  Daily limits per role: rules and message (shared)

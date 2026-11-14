@@ -72,7 +72,7 @@ writes with the service-role key. Browsers read only what RLS allows (section 4)
 | `POST /api/save-set` | Signed in | Save a generated study guide, or one from History, to the user's account; with `historyId`, that History entry is marked saved |
 | `PUT /api/sets/[id]/cards` | The set's owner | Save edited cards: `{ cards: [{ id?, question, answer, options? }] }` in display order (#55) |
 | `POST /api/profile/role` | Signed in, not chosen yet | One-time choice: `{ role: 'student' \| 'teacher' }` (#52) |
-| `DELETE /api/profile/data` | Signed in | Permanently delete the caller's account, sets, history, attempts and class memberships (#88) |
+| `DELETE /api/profile/data` | Signed in | `{ confirm: true }`: delete the caller's account, and with it all their data (#88, see "Deleting an account"); 409 for the last admin, 500 if the account wasn't deleted |
 | `GET /api/teacher/classes` | Teacher, admin | The caller's classes, newest first, with student counts |
 | `POST /api/teacher/classes` | Teacher, admin | Create a class: `{ name }` → the class with its join code |
 | `GET /api/teacher/classes/[id]` | The class's teacher | Class details, roster (names, emails, join dates) and assignments (#56) |
@@ -123,9 +123,14 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
   table of contents. The home page's tip note links to it on large screens. It describes
   what the app really does, so check it when a feature changes; its tests pin the facts
   earlier drafts got wrong (the join code format, when the daily limit resets).
+- **Privacy** (`app/privacy/page.tsx`, #88): what's kept, who can see it (classmates,
+  teachers, admins, and Google's Gemini on the free tier), and *Delete my account and data*
+  for signed-in users. Like the guide, its tests pin the facts an earlier draft got wrong:
+  check them against the code when a feature changes.
 - **Library card** (`components/desk/LibraryCard.tsx`), at the top right: the user's name
   (or email, without a name), role and *Sign out*; signed out, *Sign in with Google*.
-  While the session loads it keeps its height, so the desk doesn't jump.
+  While the session loads it keeps its height, so the desk doesn't jump. A small *Privacy*
+  link in its corner opens `/privacy`, signed in or out.
 - **The sheet:** the page itself lies on a sheet of paper below them (`.desk-sheet`, at
   most `max-w-5xl`), which `components/desk/PageTurn.tsx` renders so every page turns (see
   "Moving between pages" below). On a phone the card box and library card share the top row (the card
@@ -704,6 +709,32 @@ new ones included, gets it without doing anything):
   Bearer token and returns the user, or throws `AuthError` with 401 (not signed in) or
   403 (wrong role). A user without a profile counts as a student. Every teacher and
   admin route must use it, because hiding UI is not protection.
+
+### Deleting an account (#88)
+
+`DELETE /api/profile/data` (with `{ confirm: true }`) calls `deleteUserData()` in
+`lib/user-data.ts`, which deletes the user's `auth.users` row through Supabase Auth
+(`auth.admin.deleteUser`). Every table that holds a user's data references `auth.users`
+with `ON DELETE CASCADE`, so the database removes it all in that one statement and nothing
+can be left half deleted:
+
+- Gone with the account: the profile, saved sets and their cards, History, attempts,
+  class memberships, join failures, and the classes they teach with those classes'
+  members and assignments.
+- A teacher's sets take every attempt on them along (`attempts.set_id` cascades), so
+  students lose their scores on that teacher's assignments. The privacy page says so.
+- Kept without the person: `generation_logs`, `audit_log` and `app_settings` set the user's
+  id to null (`ON DELETE SET NULL`). Audit entries keep the ids they name and a deleted
+  set's title, never a name or email.
+- The last admin can't delete their account (409), and if the admins can't be counted,
+  nothing is deleted. supabase-js reports a failed delete in `error` instead of throwing,
+  so the result is checked and a failure answers 500, never "deleted".
+- The page then signs the browser out. Signing in with Google again later starts a new,
+  empty account.
+
+A new table with user data needs the same kind of foreign key to `auth.users` (cascade, or
+set null for records worth keeping), or deleting an account leaves its rows behind. The
+live database's keys were checked on 2026-11-14: they match the migrations.
 
 ### Classes (#53)
 

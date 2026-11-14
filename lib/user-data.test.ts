@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createFakeSupabase, fakeUuid, type FakeDb } from '@/test-utils/fake-supabase';
 
 vi.mock('@/lib/supabase-admin', () => ({ supabaseAdmin: {} }));
@@ -8,94 +9,58 @@ import { deleteUserData } from '@/lib/user-data';
 const USER_A = fakeUuid();
 const USER_B = fakeUuid();
 
+// Supabase Auth's admin delete reports a failure in `error`; it doesn't throw.
+const makeDeleteUser = () =>
+  vi.fn(async (id: string) => ({ data: { id } as unknown, error: null as { message: string } | null }));
+
 let fake: ReturnType<typeof createFakeSupabase>;
 let db: FakeDb;
+let deleteUser: ReturnType<typeof makeDeleteUser>;
+let client: SupabaseClient;
 
 beforeEach(() => {
   fake = createFakeSupabase({
     tables: {
       profiles: { unique: [['id']] },
       flashcard_sets: { unique: [['id']] },
-      guide_history: { unique: [['id']] },
-      attempts: { unique: [['id']] },
-      classes: { unique: [['id']] },
-      class_members: { unique: [['id']] },
-      class_join_failures: { unique: [['id']] },
-      generation_logs: { unique: [['id']] },
     },
   });
   db = fake.db;
+  deleteUser = makeDeleteUser();
+  client = { ...fake.client, auth: { ...fake.client.auth, admin: { deleteUser } } } as unknown as SupabaseClient;
 });
 
 describe('deleteUserData (#88)', () => {
-  it('deletes all personal data for the user while leaving other users untouched', async () => {
-    // Seed user A data
+  it('deletes the account through Supabase Auth, which removes all its data in one step', async () => {
     db.rows.profiles = [
-      { id: USER_A, role: 'student', displayName: 'User A' },
-      { id: USER_B, role: 'student', displayName: 'User B' },
+      { id: USER_A, role: 'student' },
+      { id: USER_B, role: 'student' },
     ];
-    db.rows.flashcard_sets = [
-      { id: 'set-1', user_id: USER_A, title: 'Set A' },
-      { id: 'set-2', user_id: USER_B, title: 'Set B' },
-    ];
-    db.rows.guide_history = [
-      { id: 'h-1', user_id: USER_A, title: 'Guide A' },
-      { id: 'h-2', user_id: USER_B, title: 'Guide B' },
-    ];
-    db.rows.attempts = [
-      { id: 'att-1', user_id: USER_A, score: 9 },
-      { id: 'att-2', user_id: USER_B, score: 8 },
-    ];
-    db.rows.classes = [
-      { id: 'c-1', teacher_id: USER_A, name: 'Class A' },
-      { id: 'c-2', teacher_id: USER_B, name: 'Class B' },
-    ];
-    db.rows.class_members = [
-      { id: 'm-1', student_id: USER_A, class_id: 'c-2' },
-      { id: 'm-2', student_id: USER_B, class_id: 'c-1' },
-    ];
-    db.rows.class_join_failures = [
-      { id: 'f-1', user_id: USER_A },
-      { id: 'f-2', user_id: USER_B },
-    ];
-    db.rows.generation_logs = [
-      { id: 1, user_id: USER_A, duration_ms: 100 },
-      { id: 2, user_id: USER_B, duration_ms: 200 },
-    ];
+    db.rows.flashcard_sets = [{ id: 'set-a', user_id: USER_A }];
 
-    const result = await deleteUserData(USER_A, fake.client as any);
-    expect(result).toEqual({ ok: true });
+    expect(await deleteUserData(USER_A, client)).toEqual({ ok: true });
+    expect(deleteUser).toHaveBeenCalledOnce();
+    expect(deleteUser).toHaveBeenCalledWith(USER_A);
+    // Nothing is deleted table by table: the database's ON DELETE CASCADE removes
+    // the rest with the account (this fake doesn't model it), so it can't stop halfway.
+    expect(db.rows.flashcard_sets).toHaveLength(1);
+    expect(db.rows.profiles).toHaveLength(2);
+  });
 
-    // User A data is gone
-    expect(db.rows.profiles.find((p) => p.id === USER_A)).toBeUndefined();
-    expect(db.rows.flashcard_sets.find((s) => s.user_id === USER_A)).toBeUndefined();
-    expect(db.rows.guide_history.find((h) => h.user_id === USER_A)).toBeUndefined();
-    expect(db.rows.attempts.find((a) => a.user_id === USER_A)).toBeUndefined();
-    expect(db.rows.classes.find((c) => c.teacher_id === USER_A)).toBeUndefined();
-    expect(db.rows.class_members.find((m) => m.student_id === USER_A)).toBeUndefined();
-    expect(db.rows.class_join_failures.find((f) => f.user_id === USER_A)).toBeUndefined();
+  it('throws when Supabase Auth reports the account was not deleted', async () => {
+    db.rows.profiles = [{ id: USER_A, role: 'student' }];
+    deleteUser.mockResolvedValueOnce({ data: null, error: { message: 'Database error deleting user' } });
 
-    // Generation logs anonymized
-    expect(db.rows.generation_logs.find((l) => l.id === 1)?.user_id).toBeNull();
-
-    // User B data is completely untouched
-    expect(db.rows.profiles.find((p) => p.id === USER_B)).toBeDefined();
-    expect(db.rows.flashcard_sets.find((s) => s.user_id === USER_B)).toBeDefined();
-    expect(db.rows.guide_history.find((h) => h.user_id === USER_B)).toBeDefined();
-    expect(db.rows.attempts.find((a) => a.user_id === USER_B)).toBeDefined();
-    expect(db.rows.classes.find((c) => c.teacher_id === USER_B)).toBeDefined();
-    expect(db.rows.class_members.find((m) => m.student_id === USER_B)).toBeDefined();
-    expect(db.rows.class_join_failures.find((f) => f.user_id === USER_B)).toBeDefined();
-    expect(db.rows.generation_logs.find((l) => l.id === 2)?.user_id).toBe(USER_B);
+    await expect(deleteUserData(USER_A, client)).rejects.toMatchObject({ message: 'Database error deleting user' });
   });
 
   it('refuses to delete the last admin account', async () => {
     db.rows.profiles = [{ id: USER_A, role: 'admin' }];
 
-    const result = await deleteUserData(USER_A, fake.client as any);
+    const result = await deleteUserData(USER_A, client);
     expect(result.ok).toBe(false);
     expect(result.error).toContain("The last admin account can't be deleted");
-    expect(db.rows.profiles).toHaveLength(1);
+    expect(deleteUser).not.toHaveBeenCalled();
   });
 
   it('allows deleting an admin account if another admin exists', async () => {
@@ -104,9 +69,34 @@ describe('deleteUserData (#88)', () => {
       { id: USER_B, role: 'admin' },
     ];
 
-    const result = await deleteUserData(USER_A, fake.client as any);
-    expect(result).toEqual({ ok: true });
-    expect(db.rows.profiles.find((p) => p.id === USER_A)).toBeUndefined();
-    expect(db.rows.profiles.find((p) => p.id === USER_B)).toBeDefined();
+    expect(await deleteUserData(USER_A, client)).toEqual({ ok: true });
+    expect(deleteUser).toHaveBeenCalledWith(USER_A);
+  });
+
+  it("doesn't delete an admin when the admins can't be counted", async () => {
+    db.rows.profiles = [
+      { id: USER_A, role: 'admin' },
+      { id: USER_B, role: 'admin' },
+    ];
+    // The role read works; the count of admins that follows fails.
+    let profileQueries = 0;
+    const flaky = {
+      ...client,
+      from: (table: string) => {
+        if (table === 'profiles' && ++profileQueries === 2) db.failNext('profiles', 'select');
+        return fake.client.from(table);
+      },
+    } as unknown as SupabaseClient;
+
+    await expect(deleteUserData(USER_A, flaky)).rejects.toBeDefined();
+    expect(deleteUser).not.toHaveBeenCalled();
+  });
+
+  it("doesn't delete anything when the user's role can't be read", async () => {
+    db.rows.profiles = [{ id: USER_A, role: 'student' }];
+    db.failNext('profiles', 'select');
+
+    await expect(deleteUserData(USER_A, client)).rejects.toBeDefined();
+    expect(deleteUser).not.toHaveBeenCalled();
   });
 });

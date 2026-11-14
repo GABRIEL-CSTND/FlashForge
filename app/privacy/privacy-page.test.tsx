@@ -67,9 +67,26 @@ describe('Privacy page (#88)', () => {
     expect(screen.getByRole('heading', { name: '3. Retention & Deletion Policy' })).toBeTruthy();
   });
 
+  // Facts an earlier draft got wrong. Check them against the code (RLS policies,
+  // the admin pages, lib/user-data.ts, lib/generation-logs.ts) before changing them.
+  it('says who else can see your data and what deleting an account takes with it', () => {
+    render(<PrivacyPage />);
+    const text = document.body.textContent ?? '';
+    // Admins can open or delete any saved deck (#61), with its owner's email.
+    expect(text).toMatch(/They can open or delete any saved deck, and they see its owner's email/);
+    // The Gemini free tier lets Google use what's sent to improve its products.
+    expect(text).toMatch(/free tier/);
+    expect(text).toMatch(/Google may use what's sent, and the cards it writes, to improve its products/);
+    expect(text).not.toMatch(/solely/);
+    // A teacher's sets take every student's attempts on them along (attempts.set_id cascades).
+    expect(text).toMatch(/their students' scores on those decks are deleted/);
+    // Guests' generations are logged with a hashed address for the daily limit.
+    expect(text).toMatch(/scrambled \(hashed\) form of your internet address/);
+  });
+
   it('shows sign-in prompt in the deletion section when signed out', () => {
     render(<PrivacyPage />);
-    expect(screen.getByText(/FlashForge does not store any personal data for guests/)).toBeTruthy();
+    expect(screen.getByText(/For guests, FlashForge keeps no account, decks, or History/)).toBeTruthy();
     const btn = screen.getByRole('button', { name: 'Sign in with Google' });
     fireEvent.click(btn);
     expect(auth.signInWithGoogle).toHaveBeenCalledOnce();

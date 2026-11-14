@@ -71,37 +71,44 @@ export default function PrivacyPage() {
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
           <div className="paper rounded-lg p-4 space-y-1.5 border border-ink/10">
-            <h3 className="font-medium text-sm text-ink">👤 Account Profile</h3>
+            <h3 className="font-medium text-sm text-ink">Account Profile</h3>
             <p className="text-xs text-muted leading-relaxed">
               When you sign in with Google, we store your Google email address, display name, and chosen role (Student, Teacher, or Admin) to identify your account.
             </p>
           </div>
 
           <div className="paper rounded-lg p-4 space-y-1.5 border border-ink/10">
-            <h3 className="font-medium text-sm text-ink">📚 Saved Decks & Cards</h3>
+            <h3 className="font-medium text-sm text-ink">Saved Decks & Cards</h3>
             <p className="text-xs text-muted leading-relaxed">
               The study guides and flashcards you save to <strong>My Sets</strong> are stored securely in our database so you can revisit, edit, or practice them anytime.
             </p>
           </div>
 
           <div className="paper rounded-lg p-4 space-y-1.5 border border-ink/10">
-            <h3 className="font-medium text-sm text-ink">📜 Guide History</h3>
+            <h3 className="font-medium text-sm text-ink">Guide History</h3>
             <p className="text-xs text-muted leading-relaxed">
               Study guides generated while signed in are kept in your private <strong>History</strong> log, allowing you to review past materials or save them to your library later.
             </p>
           </div>
 
           <div className="paper rounded-lg p-4 space-y-1.5 border border-ink/10">
-            <h3 className="font-medium text-sm text-ink">📊 Study Attempts & Scores</h3>
+            <h3 className="font-medium text-sm text-ink">Study Attempts & Scores</h3>
             <p className="text-xs text-muted leading-relaxed">
               When you finish practicing a deck, we record your score, date, and question accuracy so you can monitor your progress over time.
             </p>
           </div>
 
-          <div className="paper rounded-lg p-4 space-y-1.5 border border-ink/10 sm:col-span-2">
-            <h3 className="font-medium text-sm text-ink">🏫 Classes & Memberships</h3>
+          <div className="paper rounded-lg p-4 space-y-1.5 border border-ink/10">
+            <h3 className="font-medium text-sm text-ink">Classes & Memberships</h3>
             <p className="text-xs text-muted leading-relaxed">
               For teachers, we store the classes you create, rosters, and assigned decks. For students, we store the classes you join using teacher join codes.
+            </p>
+          </div>
+
+          <div className="paper rounded-lg p-4 space-y-1.5 border border-ink/10">
+            <h3 className="font-medium text-sm text-ink">AI Use</h3>
+            <p className="text-xs text-muted leading-relaxed">
+              Each study guide you make is logged (when, what kind, which AI model, whether it worked) to keep the daily limit and spot problems. Signed out, the log keeps a scrambled (hashed) form of your internet address instead of an account, so the limit works for guests too.
             </p>
           </div>
         </div>
@@ -114,16 +121,19 @@ export default function PrivacyPage() {
         </h2>
         <div className="space-y-3 text-sm text-muted leading-relaxed">
           <p>
-            <strong className="text-ink">Your Private Decks & History:</strong> Only you can view, study, edit, or delete your personal decks in My Sets and your History entries.
+            <strong className="text-ink">Your Decks & History:</strong> Other students and teachers can&apos;t see the decks in your My Sets or your History. A deck a teacher assigns to a class can be studied by the students in that class.
           </p>
           <p>
             <strong className="text-ink">Class Assignments:</strong> When you join a class, the teacher of that class can see your name, email, and your scores on sets assigned specifically to that class (in their Grade Book). Teachers <em>cannot</em> view your private, unassigned sets or unrelated history.
           </p>
           <p>
-            <strong className="text-ink">Administrators:</strong> System administrators can see registered user accounts, roles, and aggregate AI generation quotas to prevent system abuse.
+            <strong className="text-ink">Administrators:</strong> Admins can see every account&apos;s email, name and role, and change roles. They can open or delete any saved deck, and they see its owner&apos;s email. They can also see how many study guides each person has made with the AI. They can&apos;t see your History.
           </p>
           <p>
-            <strong className="text-ink">Third Parties:</strong> We never sell your personal data, run advertisements, or track you across the web. Material you upload is sent securely to the Google Gemini API solely for the purpose of generating your requested study items.
+            <strong className="text-ink">Google&apos;s Gemini AI:</strong> What you put on the notes sheet (a file&apos;s text, a photo, your notes, or the page a link or topic leads to) is sent to Google&apos;s Gemini API to write your cards. FlashForge uses the API&apos;s free tier, and under Google&apos;s terms for it, Google may use what&apos;s sent, and the cards it writes, to improve its products, and people at Google may read them. So don&apos;t put anything private or sensitive on the sheet.
+          </p>
+          <p>
+            <strong className="text-ink">No Ads or Tracking:</strong> FlashForge doesn&apos;t sell your data, show ads, or track you across other sites.
           </p>
         </div>
       </section>
@@ -138,7 +148,7 @@ export default function PrivacyPage() {
             Your data is stored for as long as your account remains active. You can delete individual decks from My Sets, remove history items, or leave classes at any time.
           </p>
           <p>
-            <strong className="text-ink">What happens if a teacher deletes their account?</strong> When a teacher deletes their account, the classes they created and their assigned decks are permanently removed. Enrolled student accounts remain active, and students keep their own private decks.
+            <strong className="text-ink">What happens if a teacher deletes their account?</strong> The classes they made, the decks they assigned, and their students&apos; scores on those decks are deleted. Students keep their accounts, their own decks, and their other scores.
           </p>
         </div>
       </section>
@@ -158,7 +168,7 @@ export default function PrivacyPage() {
                 Signed in as: <span className="font-serif text-base">{profile?.displayName || user.email}</span> ({user.email})
               </p>
               <p className="text-xs text-muted mt-1 leading-relaxed">
-                Deleting your account will permanently remove all your saved decks, flashcards, history entries, scores, and class memberships from FlashForge. This action is immediate and cannot be undone.
+                Deleting your account permanently removes it with your saved decks and cards, History, scores, class memberships, and the classes you teach. Records of AI use and of admin actions are kept, without your name or email. This is immediate and can&apos;t be undone: signing in with Google again later starts a new, empty account.
               </p>
             </div>
 
@@ -205,7 +215,7 @@ export default function PrivacyPage() {
         ) : (
           <div className="paper rounded-lg p-5 border border-ink/10 space-y-3">
             <p className="text-sm text-muted leading-relaxed">
-              You are currently signed out. FlashForge does not store any personal data for guests. If you have an account and wish to view or delete your stored data, please sign in.
+              You are signed out. For guests, FlashForge keeps no account, decks, or History, only the AI use log described above. If you have an account and want to delete it and its data, sign in.
             </p>
             <button
               type="button"

@@ -25,7 +25,11 @@ export default function LibraryCard() {
     >
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brass-ink">Library card</p>
-        <Link href="/privacy" className="text-[11px] text-muted hover:text-ink hover:underline">
+        {/* A 44 px tall tap target; the negative margins keep the card's header its size. */}
+        <Link
+          href="/privacy"
+          className="-my-3.5 -mr-2 inline-flex min-h-11 items-center px-2 text-[11px] text-muted hover:text-ink hover:underline"
+        >
           Privacy
         </Link>
       </div>

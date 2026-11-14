@@ -9,10 +9,6 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
 2026-11-11. It changes how the app looks, not how it works.
 
 ### Changed
-- **Privacy and data deletion** (2026-11-14, #88): a dedicated Privacy page (`/privacy`) on the
-  desk explains what data is kept and who can see it, and lets signed-in users permanently delete
-  their account and all associated study sets, cards, history, attempts, and class memberships
-  (`DELETE /api/profile/data`).
 - **You watch the deck being made** (2026-11-12): while the AI writes the guide, the notes
   sheet turns into a scene on the desk instead of a checklist under it. A pencil writes a
   card line by line, the card goes onto a small deck, the deck is riffle shuffled and a fresh
@@ -214,6 +210,17 @@ already applied there.
   `docs/ARCHITECTURE.md`.
 
 ### Added
+- **Privacy page and deleting your account** (2026-11-14, #88, PR #96): a *Privacy* page at
+  `/privacy`, linked from the library card, says what's kept, who can see it (classmates,
+  teachers, admins, and Google on the Gemini free tier) and how long. Signed in, *Delete my
+  account and data* deletes the account through Supabase Auth, and the database removes
+  everything tied to it in the same step (`DELETE /api/profile/data`, `lib/user-data.ts`).
+  - A teacher's account takes their classes and assigned sets along, and so their students'
+    scores on those sets. Records of AI use and admin actions stay, without the person.
+  - The last admin can't delete their account. A failed delete is reported as one: the
+    account isn't left alive behind a "deleted" message.
+  - Tests: the delete route, `deleteUserData()` and the page, including the facts its text
+    must keep right.
 - **User Guide** (#25, PR #93): a *Guide* page at `/guide`, reached from a new *Guide* tab
   in the card box (shown to everyone, signed in or not) and from the home page's tip note.
   It covers making a deck (the notes sheet, the Make card, watching the deck being made,
