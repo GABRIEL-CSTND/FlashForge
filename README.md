@@ -92,6 +92,8 @@ app/
   globals.css           Tailwind, the desk's colors and textures, brass buttons, the default border color
   icon.svg              FlashForge icon (favicon.ico and apple-icon.png are the same design)
   */layout.tsx          Section layouts that only set the browser title ("My Sets · FlashForge")
+  error.tsx             A page that breaks: Something went wrong on the sheet, with Try again and Back to desk
+  not-found.tsx         The 404 for an address that isn't a page, with links to make a deck or open My Sets
   my-sets/page.tsx      My Sets: the saved sets as decks on the desk, each with its best score; delete one
   history/page.tsx      History: every guide made while signed in, as decks; save one to My Sets or remove it
   history/[id]/page.tsx One guide from History: study it again, or save it to My Sets

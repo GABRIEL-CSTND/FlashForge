@@ -19,14 +19,15 @@ describe('error and not-found pages (#91)', () => {
     cleanup();
   });
 
-  it('renders a friendly error page and calls reset when Try again is clicked', () => {
+  it('renders a friendly error page and calls retry when Try again is clicked', () => {
     const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const reset = vi.fn();
+    const retry = vi.fn();
     const error = new Error('Database connection failed');
 
-    render(<ErrorPage error={error} reset={reset} />);
+    render(<ErrorPage error={error} retry={retry} />);
 
-    expect(screen.getByText('Something went wrong')).toBeTruthy();
+    // The visible title is the page's heading, not a hidden one.
+    expect(screen.getByRole('heading', { name: 'Something went wrong', level: 1 })).toBeTruthy();
     expect(screen.getByText(/An unexpected error occurred while loading this page/)).toBeTruthy();
     expect(errorLog).toHaveBeenCalledWith('[FlashForge error]', error);
 
@@ -35,7 +36,7 @@ describe('error and not-found pages (#91)', () => {
 
     const tryAgainBtn = screen.getByRole('button', { name: 'Try again' });
     fireEvent.click(tryAgainBtn);
-    expect(reset).toHaveBeenCalledTimes(1);
+    expect(retry).toHaveBeenCalledTimes(1);
 
     errorLog.mockRestore();
     cleanup();
