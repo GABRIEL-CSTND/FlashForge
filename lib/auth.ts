@@ -34,3 +34,12 @@ export async function signInWithGoogle() {
 export async function signOut() {
   await supabase.auth.signOut();
 }
+
+export async function signInWithPassword(email: string, password: string) {
+  return await supabase.auth.signInWithPassword({ email, password });
+}
+
+export async function signUpWithPassword(email: string, password: string) {
+  return await supabase.auth.signUp({ email, password });
+}
+

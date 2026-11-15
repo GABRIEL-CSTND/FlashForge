@@ -1,4 +1,8 @@
+'use client';
+
 import type { ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
+import { useUser } from '@/lib/auth';
 import CardBox from './CardBox';
 import LibraryCard from './LibraryCard';
 import PageTurn from './PageTurn';
@@ -9,6 +13,20 @@ import PageTurn from './PageTurn';
 // desk objects of their own; until then each page keeps its content on the sheet.
 // Moving to another page turns it (PageTurn, which renders the sheet).
 export default function Desk({ children }: { children: ReactNode }) {
+  const { user, loading } = useUser();
+  const pathname = usePathname() ?? '/';
+
+  // Wait for auth to resolve on '/' so neither the guest landing hero nor the signed-in header flashes.
+  if (pathname === '/' && loading) {
+    return <div className="flex flex-1 flex-col" />;
+  }
+
+  const isPlainDesk = (pathname === '/' && !user) || pathname === '/sign-in' || pathname === '/sign-up';
+
+  if (isPlainDesk) {
+    return <div className="flex flex-1 flex-col">{children}</div>;
+  }
+
   return (
     <div className="flex flex-1 flex-col">
       {/* Wraps on phones, where a long row of tabs and the library card don't fit side by side. */}

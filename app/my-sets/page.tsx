@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import LibraryDeck, { DESK_TEXT_BUTTON, NewDeckSpot } from '@/components/desk/LibraryDeck';
 import LibraryDesk, { DeskNote } from '@/components/desk/LibraryDesk';
 import { supabase } from '@/lib/supabase';
@@ -21,6 +21,7 @@ const TIP = 'Click a deck to pick it up and study it. Your best score is on its 
 // My Sets on the desk (desk redesign, phase 5): every saved set is a deck with
 // its best score on a paper tag. Picking one up opens it on /sets/[id].
 export default function MySetsPage() {
+  const router = useRouter();
   const { user, loading: userLoading } = useUser();
   const userId = user?.id;
   const [sets, setSets] = useState<FlashcardSet[]>([]);
@@ -28,6 +29,12 @@ export default function MySetsPage() {
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!userLoading && !user) {
+      router.replace('/sign-in');
+    }
+  }, [userLoading, user, router]);
 
   useEffect(() => {
     if (!userId) return;
@@ -75,16 +82,7 @@ export default function MySetsPage() {
   }
 
   if (!user) {
-    return (
-      <LibraryDesk title="My Sets">
-        <DeskNote>
-          <p>Sign in to view your saved sets.</p>
-          <Link href="/" className="mt-2 inline-block font-semibold text-link hover:underline">
-            Make a deck
-          </Link>
-        </DeskNote>
-      </LibraryDesk>
-    );
+    return null;
   }
 
   const count = sets.length;

@@ -8,8 +8,8 @@ import { useUser, signInWithGoogle } from '@/lib/auth';
 import StudyViewer, { StudyItem } from '@/components/StudyViewer';
 import { generateErrorText } from '@/lib/generation-limits';
 import GenerationProgress from '@/components/GenerationProgress';
-import NotesSheet from '@/components/make/NotesSheet';
-import MakeCard, { DECK_WORDS } from '@/components/make/MakeCard';
+import DeckMaker, { DECK_WORDS } from '@/components/make/DeckMaker';
+import LandingHero, { LandingNav } from '@/components/landing/LandingHero';
 import MakingDeck from '@/components/make/MakingDeck';
 import DeskTurn from '@/components/desk/DeskTurn';
 import DeckSpread from '@/components/make/DeckSpread';
@@ -76,7 +76,7 @@ const slowNoticeMs = (count: number) => 15_000 + Math.max(0, count - DEFAULT_QUE
 // Start studying gathers them into the deck on the study desk.
 export default function UploadPage() {
   const router = useRouter();
-  const { user } = useUser();
+  const { user, loading: authLoading } = useUser();
   const [file, setFile] = useState<File | null>(null);
   // Whatever is typed on the notes sheet: notes, a link or a topic.
   const [notes, setNotes] = useState('');
@@ -547,48 +547,51 @@ export default function UploadPage() {
     );
   }
 
+  if (authLoading) {
+    return null;
+  }
+
   return (
     <DeskTurn view="setup">
-      <main className="on-desk w-full pb-8 pt-1">
-        <h1 className="sr-only">Make a deck</h1>
-        <div className="grid items-start gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-          <div className="paper-shadow rounded-md lg:-rotate-[0.6deg]">
-            <NotesSheet
-              text={notes}
-              onText={editNotes}
-              file={file}
-              onFile={validateAndSetFile}
-              onRemoveFile={() => setFile(null)}
-              detected={detectSource(notes)}
-              asNotes={asNotes}
-              onAsNotes={setAsNotes}
-              disabled={generating}
-            />
-          </div>
-          <div className="flex flex-col gap-5">
-            <aside aria-label="Tip" className="sticky-note paper-shadow hidden max-w-xs rotate-[2.5deg] self-end rounded-sm px-4 py-3 text-[13.5px] leading-snug text-ink lg:block">
-              <p>Drop a PDF, Word file, slides or a photo on the sheet. Or click it and type notes, a link or a topic.</p>
-              <p className="mt-2 border-t border-ink/10 pt-1.5 text-xs">
-                New here?{' '}
-                <Link href="/guide" className="font-semibold text-brass-ink hover:underline">
-                  Read the User Guide →
-                </Link>
-              </p>
-            </aside>
-            <MakeCard
-              count={count}
-              onCount={setCount}
-              difficulty={difficulty}
-              onDifficulty={setDifficulty}
-              studyType={studyType}
-              onStudyType={setStudyType}
-              sourceLine={sourceLine}
-              canMake={source !== null}
-              making={generating}
-              onMake={handleSubmit}
-              waitNote={waitNote}
-              error={status === 'error' ? errorMsg : ''}
-            />
+      <main className={`on-desk w-full ${user ? 'pb-8 pt-4 sm:pt-6' : 'min-h-screen pb-16'}`}>
+        <h1 className="sr-only">FlashForge - AI-Powered Study Engine</h1>
+
+        {/* Top Navbar and Hero Section: only shown for landing / signed-out users */}
+        {!user && (
+          <>
+            <LandingNav />
+            <LandingHero />
+          </>
+        )}
+
+        {/* Deck Builder Card (Upload Material to Build Study Deck) */}
+        <div id="deck-builder" className={`mx-auto max-w-4xl ${user ? '' : 'px-4 pt-2'}`}>
+          <DeckMaker
+            file={file}
+            onFile={validateAndSetFile}
+            onRemoveFile={() => setFile(null)}
+            notes={notes}
+            onNotes={editNotes}
+            asNotes={asNotes}
+            onAsNotes={setAsNotes}
+            detected={detectSource(notes)}
+            sourceLine={sourceLine}
+            difficulty={difficulty}
+            onDifficulty={setDifficulty}
+            studyType={studyType}
+            onStudyType={setStudyType}
+            count={count}
+            onCount={setCount}
+            canMake={source !== null}
+            making={generating}
+            onMake={handleSubmit}
+            waitNote={waitNote}
+            error={status === 'error' ? errorMsg : ''}
+          />
+          <div className="mt-4 text-center">
+            <Link href="/guide" className="text-xs font-medium text-on-desk/80 hover:text-on-desk hover:underline">
+              Need help? Read the User Guide →
+            </Link>
           </div>
         </div>
       </main>
