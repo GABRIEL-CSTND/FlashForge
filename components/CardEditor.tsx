@@ -1,0 +1,382 @@
+'use client';
+
+import { useId, useMemo, useState } from 'react';
+import {
+  CARD_LIMITS,
+  kindFor,
+  normalizeChoice,
+  toTrueFalse,
+  TRUE_FALSE_OPTIONS,
+  validateCards,
+  type CardKind,
+  type StudyType,
+} from '@/lib/card-rules';
+import { MIXED_PARTS } from '@/lib/study-types';
+
+// "Multiple choice", "True or false", "Identification" (#69).
+const KIND_LABELS = Object.fromEntries(MIXED_PARTS.map((p) => [p.kind, p.label])) as Record<CardKind, string>;
+
+export interface EditableCard {
+  id: string;
+  question: string;
+  answer: string;
+  options: string[] | null;
+  explanation?: string | null;
+}
+
+// What PUT /api/sets/[id]/cards expects, in the order the cards should appear.
+export interface CardPayload {
+  id?: string;
+  question: string;
+  answer: string;
+  options?: string[];
+  explanation?: string;
+}
+
+export type SaveResult = { ok: true } | { ok: false; error: string; cardIndex: number | null };
+
+interface CardEditorProps {
+  studyType: StudyType;
+  cards: EditableCard[];
+  onSave: (cards: CardPayload[]) => Promise<SaveResult>;
+  onCancel: () => void;
+}
+
+interface DraftCard {
+  key: string;
+  id: string | null;
+  // Fixed for each card. Only a mixed quiz (#69) has more than one kind.
+  kind: CardKind;
+  question: string;
+  answer: string;
+  choices: string[];
+  correctIndex: number | null;
+  explanation: string;
+}
+
+// React list keys only (never rendered into the page). DOM ids use useId()
+// plus the card's position, so server and client HTML match.
+let keyCounter = 0;
+const newKey = () => `card-${++keyCounter}`;
+
+function toDraft(card: EditableCard, studyType: StudyType): DraftCard {
+  const kind = kindFor(studyType, card.options);
+  const choices =
+    kind === 'multiple_choice'
+      ? [...(card.options ?? []), '', '', '', ''].slice(0, CARD_LIMITS.choices)
+      : [];
+  const correct = choices.findIndex((c) => c && normalizeChoice(c) === normalizeChoice(card.answer));
+  return {
+    key: newKey(),
+    id: card.id,
+    kind,
+    question: card.question,
+    // True or false (#68): "True", "False", or "" until one is picked.
+    answer: kind === 'true_false' ? (toTrueFalse(card.answer) ?? '') : card.answer,
+    choices,
+    correctIndex: correct === -1 ? null : correct,
+    explanation: card.explanation ?? '',
+  };
+}
+
+function emptyDraft(kind: CardKind): DraftCard {
+  return {
+    key: newKey(),
+    id: null,
+    kind,
+    question: '',
+    answer: '',
+    choices: kind === 'multiple_choice' ? Array(CARD_LIMITS.choices).fill('') : [],
+    correctIndex: null,
+    explanation: '',
+  };
+}
+
+function toPayload(draft: DraftCard): CardPayload {
+  const base = draft.id ? { id: draft.id } : {};
+  if (draft.kind === 'identification') return { ...base, question: draft.question, answer: draft.answer };
+  if (draft.kind === 'true_false') {
+    return {
+      ...base,
+      question: draft.question,
+      answer: draft.answer,
+      options: [...TRUE_FALSE_OPTIONS],
+      explanation: draft.explanation,
+    };
+  }
+  return {
+    ...base,
+    question: draft.question,
+    options: draft.choices,
+    answer: draft.correctIndex === null ? '' : draft.choices[draft.correctIndex],
+  };
+}
+
+// Edit mode for a study set (#55): change, add, delete and reorder cards, then
+// save them all at once. Uses the same rules as the server (lib/card-rules.ts).
+export default function CardEditor({ studyType, cards, onSave, onCancel }: CardEditorProps) {
+  const initial = useMemo(() => cards.map((c) => toDraft(c, studyType)), [cards, studyType]);
+  const [drafts, setDrafts] = useState<DraftCard[]>(initial);
+  const [error, setError] = useState<{ message: string; cardIndex: number | null } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const idBase = useId();
+
+  const isMixed = studyType === 'mixed';
+  const payload = drafts.map(toPayload);
+  const dirty = JSON.stringify(payload) !== JSON.stringify(initial.map(toPayload));
+
+  const update = (key: string, patch: Partial<DraftCard>) =>
+    setDrafts((prev) => prev.map((d) => (d.key === key ? { ...d, ...patch } : d)));
+
+  const move = (index: number, by: -1 | 1) =>
+    setDrafts((prev) => {
+      const next = [...prev];
+      [next[index], next[index + by]] = [next[index + by], next[index]];
+      return next;
+    });
+
+  const remove = (key: string) => setDrafts((prev) => prev.filter((d) => d.key !== key));
+
+  const add = (kind: CardKind) => setDrafts((prev) => [...prev, emptyDraft(kind)]);
+
+  const handleSave = async () => {
+    const checked = validateCards(payload, studyType);
+    if (!checked.ok) {
+      setError({ message: checked.error, cardIndex: checked.cardIndex });
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await onSave(payload);
+      if (!result.ok) setError({ message: result.error, cardIndex: result.cardIndex });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    if (dirty && !window.confirm('Discard your changes to these cards?')) return;
+    onCancel();
+  };
+
+  return (
+    <main className="min-h-screen p-6 max-w-2xl mx-auto space-y-6">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold">Edit cards</h1>
+        <p className="text-sm text-muted">
+          {drafts.length} card{drafts.length === 1 ? '' : 's'}
+        </p>
+      </div>
+
+      <ol className="space-y-4">
+        {drafts.map((d, i) => {
+          const label = `Card ${i + 1}`;
+          const cardError = error && error.cardIndex === i ? error.message : null;
+          const isMultipleChoice = d.kind === 'multiple_choice';
+          const isTrueFalse = d.kind === 'true_false';
+          return (
+            <li
+              key={d.key}
+              aria-label={label}
+              className={`space-y-3 rounded-xl border p-4 ${cardError ? 'border-pencil' : ''}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-medium">
+                  {label}
+                  {isMixed && <span className="font-normal text-muted"> · {KIND_LABELS[d.kind]}</span>}
+                </h2>
+                <div className="flex items-center gap-1 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => move(i, -1)}
+                    disabled={i === 0 || saving}
+                    aria-label={`Move ${label} up`}
+                    className="rounded px-2 py-1 hover:bg-ink/5 disabled:opacity-30"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => move(i, 1)}
+                    disabled={i === drafts.length - 1 || saving}
+                    aria-label={`Move ${label} down`}
+                    className="rounded px-2 py-1 hover:bg-ink/5 disabled:opacity-30"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => remove(d.key)}
+                    disabled={drafts.length === 1 || saving}
+                    aria-label={`Delete ${label}`}
+                    title={drafts.length === 1 ? 'A set needs at least one card' : undefined}
+                    className="rounded px-2 py-1 text-pencil hover:bg-pencil/10 disabled:opacity-30"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor={`${idBase}-${i}-question`} className="text-xs uppercase tracking-wide text-muted">
+                  {isTrueFalse ? 'Statement' : 'Question'}
+                </label>
+                <textarea
+                  id={`${idBase}-${i}-question`}
+                  value={d.question}
+                  onChange={(e) => update(d.key, { question: e.target.value })}
+                  maxLength={CARD_LIMITS.question}
+                  rows={2}
+                  disabled={saving}
+                  className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                />
+              </div>
+
+              {isTrueFalse ? (
+                <>
+                  <fieldset className="space-y-2" disabled={saving}>
+                    <legend className="text-xs uppercase tracking-wide text-muted">Answer</legend>
+                    <div className="flex gap-4">
+                      {TRUE_FALSE_OPTIONS.map((value) => (
+                        <label key={value} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="radio"
+                            name={`${idBase}-${i}-truth`}
+                            checked={d.answer === value}
+                            onChange={() => update(d.key, { answer: value })}
+                            aria-label={`${label} is ${value.toLowerCase()}`}
+                            className="h-4 w-4 accent-green-600"
+                          />
+                          {value}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor={`${idBase}-${i}-explanation`}
+                      className="text-xs uppercase tracking-wide text-muted"
+                    >
+                      Explanation (optional)
+                    </label>
+                    <textarea
+                      id={`${idBase}-${i}-explanation`}
+                      value={d.explanation}
+                      onChange={(e) => update(d.key, { explanation: e.target.value })}
+                      maxLength={CARD_LIMITS.explanation}
+                      rows={2}
+                      disabled={saving}
+                      placeholder="Shown after answering, e.g. the correct fact"
+                      className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                    />
+                  </div>
+                </>
+              ) : isMultipleChoice ? (
+                <fieldset className="space-y-2" disabled={saving}>
+                  <legend className="text-xs uppercase tracking-wide text-muted">
+                    Choices: select the correct one
+                  </legend>
+                  {d.choices.map((choice, j) => (
+                    <div key={j} className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name={`${idBase}-${i}-correct`}
+                        checked={d.correctIndex === j}
+                        onChange={() => update(d.key, { correctIndex: j })}
+                        aria-label={`${label}: choice ${j + 1} is correct`}
+                        className="h-4 w-4 shrink-0 accent-green-600"
+                      />
+                      <input
+                        value={choice}
+                        onChange={(e) =>
+                          update(d.key, { choices: d.choices.map((c, k) => (k === j ? e.target.value : c)) })
+                        }
+                        maxLength={CARD_LIMITS.choice}
+                        aria-label={`${label}: choice ${j + 1}`}
+                        className={`min-w-0 flex-1 rounded-lg border bg-transparent px-3 py-1.5 text-sm ${
+                          d.correctIndex === j ? 'border-green-800' : ''
+                        }`}
+                      />
+                    </div>
+                  ))}
+                </fieldset>
+              ) : (
+                <div className="space-y-1">
+                  <label htmlFor={`${idBase}-${i}-answer`} className="text-xs uppercase tracking-wide text-muted">
+                    Answer
+                  </label>
+                  <input
+                    id={`${idBase}-${i}-answer`}
+                    value={d.answer}
+                    onChange={(e) => update(d.key, { answer: e.target.value })}
+                    maxLength={CARD_LIMITS.answer}
+                    disabled={saving}
+                    className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
+
+              {cardError && (
+                <p role="alert" className="text-sm text-pencil">
+                  {cardError}
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+
+      {isMixed ? (
+        // A mixed quiz (#69) adds a card of any of its three kinds.
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {MIXED_PARTS.map((p) => (
+            <button
+              key={p.kind}
+              type="button"
+              onClick={() => add(p.kind)}
+              disabled={drafts.length >= CARD_LIMITS.maxCards || saving}
+              className="rounded-xl border border-dashed py-3 text-sm font-medium hover:border-accent disabled:opacity-40"
+            >
+              + {p.label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => add(kindFor(studyType, null))}
+          disabled={drafts.length >= CARD_LIMITS.maxCards || saving}
+          className="w-full rounded-xl border border-dashed py-3 text-sm font-medium hover:border-accent disabled:opacity-40"
+        >
+          + Add card
+        </button>
+      )}
+
+      {error && error.cardIndex === null && (
+        <p role="alert" className="text-center text-sm text-pencil">
+          {error.message}
+        </p>
+      )}
+
+      <div className="sticky bottom-0 flex gap-3 bg-background py-3">
+        <button
+          type="button"
+          onClick={handleCancel}
+          disabled={saving}
+          className="btn btn-secondary btn-lg flex-1"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || !dirty}
+          className="btn btn-primary btn-lg flex-1"
+        >
+          {saving ? 'Saving...' : 'Save changes'}
+        </button>
+      </div>
+    </main>
+  );
+}

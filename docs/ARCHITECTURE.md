@@ -1,0 +1,1299 @@
+# FlashForge architecture
+
+How the app works, end to end. For setup, see the [README](../README.md); for the
+database, see [supabase/README.md](../supabase/README.md).
+
+## Overview
+
+```mermaid
+flowchart LR
+  subgraph Browser
+    U[Upload page<br/>app/page.tsx] --> SV[StudyViewer]
+    MS[My Sets] --> SP["Set page<br/>/sets/[id]"]
+    HI["History<br/>/history, /history/[id]"]
+    RC[RoleChooser<br/>one-time screen]
+    AP["Admin pages<br/>/admin, /admin/users,<br/>/admin/sets, /admin/usage"]
+    T["Teacher pages<br/>/teacher, /teacher/classes/[id],<br/>/teacher/classes/[id]/results"]
+    MC["My classes<br/>/classes"]
+  end
+  subgraph "Next.js server (Vercel)"
+    G["/api/generate"] --> AI[lib/gemini.ts]
+    S["/api/save-set"]
+    EC["/api/sets/[id]/cards"]
+    AS["/api/teacher/sets/[id]/assignments"] --> ASL[lib/assignments.ts]
+    R["/api/profile/role"]
+    AA["/api/admin/..."] --> ADL[lib/admin.ts]
+    TC["/api/teacher/classes/..."] --> CL[lib/classes.ts]
+    TC --> CR[lib/class-results.ts]
+    SC["/api/student/classes/..."] --> SCL[lib/student-classes.ts]
+    AT["/api/attempts"] --> ATL[lib/attempts.ts]
+  end
+  subgraph Google
+    AI --> M1[gemini-3.5-flash]
+    AI -.->|busy or out of quota| M2[gemini-3.5-flash-lite]
+    AI -.->|last resort| M3[gemma-4-26b-a4b-it]
+  end
+  subgraph Supabase
+    DB[(Postgres + RLS)]
+    AUTH[Google sign-in]
+  end
+  U -->|PDF/TXT| G
+  G -.->|"usage log, after the response"| DB
+  G -->|"signed in: the guide, into History"| DB
+  HI -->|anon key + user session| DB
+  HI -->|Save| S
+  SV -->|Save| S -->|service-role key| DB
+  MS -->|anon key + user session| DB
+  SP -->|anon key + user session| DB
+  SP -->|Edit cards| EC -->|"service-role key, replace_set_cards()"| DB
+  SP -->|Assign to class| AS
+  SP -->|Finish| AT
+  ATL -->|service-role key, scored on the server| DB
+  ASL -->|service-role key, scoped to the teacher| DB
+  U --> AUTH
+  RC --> R -->|service-role key| DB
+  AP --> AA
+  ADL -->|"service-role key, admin_* functions"| DB
+  T --> TC
+  CL -->|service-role key, scoped to the teacher| DB
+  CR -->|service-role key, own class and current students| DB
+  MC --> SC
+  SCL -->|service-role key, scoped to the student| DB
+```
+
+Every server route that changes data checks the caller first (`lib/roles.ts`) and then
+writes with the service-role key. Browsers read only what RLS allows (section 4).
+
+### API routes
+
+| Method and path | Who | What it does |
+|---|---|---|
+| `POST /api/generate` | Anyone | Extract text from a PDF/TXT and generate 10 study items (section 1); a signed-in user's guide is also kept in History |
+| `POST /api/save-set` | Signed in | Save a generated study guide, or one from History, to the user's account; with `historyId`, that History entry is marked saved |
+| `PUT /api/sets/[id]/cards` | The set's owner | Save edited cards: `{ cards: [{ id?, question, answer, options? }] }` in display order (#55) |
+| `POST /api/profile/role` | Signed in, not chosen yet | One-time choice: `{ role: 'student' \| 'teacher' }` (#52) |
+| `DELETE /api/profile/data` | Signed in | `{ confirm: true }`: delete the caller's account, and with it all their data (#88, see "Deleting an account"); 409 for the last admin, 500 if the account wasn't deleted |
+| `GET /api/teacher/classes` | Teacher, admin | The caller's classes, newest first, with student counts |
+| `POST /api/teacher/classes` | Teacher, admin | Create a class: `{ name }` → the class with its join code |
+| `GET /api/teacher/classes/[id]` | The class's teacher | Class details, roster (names, emails, join dates) and assignments (#56) |
+| `GET /api/teacher/classes/[id]/results` | The class's teacher | Every current student × assignment: best and latest score, attempts, done / late / not started, and each assignment's class average (#58) |
+| `PATCH /api/teacher/classes/[id]` | The class's teacher | Rename: `{ name }` |
+| `DELETE /api/teacher/classes/[id]` | The class's teacher | Delete the class and its memberships |
+| `POST /api/teacher/classes/[id]/join-code` | The class's teacher | Replace the join code; the old one stops working |
+| `GET /api/teacher/classes/[id]/students/[studentId]` | The class's teacher | One student's attempts on the class's assignments, grouped by assignment, newest first; 404 if they aren't in the class (#58) |
+| `DELETE /api/teacher/classes/[id]/students/[studentId]` | The class's teacher | Remove one student from the class |
+| `GET /api/student/classes` | Student | The classes the caller joined, most recent first, with teacher names and each class's assignments (#56), each with the caller's own `myProgress` (#57) |
+| `POST /api/student/classes` | Student | Join with a code: `{ code }` (any case, spaces or hyphen) → 201 joined, or 200 `alreadyMember` |
+| `DELETE /api/student/classes/[id]` | Student in that class | Leave the class |
+| `GET /api/teacher/sets/[id]/assignments` | The set's owner (teacher, admin) | The owner's classes, marking which already have this set (#56) |
+| `POST /api/teacher/sets/[id]/assignments` | The set's owner (teacher, admin) | Assign: `{ classIds, dueAt \| null }` → `{ assigned, alreadyAssigned }` |
+| `GET /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | The assignment's questions, hardest first: % of current students who got each wrong (latest attempt each) and the most-picked wrong choice (#59) |
+| `PATCH /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | Change the due date: `{ dueAt \| null }` |
+| `DELETE /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | Unassign; students lose access right away |
+| `POST /api/attempts` | Signed in, can open the set | Save a finished study session: `{ id, setId, assignmentId?, answers }` → 201 with the scored attempt, or 200 if that `id` was already saved (#57) |
+| `GET /api/attempts?setId=…` | Signed in | The caller's own 10 most recent attempts on that set, newest first |
+| `GET /api/admin/users?q=…` | Admin | Users with role, sign-up date and number of sets, newest first; `q` matches part of an email or name (#60) |
+| `PATCH /api/admin/users/[id]` | Admin | Change a role: `{ role }` → `{ from, role }`; 409 if it would remove the last admin (#60) |
+| `GET /api/admin/usage` | Admin | Generations for the last 14 quota days (per day and model), top users, the models in fallback order and the main model's daily quota (#62), and the daily limits (#63) |
+| `PUT /api/admin/limits` | Admin | Replace the daily limits: `{ limits: { anonymous, student, teacher, admin } }`, each a whole number 0–1000 or `null` for none (#63) |
+| `GET /api/admin/sets?q=…` | Admin | Every set with owner, cards and number of classes it's assigned to, newest first; `q` matches a title or owner (#61) |
+| `DELETE /api/admin/sets/[id]` | Admin | Delete any set with its cards, assignments and saved results; logged → `{ deleted, assignments }` (#61) |
+
+Errors are JSON `{ error }` with 400 (bad input), 401 (not signed in), 403 (wrong role),
+404 (not found, *or* someone else's class), 409 (conflict, e.g. a role already chosen or
+the 50-class limit), 429 (too many wrong join codes; includes a `Retry-After` header), and
+500 (a generic message; details only go to the server log).
+
+### Page layout
+
+Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The root layout
+(`app/layout.tsx`) makes the `<body>` the desk, a flex column, and wraps every page in
+`components/desk/Desk.tsx`:
+
+- **Card box** (`components/desk/CardBox.tsx`), at the top left, holds the navigation that
+  used to be the upload page's header links. Its front is the brass **FlashForge** button
+  (to `/`, a new study guide), and a paper divider tab sticks up for each section the user
+  can open (`cardBoxTabs()`): *My Sets* and *History* when signed in, then *My Classes*
+  (`/classes`) for students, *Classes* (`/teacher`) for teachers and admins, and *Admin*
+  for admins, then *Guide* (`/guide`, #25) for everyone. The role's tabs appear once the
+  profile has loaded. The open section's tab stands tallest and has a brass edge
+  (`aria-current="page"`). Signed out, *Guide* is the only tab.
+- **User Guide** (`app/guide/page.tsx`, #25): one static page (a server component) on how to
+  make a deck, the study formats and modes, the library and the teacher tools, with a
+  table of contents. The home page's tip note links to it on large screens. It describes
+  what the app really does, so check it when a feature changes; its tests pin the facts
+  earlier drafts got wrong (the join code format, when the daily limit resets).
+- **Privacy** (`app/privacy/page.tsx`, #88): what's kept, who can see it (classmates,
+  teachers, admins, and Google's Gemini on the free tier), and *Delete my account and data*
+  for signed-in users. Like the guide, its tests pin the facts an earlier draft got wrong:
+  check them against the code when a feature changes.
+- **Library card** (`components/desk/LibraryCard.tsx`), at the top right: the user's name
+  (or email, without a name), role and *Sign out*; signed out, *Sign in with Google*.
+  While the session loads it keeps its height, so the desk doesn't jump. A small *Privacy*
+  link in its corner opens `/privacy`, signed in or out.
+- **The sheet:** the page itself lies on a sheet of paper below them (`.desk-sheet`, at
+  most `max-w-5xl`), which `components/desk/PageTurn.tsx` renders so every page turns (see
+  "Moving between pages" below). On a phone the card box and library card share the top row (the card
+  gets narrower and stays on the right) and the sheet nearly fills the width.
+- Pages keep their own layout on the sheet. The sheet is a flex column too, so a centered
+  `<main>` (`max-w-* mx-auto`) sizes to its content: pages with one-line text that can be
+  long (`truncate`) add `w-full` to it, or a long title makes the page wider than a phone
+  screen instead of shortening with "…". Pages built to fill the window (`min-h-screen`)
+  only fill the sheet (`.desk-sheet .min-h-screen` in `globals.css`).
+- **When something goes wrong** (#91): `app/error.tsx` catches a page that throws and shows
+  *Something went wrong* on the sheet, with *Try again* (`retry()`, which loads the page
+  again, not `reset()`, which only draws it again) and *Back to desk*. `app/not-found.tsx` is
+  the 404 for an address that isn't a page. An error in the root layout itself would need a
+  `global-error.tsx`, which there isn't. A set, guide or class that doesn't exist still shows
+  its own page's "not found" line, not this 404.
+- Studying flashcards (phase 2), making a deck (phase 3), taking quizzes (phase 4), the
+  library (phase 5: My Sets, History, My Classes) and the teacher pages (phase 6) happen on
+  the desk itself (below). Phase 7 put the admin pages, the role chooser and the card editor
+  on the desk's colors and removed the rest of the old look.
+
+**Look and feel:**
+- **Fonts:** Instrument Sans for the app (`--font-sans`, set on the body), Fraunces for
+  titles (`h1` and `h2` on the sheet) and names on the desk (`--font-serif`, the
+  `font-serif` class), and Geist Mono for code (`--font-mono`). All three are loaded in
+  `app/layout.tsx` with `next/font`.
+- **Colors:** `globals.css` defines the desk's palette once, as variables that are also
+  Tailwind colors: `desk` (green leather), `sheet` and `paper` (cream), `ink` (text),
+  `muted`, `brass`, `brass-ink` (brass for words on paper, 5.4:1 contrast), `pencil` (red,
+  for corrections and warnings) and `on-desk` (words straight on the desk). The names the
+  pages already used point at it: `--background` is the sheet, `--foreground` is ink,
+  `--accent` is brass and `--link` is brass-ink, so `bg-accent`, `border-accent` and
+  `text-link` follow along. There is no dark mode: the paper always stays light.
+- **Textures:** `.desk` lays `public/textures/leather.png` over the desk color
+  (`soft-light`), and `.paper` and `.sheet` lay `paper.png` over cream (`multiply`). Both
+  are 256 px tiles made by `scripts/make-textures.cjs`, which gives the same bytes on every
+  run.
+- **Borders:** Tailwind 4 draws a plain `border` in the text color, so `globals.css` sets a
+  default border color for everything: `--border`, a soft paper line. Colored borders
+  (`border-red-500`, `border-blue-400`) still override it.
+- **Icon:** `app/icon.svg` (stacked flashcards with a spark), plus the same design as
+  `favicon.ico` (32px) and `apple-icon.png` (180px). Next.js adds the `<link>` tags.
+- **Browser titles:** the root layout's template is `%s · FlashForge`. Pages are Client
+  Components and can't export metadata, so each section has a small `layout.tsx` that only
+  sets its title. The sections with titled pages below them (`teacher`, a class, `admin`)
+  must pass the template on again, or Next drops it for deeper pages.
+- **Buttons:** use `.btn` with `.btn-primary` (a page's main action, brass with dark text)
+  or `.btn-secondary` (everything else), plus `.btn-lg` for the big full-width ones,
+  instead of writing button classes by hand. Layout classes on the element (`w-full`,
+  `flex-1`, `shrink-0`) still apply. Links use `text-link hover:underline`. Selected
+  options use `border-accent bg-accent/10`; ones filled with the accent use
+  `bg-accent text-ink`, because white text on brass is too faint to read. `.brass` gives
+  the same brass look to things that aren't buttons, like the FlashForge plate.
+- **No other palette:** Tailwind's gray, red and amber classes are gone (phase 7). Muted words
+  use `muted`, warnings and wrong answers `pencil`, "late" `brass-ink`; the one green left is
+  `green-800` (and a `green-700` bar) for right answers and saved states, which reads at 4.5:1
+  on paper. Buttons say what they do in words, not emoji (*Delete this set*, *Save to My Sets*).
+
+### Studying flashcards on the desk (desk redesign, phase 2)
+
+`components/StudyViewer.tsx` picks the desk. Flashcard sets (and unknown legacy study
+types) go to `components/study/FlashcardDesk.tsx`. Multiple choice, true or false and
+mixed quizzes go to the quiz desk, `components/study/QuizDesk.tsx` (phase 4, below). Both
+score and report the same way (`components/study/logic.ts`, moved out of
+`StudyViewer.tsx` unchanged).
+
+- **The layout.** On a laptop (a desk at least 960 px wide): the deck on the left with
+  the set's name on a paper label (the page's `h1`), the save or rename controls and the
+  pencil; the card in the middle; the Got it and Missed it piles on the right; the brass
+  tools (Flip, Type, Match, Read aloud, Auto) under the card. On a phone: the deck peeks
+  out above the card, the piles are two trays under it (Missed it on the left, Got it on
+  the right), then the tools. The paper sheet steps aside for it
+  (`.desk-sheet:has(.on-desk)` in `globals.css`).
+- **Studying.** Click the card (or press Enter or Space) to turn it over, then click a
+  pile, or press → for Got it and ← for Missed it while the card or a pile has focus. A
+  card can be sorted without turning it over. When the deck is done, a paper note in the
+  middle shows the score. The Missed it pile then deals its cards again (practice, not
+  saved), and *Review Again* or *Try Again* starts the whole deck over.
+- **The pencil** (`components/desk/Pencil.tsx`) opens the card editor. The set page
+  passes `onEdit` only to the set's owner. The quiz desk has the same pencil.
+- **Placing the cards** (`components/desk/useDeskLayout.ts`). The page lays the desk out
+  with ordinary CSS and marks empty slots for the deck, the middle card and the piles.
+  The hook measures the slots (with a `ResizeObserver`, and again when the mode or the
+  finish note moves them), and each card moves between them with a CSS `transform`
+  (translate, rotate, scale). Only `transform` and `opacity` animate, and only after the
+  cards first lie in place, so they never fly in from a corner. A stack shows at most 8
+  layers. Until the desk is measured, the window's width picks the layout
+  (`useSyncExternalStore`, so the server's HTML always matches the first render).
+- **The card** (`components/desk/PaperCard.tsx`) has two faces, and turning it over is a
+  `rotateY` on an inner layer. The face turned away is `aria-hidden` and `inert`. Only the
+  card in the middle is there for screen readers: the deck and the piles are
+  `aria-hidden` paper with no words on it. Long clues and terms get smaller type, and the
+  card scrolls if they still don't fit.
+- **Accessibility.** The flip button is the slot under the middle card, so it stays in
+  place from card to card and focus is never lost. Progress (*Card 3 of 10*) and the pile
+  counts are in a live region. Focus moves to *Next card* after a typed answer is
+  checked, and to the finish note at the end. Controls are at least 44 px. With
+  `prefers-reduced-motion`, cards jump to their place and only fade.
+
+### Quizzes on the desk (desk redesign, phase 4)
+
+Multiple choice, true or false (#68) and mixed quizzes (#69) are taken on the same desk as
+flashcards, in `components/study/QuizDesk.tsx`. It uses the same deck, card spots and
+layout hook (`useDeskLayout`), so it reads the same way on a laptop and a phone.
+
+- **The layout.** The deck on the left, the question card in the middle with its
+  answers underneath, and the **Right** and **Wrong** piles on the right (on a phone:
+  the deck peeks out above the card, the answers stack one under another, and the piles
+  are trays at the bottom). The question card is lower than a flashcard on a laptop
+  (about 560 × 290), so the answers and *Next* fit under it on a 768-pixel-high screen,
+  and taller on a phone, where the narrow card also holds the verdict, the correction and
+  the quote. When a card holds more than fits, the whole card scrolls, so the question
+  never gets cut off.
+- **The answers** (`components/study/AnswerSlips.tsx`) are paper slips: four lettered
+  slips (A–D) for multiple choice, *True* and *False* for a statement. They come in one
+  after another. Picking one shows the verdict on the card (*✓ Correct*, *✗ Not quite.
+  The answer is …*, or *✗ Not quite. It's false.*), then the explanation (the correction
+  of a false statement) and the quote. The right slip lifts with a brass edge and a check,
+  a wrong pick is struck through in red pencil, and the rest fade back. Each slip's
+  accessible name is just its answer; the letter is decoration.
+- **Moving on.** *Next question* (*Next statement* in true or false, *See your score* on
+  the last one) puts the card on the Right or Wrong pile. The piles are only paper
+  (`aria-hidden`): answers are given on the slips, and the counts are read out with the
+  progress above the desk (*Question 3 of 10*). There's no going back, as in the
+  flashcard desk.
+- **A mixed quiz** goes part by part (`byPart()`), and each part opens with its own card:
+  *Part II*, *True or false*, *3 questions*, with **Begin Part II**. The last question of a
+  part says *On to Part III*. Part III is typed on the card with the same line to type on
+  as the flashcards' Type mode (`components/study/TypedForm.tsx`) and the same check. The
+  finish note lists each part's score (*Score by part*).
+- **The finish note** shows the score and the % correct, how many had a small typo, and
+  how many are on the Wrong pile. **Try the wrong ones again** deals the Wrong pile again
+  for practice (not saved, like the flashcards' Missed it pile), and **Start over** starts
+  the quiz over and is saved again.
+- **Focus.** Picking an answer (or checking a typed one) moves focus to *Next*; *Next*
+  moves it to the new card's words (a typed card puts it on the line to type on), and the
+  last one to the finish note. The card's words show no focus ring, as they aren't a
+  control. Read aloud and Auto are under the card, as for flashcards; Auto also reads a
+  part's card (*Part 2. True or false. 3 questions.*).
+- **Scoring is unchanged:** the first time through, each answer is reported in the
+  quiz's order (`reportAnswer()`), and the server scores it in `lib/attempts.ts`.
+
+### The library on the desk (desk redesign, phase 5)
+
+My Sets (`app/my-sets/page.tsx`), History (`app/history/page.tsx`) and My Classes
+(`app/classes/page.tsx`) lay their decks out on the leather, following `Desk-Printed-Library`
+on the design canvas. They share `components/desk/LibraryDesk.tsx` (the page's name and a line
+on the leather, a sticky note with a tip on a laptop, and `DeskNote` for signed-out, empty
+and failed states) and `LibraryDeck.tsx`.
+
+- **A deck** is a stack of paper cards: its study type, title and one line on top, and a
+  paper tag (`components/desk/PaperTag.tsx`) tied to its corner. The whole deck is the link
+  that picks it up, named *Pick up <title>, <kind>, <line>. <tag>*; the tag sits inside the
+  link, so it's read with it. Buttons for the deck (Delete, Save to My Sets, Remove) lie on
+  the leather under it.
+- **My Sets:** each saved set, newest first, tagged with its best score (*Best 9 of 10*,
+  from the user's own attempts, `bestByDeck()` in `lib/library.ts`) or *Not studied yet*.
+  The last place is the dashed outline of a **New deck**, which goes to `/`. **Delete** asks
+  first, as before.
+- **History:** each guide's tag says when it was made and whether it's saved (*Today ·
+  saved*, *Oct 29 · not saved* in red pencil). See "History" below for saving and removing.
+- **My Classes:** each class is a tray in the leather with its name and teacher on a paper
+  label and **Leave** beside it. Its assignments are decks tagged *Due Fri, Nov 7, 5:00 PM*
+  (brass), *Overdue · was due Nov 2* (red), *Done · best 8/10* or *No due date*. The **Join
+  a class** card sits beside the trays on a laptop and under them on a phone. *Your classes
+  (N)* stays as a heading for screen readers only.
+- **Picking up a deck** morphs it into the page it opens, with React's `<ViewTransition>`
+  (`components/desk/DeckMorph.tsx`): the deck and the next page's opening deck carry the same
+  name (`deck-<set id>`, or `deck-h-<entry id>` from History). `/sets/[id]` and `/history/[id]`
+  show that opening deck (`components/desk/OpeningDeck.tsx`) while their cards load, so the
+  morph has somewhere to land. `ViewTransition` is only in the canary React the App Router
+  runs, not in the `react` package the tests use, so `DeckMorph` looks it up and shows the
+  deck as it is without it. Names must be unique on a page, so a set assigned in two classes
+  morphs from its first tray only. With `prefers-reduced-motion` there's no morph.
+- **Layout:** a grid of decks about 220 to 258 px wide, as many columns as fit: four or
+  five on a laptop, one on a phone. Dates are worded in the viewer's own time zone
+  (`shortDate()`): *Today*, *Yesterday*, *Oct 29*, or *Oct 29, 2025* in another year.
+
+### The teacher's desk (desk redesign, phase 6)
+
+The teacher pages follow `Desk-Printed-Teacher` on the design canvas, built from the same pieces
+as the library (phase 5).
+
+- **Your classes** (`app/teacher/page.tsx`): each class is a kraft folder
+  (`components/desk/KraftFolder.tsx`): a tab, the class's name, its student count and its join
+  code on a brass plate. The whole folder is the link that opens the class. The last place
+  is an empty folder for a **New class**: name it and **Create class** makes it and its code.
+- **A class** (`app/teacher/classes/[id]/page.tsx`): the name on the leather with **Rename**,
+  **Open the grade book**, and the join code on a paper plate with **Copy code** and **Get a
+  new code**. The assigned sets are decks (`LibraryDeck`) tagged with when they're due or
+  *Overdue*, with **Due date** and **Unassign** under each. The roster is a sheet of paper.
+- **The grade book** (the results page): the same table as before, on a sheet of paper, with
+  **Download CSV** as a brass button on the leather. On a phone the table scrolls sideways
+  inside its paper.
+- **An assignment** (`assignments/[assignmentId]`): its cards laid out on the desk, hardest
+  first, each with its % wrong, the answer, the most common wrong answer and a red bar.
+- **Still to do from the design:** the folders don't show how many assignments are overdue,
+  because `GET /api/teacher/classes` doesn't return it (the API stays as it is), and sets are
+  still assigned from the set page (**Assign to class**) rather than from a slip on the class.
+- `AssignPanel` and `StudentResultsPanel` keep their dialogs, now on paper colors.
+
+### Moving between pages (page turns)
+
+Every navigation turns the page instead of swapping it at once
+(`components/desk/PageTurn.tsx`, which renders the sheet in `Desk.tsx`, so every page,
+new ones included, gets it without doing anything):
+
+- **Links and `router.push`:** App Router navigations are transitions, so React runs them as
+  view transitions. `PageTurn` wraps the page in a `<ViewTransition>` keyed by the path. The
+  old page leaves (`page-out`: it fades and sinks 8 px in 0.15 s) and the new one arrives
+  (`page-in`: it rises 16 px into place over 0.42 s, fading in from 0.12 s, when the old page
+  is nearly gone). The card box, library card and desk stay put. The styles are under
+  "Turning pages" in `globals.css`. A deck picked up in the library still morphs on top
+  (`DeckMorph`, above). `ViewTransition` is looked up in `components/desk/view-transition.ts`,
+  as the tests' React doesn't have it.
+- **Views inside a page** turn the same way with `components/desk/DeskTurn.tsx`, keyed by the
+  view's name, when the change is a transition (`startTransition`). The home page uses it:
+  the notes sheet turns into the deck being made, then into the new cards, or back to the
+  notes sheet with the problem if it failed. Changes outside a transition just swap.
+- **Only navigations turn the page:** `default="none"`, so a state change on a page never
+  animates the whole page, and search params don't change the path. The key remounts the page
+  tree on each new path, which the App Router does for a new page anyway. (With
+  `cacheComponents` on, Next would keep recent pages alive in hidden `<Activity>` boundaries,
+  and the key would drop them. It's off.)
+- **Back and Forward:** React renders those at once, so the browser can restore the scroll,
+  and runs no view transition. `PageTurn` gives the sheet the same rise itself (the Web
+  Animations API), unless the browser already animated it (`hasUAVisualTransition`, a swipe
+  back on a phone).
+- **What a page loads arrives** instead of popping in (`.desk-arrive`: a 0.38 s fade and 10 px
+  rise). Decks, folders, class trays and paper notes come one after another (`--i` is the
+  place in the list, capped at 8, so a long library doesn't keep anyone waiting). Pages that
+  had only "Loading…" come all at once: a class, the grade book, an assignment, the admin
+  lists, and the study desk after the deck that opened it (`StudyViewer`'s `arrive`, not on
+  the home page, where the new cards gather into the deck first). It moves with `transform`
+  and only fills backwards, so it doesn't fight the decks' tilt or their hover lift.
+- **"Loading…" lines wait** 0.35 s before they fade in (`.desk-wait`), so a quick load
+  doesn't flash them. Screen readers still hear them straight away.
+- **Reduced motion:** pages and what they load only fade. Nothing moves, and there's no
+  deck morph.
+- **On a new page:** put `.desk-arrive` (with `--i` in a list) on what replaces a loading
+  line, and `.desk-wait` on the loading line itself. Don't add `.desk-arrive` to something
+  that's there as soon as the page opens: the page turn already brings it in.
+- Browsers without view transitions swap pages as before. Checked in Edge with the
+  animations slowed down 10 times: turns both ways, the morph, Back and Forward, a click
+  right after Back, reduced motion, a phone's width and the study desk arriving.
+
+## 1. Generating a study guide
+
+1. **Make a deck** (`app/page.tsx`, the desk since redesign phase 3): one **notes sheet**
+   (`components/make/NotesSheet.tsx`) takes a dropped or chosen PDF (up to 100 MB, read in
+   the browser, #44), Word (`.docx`), PowerPoint (`.pptx`, #71), TXT file or photo of up
+   to 4 MB, or typed text. `detectSource()` in `lib/sources.ts` says what the text looks
+   like: a web address is a link (#74; `https://` is added when left off), a short name
+   (one line, at most 6 words, not a sentence) is a topic (#79), anything else is notes
+   (#70). The sheet says what it found, with a switch (*Use it as notes*) when that's
+   wrong. Notes must be 20 to 30,000 characters (`pastedTextProblem()`), with a counter.
+   The **"Make me 10 medium flashcards"** card (`components/make/MakeCard.tsx`) sets how
+   many (5, 10, 15, 20 or 30, #65), how hard and what kind (#68, #69): each word opens
+   paper slips (`components/desk/SlipMenu.tsx`) with a line saying what each choice is.
+   **Make my deck** sends it. Nothing is saved yet. While the AI works, the notes sheet
+   turns into **the deck being made** (`components/make/MakingDeck.tsx`): a pencil writes
+   a card, the card goes onto a small deck, the deck is riffle shuffled and a fresh card
+   comes up, on one 5.6 s CSS loop (`.making-*` in `globals.css`) until the first cards
+   arrive. Under it, what's being made (*Making 10 medium flashcards*, from what) and the
+   steps (step 3 below). It's hidden from screen readers, which follow the steps, and with
+   reduced motion it holds still, the card written.
+   - **Cards as they're written** (#94): for flashcards and multiple choice the API sends
+     the first cards while the AI writes the rest (a `cards` event, step 2). They turn the
+     scene into a spread (`components/make/DeckSpread.tsx`, in a transition, so it turns
+     like a page) and land one at a time, 300 ms apart (`CARD_GAP_MS`), under *4 of 10
+     cards written…*. **Start studying** works at once: the study desk puts each new card
+     at the back of the deck. Save waits for the whole deck.
+   - A deck that arrives whole (true or false, mixed, the backup model, or one brought back
+     after signing in) is all there at once, and its cards land 350 ms apart.
+   - If the AI stops partway, the cards already on the desk stay as a shorter deck (*We
+     couldn't write the rest of your cards…*). If it had to start again with another
+     model, the finished deck replaces them and the study desk starts over. Leaving a deck
+     that's still being written stops the request, and an answer that still comes is
+     ignored.
+   - The spread has Save and the source's credit; **Start studying** gathers the cards and
+     the study screen takes over on the same URL.
+2. **`POST /api/generate`** (`app/api/generate/route.ts`, `maxDuration = 90`):
+   - Checks the caller's **daily limit** first (#63). Over it, the answer is 429 and the AI
+     isn't called. See "Daily generation limits" below.
+   - Checks the file again with the page's rules (`fileProblem()` in `lib/sources.ts`):
+     a known type, at most 4 MB (Vercel refuses requests over about 4.5 MB), and a clear
+     "save it as .docx/.pptx or PDF first" for old `.doc` and `.ppt` files.
+   - **Large PDFs** (#44): a PDF over 4 MB can't be sent (the request limit), and a big
+     upload is slow on mobile data, so the browser reads every PDF itself
+     (`lib/read-pdf.ts`, the same PDF.js through `unpdf`, building each page's text the
+     way the server does) and sends only the text: a `pages` field, the pages as a JSON
+     list of strings, and a `fileName`. A 12 MB, 300-page lecture went up as 32 KB. The
+     upload page shows *Reading your PDF on this device (12 of 140 pages)* while it
+     works, a few pages at a time so the tab doesn't freeze. The server checks `pages`
+     like any other input (`parsePages()` in `lib/pdf-pages.ts`: a list of strings, 1 to
+     2,000 pages, at most 3.5 MB) and then does exactly what it does for a PDF it read
+     itself (`pageUnits()`, so long documents are sampled and quotes name the right
+     page). Only a PDF with more text than a request can hold (thousands of dense pages)
+     has its pages trimmed to one length, never dropped (`fitPages()`). When the browser
+     can't read a PDF, or it is pictures of pages (a scan, #73), the file itself is sent
+     as before, which only works up to 4 MB: a bigger scan gets a plain message instead.
+     A password-protected PDF and one with more than 2,000 pages get their own messages.
+     The browser accepts PDFs up to 100 MB (`pickedFileProblem()`); `fileProblem()`, which
+     the server uses for a file actually sent to it, is still 4 MB.
+   - Extracts text: PDFs with `unpdf`, TXT as UTF-8, and Word and PowerPoint with
+     `lib/office-text.ts` (#71). Those are zip files of XML: it unzips only the parts with
+     text (`word/document.xml`; each slide and each speaker-notes page) and reads the text
+     runs paragraph by paragraph. Slides come in order, then the speaker notes. A part over
+     10 MB unzipped, or 40 MB in all, is refused, so a small "zip bomb" can't use up the
+     server's memory. Unreadable files get HTTP 422 with a friendly message.
+   - Photos (JPG, PNG or WebP, #72) aren't turned into text: they go to the AI as an
+     attachment (`inlineData`) next to the prompt. The upload page shrinks them first
+     (`lib/shrink-image.ts`: longest side 1,600 pixels, JPEG at 85%; small photos are
+     sent as they are), so a 3–8 MB phone photo fits under the 4 MB limit. Browsers turn
+     the photo the right way up when decoding it.
+   - Scanned PDFs (#73) are pictures of pages with no text in them, so text extraction
+     finds little or nothing. A PDF with under 100 characters of text (not counting
+     spaces, `SCANNED_PDF_TEXT_CHARS`) goes to the AI as an attachment the same way, and
+     the AI reads the pages. PDFs with text keep using the cheaper text path.
+   - Or looks a typed topic up from the `topic` field (#79), only after the daily limit
+     check, with `findTopic()` in `lib/topic.ts`: a Wikipedia search for the top 3
+     matches, skipping disambiguation pages ("Mercury" finds *Mercury (planet)*), then
+     that article's plain text without its lists at the end (*See also*, *References*...).
+     The guide is titled after the article and credits it ("From Wikipedia: ...", also
+     for web links), and the AI is told to focus on the typed words. A topic of 2 to 100
+     characters is required; no match, only disambiguation pages, a very short article or
+     Wikipedia being unreachable come back as 422 with a plain reason, without using the
+     AI. Live lookups took about 1–1.5 seconds.
+   - Reads the difficulty from the `difficulty` field (#79): `easy`, `medium` or
+     `hard`, anything else is medium (`parseDifficulty()` in `lib/study-types.ts`).
+   - Or fetches a web page from the `url` field (#74), only after the daily limit check,
+     with `fetchWebPage()` in `lib/web-page.ts` (see "Web links" in the security model).
+     It keeps the page's `<article>` or `<main>` text when that has 500+ characters,
+     otherwise its whole `<body>`, without scripts, styles, menus, headers, footers,
+     sidebars and forms. The guide is titled after the page, and `sourceFilename` is the
+     page's address. Problems come back as 422 with a plain reason ("points to a private
+     address", "answered with an error (404)", "isn't a web page we can read", "too big").
+   - Or takes pasted notes from the `text` field (#70), with line breaks counted as one
+     character as on the page (forms send them as CR LF), and the same 20 to 30,000
+     character rule (422 otherwise). The title is the text's first line if it's short,
+     otherwise its first words (`titleFromText()`), and `sourceFilename` is null.
+   - Calls `generateStudyItems(text, studyType, { count })` and returns
+     `{ title, sourceFilename, studyType, items, model }`. `count` comes from the form:
+     any whole number from 5 to 30, otherwise 10 (`parseQuestionCount()` in
+     `lib/study-types.ts`). An unknown study type falls back to flashcards.
+   - Never sends raw API errors to the browser; details go to the server log.
+   - **Progress** (`lib/generation-progress.ts`): a normal request gets one JSON answer. The
+     upload page also sends `Accept: application/x-ndjson`, and then the route streams one
+     JSON event per line: a `step` event as each stage starts (`reading` once the daily
+     limit check has passed, `writing` just before the AI call, and `writing` again with
+     `attempt` and `backup` for every retry or switch to the backup model), then one
+     `result` event holding the status and body the JSON answer would have had. Limits,
+     errors and the usage log work the same either way; a refused or failed request is just
+     a `result` event with its usual status. While a Gemini model writes flashcards or
+     multiple choice, `cards` events come in between (#94): each holds the deck so far
+     (`title`, `sourceFilename`, `source`, `studyType`, `items`), checked like the final deck. `readGeneration()` reads this on the page and
+     falls back to plain JSON, so an older server still works.
+3. **Show it**: while it waits, under the deck being made, the page shows the steps (`GenerationProgress`):
+   uploading, reading, writing, with what's done, what's under way, and a seconds counter.
+   The first two are worded for the source (`progressLabels()`): a link's reading step is
+   *Fetching the web page*, a topic's is *Looking it up on Wikipedia* (#79), since the
+   server looks the topic up during that step. When the server reports a retry or the backup model, that is explained under the
+   writing step. The page's own timer (15 seconds, plus one per question over 10) only
+   explains a possible slower backup when the server hasn't already said so.
+   Then the page shows the new cards in the spread (`DeckSpread`) and, after **Start
+   studying**, `StudyViewer`, both on the **same URL** (`/`), so *Exit* on either clears the
+   result instead of navigating (it asks first if the guide isn't saved and isn't in
+   History either).
+4. **Usage log** (#62): every request to `/api/generate`, successful or not, gets a row in
+   `generation_logs`. The row is reserved by the limit check and filled in with Next's
+   `after()`, after the response has been sent, so logging never slows the user down.
+   It also waits for the generation itself to finish: with progress on, the response can
+   end first (the student closes the page) while the AI is still working, and the row
+   must still get the real outcome, or an abandoned request would be saved as a failure
+   that doesn't count toward the daily limit. The upload page sends the user's token when signed
+   in, so the log knows who generated it. See "Admin: AI usage" below.
+5. **Save** (optional, requires sign-in): `POST /api/save-set` verifies the user's token,
+   checks the study type and every card with the card editor's rules (`validateCards()`,
+   400 otherwise, #68) and inserts the set and cards with the **service-role** key. If the
+   cards can't be saved, the new set is removed again. If the user signs in
+   mid-save, the unsaved result is kept in `sessionStorage` across the Google redirect
+   (`lib/pending-guide.ts`) and saved automatically afterwards, once per page load. The
+   page reads it with `useSyncExternalStore`, so the server render and hydration show
+   nothing and the browser's copy appears right after, with no effect setting state
+   (#89). It stays kept until the guide is saved or left, so a failed automatic save or
+   a reload doesn't lose it; the Save button tries again. The page sends the guide's `historyId` along, so
+   History shows it as saved (see "History" below).
+
+### The AI pipeline (`lib/gemini.ts`)
+
+**Model chain.** Models are tried in order, and each has its own free-tier quota:
+
+| # | Model | Attempts | Timeout per attempt (10 questions) | Notes |
+|---|---|---|---|---|
+| 1 | `gemini-3.5-flash` | 2 | 25s, +0.5s per question over 10 | Main model. `thinkingLevel: 'low'` for speed |
+| 2 | `gemini-3.5-flash-lite` | 2 | 25s, +0.5s per question over 10 | Same request; separate quota |
+| 3 | `gemma-4-26b-a4b-it` | 1 | 40s, +1.5s per question over 10 | Last resort: slow (~26–33s for 10) and sometimes fails |
+
+- The whole generation is capped at **75 seconds**.
+- **429 (quota used up)** skips straight to the next model.
+- **503/5xx, timeouts, network errors, and empty or invalid output** are retried with
+  exponential backoff plus jitter.
+- **Other 4xx errors** (bad request, bad key) fail immediately.
+- Users only ever see "The AI is busy right now…" or a generic error message.
+
+**Streaming the first cards (#94).** For flashcards and multiple choice, when the route asks
+for them (`onCards`, only with progress on), the Gemini models are called with
+`streamGenerateContent?alt=sse`. `createItemScanner()` picks each finished card out of the
+JSON array while it's still being written, and each is validated and its quote checked at
+once. The deck so far, up to the chosen count, goes to `onCards`. The final deck is those
+same cards in the same order: validate and keep the first N, as `finalItems()` does. Once a
+request that showed cards fails, later requests stay quiet, so the cards on screen never
+change under the student. True or false (shuffled at the end), mixed quizzes (assembled by
+part) and Gemma (no streaming) are sent whole.
+
+**Why Gemma needs a different request.** We tested this on 2026-10-20:
+
+| Setting | Gemini | Gemma 4 |
+|---|---|---|
+| `responseSchema` | Used | HTTP 500 |
+| `thinkingConfig` | `thinkingLevel: 'low'` | HTTP 400 |
+| `responseJsonSchema` | Not used | Fast, but outputs garbage ("Taxonomy-set-3-A-R-C", repeated phrases, HTML) |
+| Plain JSON mode | Not used | **Used.** The format goes in the prompt; Gemma "thinks" first, and those thought parts are skipped |
+
+**Prompts.**
+- *Flashcards* are identification-style: the question is a clue or definition and the
+  answer is the 1–4 word term. "Explain/describe/why/how" questions aren't allowed.
+- *Multiple choice*: 4 options, wrong options of the same kind as the answer, and no
+  "all/none of the above".
+- *True or false* (#68): one fact per statement, about half true and half false. A false
+  statement changes one key detail of a real fact (a term, name, number or date), never
+  just adds "not", and comes with the corrected statement as its `explanation`. The
+  guide is shuffled, since the model writes its true statements first. In a test on
+  sample notes (2026-10-24), 10 statements came back 5 true and 5 false, each false one
+  with a correction, in 3.3 seconds.
+- *Mixed quiz* (#69): one request for all three parts, with exact counts per part (about
+  40% multiple choice, 30% true or false, 30% identification: `mixedSplit()`), each part
+  with the same rules as its own study type. Every item has a `type`; when it's missing,
+  the kind is guessed from the item. Each part keeps its share, a short part is filled
+  from the other parts' spares, and an answer with no usable item for a whole part counts
+  as a failed attempt. In a test on sample history notes (2026-10-24), 10 questions came
+  back as 4 + 3 + 3, all well formed (the main model was busy, so the lite backup wrote
+  it, in 12.5 seconds with the retries).
+- *Photos* (#72) and *scanned PDFs* (#73): the prompt says the material is the attached
+  photo or document (scanned pages) and asks for an empty list if it has no readable
+  study material. An empty list from a photo is answered
+  straight away with 422 *"We couldn't find any notes to study in this file. Try a
+  clearer, brighter photo, or paste the text."* (*"a clearer scan"* for a PDF;
+  `GeminiError.unreadable`), with no retries. Each attempt gets 15 seconds more: a 5-question guide from a photo took 19.5
+  seconds on `gemini-3.5-flash` in a test (2026-10-24). In the same test the Gemma backup
+  read the photo too, so photos use the whole model chain. A one-page scanned PDF of the
+  same notes (no text in it) gave 5 good flashcards in 3.9 seconds, and Gemma read it
+  too. The upload page waits 15
+  seconds longer before showing the "slower backup" notice and says *"Reading your
+  photo…"*.
+- **Difficulty** (#79): *easy* asks about the main terms and ideas with clear clues and
+  clearly different wrong choices; *hard* asks about specific details and how ideas
+  connect, with close wrong choices and subtle false statements; *medium* adds nothing,
+  so it's the same prompt as before. In a test on the *OSI model* article, easy asked
+  how many layers there are; hard asked which part of ISO/IEC 7498 covers security, with
+  the other parts as wrong choices.
+- **Focus** (#79): a typed topic is added as "Focus on what the text says about ...",
+  with quotes and line breaks taken out first.
+- **Spares:** items that fail validation are dropped, so the prompt asks for 20% more
+  flashcards or true-or-false statements, or 30% more multiple-choice questions, than the
+  user chose (12 or 13 for 10), and the guide keeps the first valid ones up to the chosen
+  count. It used to be 10% and 20%, and two dropped cards left a 10-card guide with 8 or 9
+  (2026-11-12). Spares cost output tokens, not requests, so the daily quota is the same.
+- **Long documents** (#38): the AI gets up to 30,000 characters. A longer PDF is sampled
+  by whole pages spread over the whole document (always the first and the last page,
+  blank pages left out), a longer TXT file by whole paragraphs, and other long text
+  (Word, PowerPoint, web pages, topics) by paragraphs or lines (`lib/source-quotes.ts`).
+  Kept pages and lines keep their real numbers, so a quote from page 40 says *Page 40*.
+  Wherever something was left out, the text has a "[… part of the document left out …]"
+  line, so a sentence cut off at the end of a kept page isn't read as going on in the
+  next kept one, and the quote check never matches a quote, whole or in pieces, across
+  that gap. Text that comes with its pages or lines is sampled once, with them, so the AI
+  and the quote check always have the same text. The prompt also asks for questions from
+  the beginning, middle and end.
+
+**Validation**, applied to every model's output:
+- Thought parts and ```` ```json ```` fences are stripped before parsing.
+- **Garbage filter:** rejects HTML, a short chunk repeated 4+ times, slug-like tokens of
+  5+ parts ("status-code-404-not-found"), long whitespace runs, and over-long text. A
+  chunk of only digits and separators doesn't count as repeated, so binary numbers
+  ("11111111.11111111.11111111.11000000") pass, and so does "state-of-the-art". Before
+  2026-11-12 both were dropped, which cut subnetting guides short. **Short answers only:** any answer over 6 words or 60
+  characters is dropped (`ANSWER_LIMITS` in `lib/gemini.ts`). That covers flashcard and
+  identification answers and every multiple-choice choice, so a card with one long
+  choice is dropped whole. The prompt asks for 1 to 4 words, so this only catches the
+  model ignoring it.
+- **Multiple choice:** options are trimmed and de-duplicated, exactly 4 are required,
+  the answer must match exactly one option (ignoring case and spacing, and then stored
+  as that option's text), and options are shuffled in code. The matching rule is
+  `normalizeChoice()` in `lib/card-rules.ts`, shared with the card editor.
+- Fewer than **60%** of the chosen count (6 of 10) valid items counts as a failed
+  attempt, so the next model is tried.
+
+### Quotes under cards (#21)
+
+- **Asked for with text:** for a text source, the prompt (`SOURCE_INSTRUCTION` in
+  `lib/gemini.ts`) and the response schema ask every item for a `source`: the one
+  sentence of the text it's based on, copied word for word. Photos and scanned PDFs
+  aren't asked, as there's no text to check a sentence against.
+- **Checked against the text** (`createSourceChecker()` in `lib/source-quotes.ts`),
+  ignoring case, punctuation, dashes, quote marks, line breaks and ligatures, and only
+  ever matching whole words. A quote found whole is kept. Otherwise the words the text
+  has must make up 80% of it, in at most 4 runs, and only the longest run is kept (20+
+  characters and at least half the quote): runs from different sentences are never
+  joined, because together they can say what the document doesn't ("The mitochondria
+  is the organelle that" + "stores" + "DNA"). Anything else is dropped; the card always
+  stays. The server log counts quotes kept whole, kept in part and dropped, never their
+  text.
+- **Where it is:** the PDF page, or the line of a text file or pasted notes, that the
+  quote starts on (`pageUnits()`, `lineUnits()`), with real page numbers when a long
+  document was sampled (#38). Word, PowerPoint, web pages and topics get no place.
+- **Shown after answering**, under the card, so it doesn't give the answer away, with a
+  label from the guide's source (`quoteSourceLabel()` in `lib/sources.ts`): *From the
+  document*, *From the notes*, *From the web page* or *From Wikipedia*. Never "your", as
+  whoever studies the set may not be the one who made it.
+- **Saved** in `flashcards.source_excerpt` (up to 600 characters) and `source_location`
+  (up to 40) by `/api/save-set`, which pairs each card with its item by position.
+  **When the owner edits cards**, `replace_set_cards()` clears the quote of a card whose
+  question or answer changes, as the sentence may no longer back it; a card that only
+  moves, or gets new wrong choices, keeps it.
+
+### Editing a saved study set (#55)
+
+- The set's owner sees **Edit cards** (the pencil on the desk) on `/sets/[id]`. `components/CardEditor.tsx`
+  lets them change questions and answers, delete cards, add cards (up to 50) and reorder
+  them. For multiple choice they edit the 4 choices and pick the correct one with a radio
+  button. Cancel asks first if anything changed.
+- **Saving is all at once.** `PUT /api/sets/[id]/cards` gets the whole list in display
+  order: cards with an `id` are kept and updated, cards without one are new, and the
+  set's other cards are deleted.
+- **One set of rules on both sides:** `validateCards()` in `lib/card-rules.ts` runs in
+  the editor before sending and again on the server. Every card needs a question (up to
+  500 characters) and an answer (up to 200). A multiple-choice card needs exactly 4
+  different choices (compared with `normalizeChoice`) with one marked correct, and the
+  answer is stored as that choice's text. A true-or-false card (#68) is a statement with
+  *True* or *False* picked and an optional explanation (up to 300 characters); it's
+  stored with the options `["True", "False"]`, and only these cards may have an
+  explanation. Errors name the card ("Card 3: write a
+  question.") and come back with a `cardIndex` so the editor can outline that card.
+- **Only the owner, checked twice:** the route looks the set up with `user_id = caller`
+  (`lib/sets.ts`, so others get 404, including admins and legacy ownerless sets). Then
+  `public.replace_set_cards()` re-checks the owner.
+- **All or nothing:** `replace_set_cards()` is one transaction. It locks the set's row so
+  two saves queue up, rejects card ids that aren't in this set and ids sent twice (the
+  route answers 409 "Reload the page"), then applies the update, insert and delete.
+  **Edited cards keep their ids**, so study results (#57) and most-missed questions
+  (#59) can refer to them. Only the service role may call it.
+
+### History
+
+- **Every guide a signed-in user makes** is kept in `guide_history`, saved or not, so
+  a guide they didn't save isn't lost. My Sets still lists only saved sets.
+- **Written by the server only:** after a successful generation, `/api/generate` adds
+  the guide (title, study type, source, credit and the cards with their quotes) with the
+  service-role key (`addToHistory()` in `lib/history.ts`) and returns its id as
+  `historyId`. Signed-out guides and failed ones are never kept. If the row can't be
+  written, the user still gets the guide, with `historyId: null`.
+- **Saved or not:** `/api/save-set` takes an optional `historyId` and sets that entry's
+  `set_id` to the new set (`markSaved()`, only for the caller's own entry). If the set
+  is deleted later, `set_id` goes back to null and the guide shows as not saved again.
+- **`/history`** lays the user's entries out as decks, newest first (see "The library on
+  the desk" above): study type, title, number of questions, and a tag with the day and
+  *saved* or *not saved*. An unsaved one has **Save to My Sets**, the same save as on its
+  own page. **Remove** takes one off after asking; the warning says whether it was saved
+  (the set stays in My Sets) or will be gone for good.
+- **`/history/[id]`** opens one entry in `StudyViewer` to study again. An unsaved
+  guide has **Save to My Sets**, which saves it with its `historyId` and opens the
+  new set; a saved one links to its set instead. Exit and Done go back to History.
+  Scores aren't recorded here, since attempts belong to saved sets (#57).
+- **Only the owner** can read or remove an entry (RLS); nobody else, teachers and admins
+  included, can see it, and nobody can add or change one from the browser. The cards
+  (with sentences quoted from the user's document) stay until the user removes them, or
+  their account is deleted.
+
+## 2. Auth and roles
+
+- **Sign-in:** Google OAuth through Supabase (`lib/auth.ts`). Anyone can generate and
+  study without signing in; saving requires sign-in.
+- **Roles** (`public.profiles.role`): `student` (default), `teacher`, `admin`.
+  - A trigger on `auth.users` creates a student profile at sign-up. It catches its own
+    errors, so it can never block a sign-up.
+  - Users can read their own profile and change only `display_name`, through a
+    column-level grant. **They can never change their own role.**
+  - The first admins come from `supabase/seed-admins.sql`; later ones are added in-app on
+    `/admin/users` (#60).
+- **Choosing a role at sign-up** (#52):
+  - `components/ProfileProvider.tsx` (in the root layout) loads the user's own profile,
+    which RLS allows, and shares it with every page through `useProfile()`.
+  - `components/RoleChooser.tsx` shows a one-time "student or teacher?" screen to any
+    signed-in user who is still a default student with an empty `role_chosen_at`. That
+    includes existing users on their next visit. It sits on top of the current page
+    instead of navigating, so a save that's finishing after the Google redirect keeps
+    running.
+  - `POST /api/profile/role` accepts only `student` or `teacher`, and only once. It
+    updates the row only `where role = 'student' and role_chosen_at is null`, so it can't
+    overwrite a role an admin assigned, and two parallel requests can't both succeed. If
+    the profile row is missing, it inserts one.
+  - Responses: 401 not signed in, 400 any other role (including `admin`), 409 already
+    chosen. Teachers then land on `/teacher`; students stay where they are.
+- **Server checks** (`lib/roles.ts`): `requireRole(req, ['teacher', 'admin'])` reads the
+  Bearer token and returns the user, or throws `AuthError` with 401 (not signed in) or
+  403 (wrong role). A user without a profile counts as a student. Every teacher and
+  admin route must use it, because hiding UI is not protection.
+
+### Deleting an account (#88)
+
+`DELETE /api/profile/data` (with `{ confirm: true }`) calls `deleteUserData()` in
+`lib/user-data.ts`, which deletes the user's `auth.users` row through Supabase Auth
+(`auth.admin.deleteUser`). Every table that holds a user's data references `auth.users`
+with `ON DELETE CASCADE`, so the database removes it all in that one statement and nothing
+can be left half deleted:
+
+- Gone with the account: the profile, saved sets and their cards, History, attempts,
+  class memberships, join failures, and the classes they teach with those classes'
+  members and assignments.
+- A teacher's sets take every attempt on them along (`attempts.set_id` cascades), so
+  students lose their scores on that teacher's assignments. The privacy page says so.
+- Kept without the person: `generation_logs`, `audit_log` and `app_settings` set the user's
+  id to null (`ON DELETE SET NULL`). Audit entries keep the ids they name and a deleted
+  set's title, never a name or email.
+- The last admin can't delete their account (409), and if the admins can't be counted,
+  nothing is deleted. supabase-js reports a failed delete in `error` instead of throwing,
+  so the result is checked and a failure answers 500, never "deleted".
+- The page then signs the browser out. Signing in with Google again later starts a new,
+  empty account.
+
+A new table with user data needs the same kind of foreign key to `auth.users` (cascade, or
+set null for records worth keeping), or deleting an account leaves its rows behind. The
+live database's keys were checked on 2026-11-14: they match the migrations.
+
+### Classes (#53)
+
+- Teachers (and admins) create classes on `/teacher`. Each class gets a **join code**:
+  6 characters from an alphabet without look-alikes (no `0/O`, `1/I/L`), stored as
+  `K7M2QX` and shown as `K7M-2QX`. A unique constraint guarantees one class per code;
+  on a clash the server simply tries a new random code.
+- **All class changes go through `/api/teacher/classes/...`** routes, which call
+  `requireRole(req, ['teacher', 'admin'])` and then `lib/classes.ts`. Every query there
+  filters on `teacher_id = <caller>`, so another teacher's class behaves exactly like a
+  missing one (404). There are no write grants or policies for browsers.
+- **Get a new code** replaces it right away. The old code stops working, and students
+  already in the class stay in it.
+- The roster (names **and emails**) comes from `public.class_roster(class, teacher)`, a
+  database function only the service role may call. It returns nothing unless the
+  teacher owns the class.
+- A teacher can have at most 50 classes (`MAX_CLASSES_PER_TEACHER`), since anyone can
+  pick "teacher" at sign-up.
+- **Admins** can use all teacher features, but only on classes they created themselves.
+  Admins can't see other teachers' classes.
+
+### Joining a class (#54)
+
+- Students open **My classes** (`/classes`, the *My Classes* tab in the card box) and type a
+  code. Case, spaces and the hyphen don't matter (`k7m 2qx` → `K7M2QX`, using
+  `normalizeJoinCode`). Before joining, the page says: *"Your teacher will see your name,
+  email, and your scores on this class's assignments."*
+- `POST /api/student/classes` looks the code up on the server, with the service role. So
+  codes can't be listed or guessed through the database API: browsers have no access to
+  other classes' rows at all.
+- **Students only:** teachers and admins get 403 (they manage classes, they don't join them).
+- **Joining twice changes nothing.** The (`class_id`, `student_id`) primary key rejects
+  the second row, which the route reports as `alreadyMember`.
+- **Guessing limit:** each wrong code (a valid format, but no class has it) is saved in
+  `class_join_failures`. After **10 wrong codes in 15 minutes**, the route answers 429
+  until the oldest one falls out of the window. That's checked *before* the lookup, so
+  even a correct code waits. Codes with an impossible format are rejected (400) without
+  counting. This is stored in the database because Vercel runs many server instances
+  that don't share memory.
+- **Leaving** (`DELETE /api/student/classes/[id]`) removes only the caller's own
+  membership. Rejoining needs the class's current code.
+
+### Assigning sets to classes (#56)
+
+- On a set they own, teachers (and admins) get **Assign to class**
+  (`components/AssignPanel.tsx`). It lists their classes, with ones that already have
+  the set shown as assigned, and takes an optional due date. A set is assigned to a
+  class at most once (unique `class_id, set_id`), so assigning again reports
+  `alreadyAssigned` and leaves the existing due date alone.
+- **Only the owner's own sets, to their own classes:** `lib/assignments.ts` checks
+  `flashcard_sets.user_id` and `classes.teacher_id` against the caller. If any class in
+  the list isn't theirs, nothing is assigned (404).
+- On the class page, teachers see **Assigned sets**, soonest due first, with an
+  **Overdue** badge. They can change or remove the due date, or **Unassign**.
+- **Due dates** (`lib/due-dates.ts`) are stored as timestamps and always shown in the
+  viewer's own time zone (`toLocaleString`). The server accepts no date, or a date that
+  hasn't passed (5-minute grace) and is within 2 years.
+- **Students** see each class's assigned sets on **My classes**, with the due date and an
+  Overdue badge (or **Done**, see #57 below), and open them on `/sets/[id]`. They can't
+  edit them.
+- **Access follows the assignment (RLS):** a new `flashcard_sets` policy lets a user read
+  a set while it's assigned to a class they're in (`private.is_assigned_to_me()`). Cards
+  are now readable exactly when their set is. Unassigning, leaving the class, or the
+  teacher deleting the set or class removes access immediately.
+### Study results (#57)
+
+- **Every finish on a saved set is saved** for signed-in users. `StudyViewer` reports what
+  the student did (`onComplete`) and the set page sends it to `POST /api/attempts`.
+  Signed-out visitors can still study; the finish screen asks them to sign in to save
+  scores. A freshly generated guide that isn't saved yet records nothing.
+- **Flipped flashcards are self-marked.** On the desk (see "Studying flashcards on the
+  desk" below) the student puts each card on the **Got it** or **Missed it** pile, which
+  deals the next one. Every card gets sorted, so none is left unmarked. The finish note
+  shows "*n* / *total* in Got it". Going through the Missed it pile again afterwards is
+  practice and isn't saved; *Review Again* starts the whole deck over and is saved again.
+  Multiple choice is scored as before. Flashcards can also be typed (#66, below).
+- **The server does the scoring** (`lib/attempts.ts`). The browser sends only card ids
+  and what was picked, typed or marked, plus how a flashcard set was studied (`mode`). The server checks that the caller can open the set
+  (they own it, it's a legacy set, or it's assigned to a class they're in: the same rule
+  as RLS), compares each pick with the real answer using `normalizeChoice`, and stores
+  the score plus a per-card `answers` list. Answers for cards that no longer exist are
+  dropped; if none are left (the owner rewrote the set mid-study), the route answers 409.
+- **Retries can't double-count.** The browser makes a new id (`newId()`) for each finish.
+  Sending the same id again returns the saved attempt (200) instead of adding one, and
+  an id that belongs to someone else is refused (409).
+- **Linking to an assignment:** links on My classes carry `?assignment=<id>`. The attempt
+  is linked only if that assignment is for this set and the student is in its class;
+  otherwise it's saved as private study. The finish screen says which: *"Your teacher
+  can see it"* or *"Only you can see this one."*
+- **Recent scores:** after saving, the finish screen lists the student's last 10 results
+  on that set (`GET /api/attempts`).
+- **Done / not done:** `GET /api/student/classes` adds `myProgress` (number of attempts,
+  best score, last finish) to each assignment, and My classes tags that deck **Done · best
+  8/10** in place of Overdue. Finishing after the due date still counts as done.
+- **Who can read attempts (RLS):** the student, and the class's teacher only for attempts
+  made from that class's assignment, and only while the student is still in the class.
+  Private study is never visible to teachers, and unassigning a set keeps the attempts
+  but makes them private. Browsers can't write attempts at all. Teachers see these
+  results on the class's results page (#58, below).
+
+### Mixed quiz (#69)
+
+- A new study type, `mixed`, laid out like a school exam: **Part I** multiple choice,
+  **Part II** true or false, **Part III** identification. A card's kind comes from its
+  options (`cardKind()` in `lib/card-rules.ts`): 4 choices, True and False, or none. So
+  the cards table needs nothing new, and each card is checked with its own kind's rules
+  in `validateCards()`, on save and in the editor.
+- **Studying:** the cards are shown part by part (in saved order within a part), each
+  part opened by its own card (*Part II*, *True or false*, **Begin Part II**), with
+  *Part II · True or false* on each question. Parts I and II are picks; Part III is typed
+  and checked like #66. The finish note shows the total and each part's score (see
+  "Quizzes on the desk" above).
+- **Scoring on the server:** `POST /api/attempts` gets a pick (`chosen`) or typed text
+  (`typed`) per card, and `scoreAnswers()` scores each card by its kind, keeping only
+  what that kind uses. Teachers' results and the most-missed page work as for any set.
+- **Editing:** each card keeps its kind (*Card 2 · True or false*), and new cards are
+  added with **+ Multiple choice**, **+ True or false** or **+ Identification**.
+- **Database:** `study_type` allows `mixed` on sets, attempts and the generation log.
+
+### True or false (#68)
+
+- A new study type, `true_false`. Each card is stored like a two-option multiple-choice
+  card: the statement as `question`, `options` `["True", "False"]`, `answer` *True* or
+  *False*, plus an optional `explanation` (a new `flashcards` column) shown after
+  answering. The upload page offers it; generation is one AI request like the others.
+- **Studying:** the statement on the card and two slips under it, *True* and *False*.
+  Answering shows *✓ Correct* or *✗ Not quite. It's false.* on the card with the
+  explanation under it, lifts the right slip and strikes through a wrong pick. The score
+  is worked out like multiple choice, on the server too.
+- **Editing:** a *Statement* box, a *True / False* choice and an *Explanation (optional)*
+  box. `replace_set_cards()` saves and returns the explanation (an empty one clears it).
+- **Teachers:** results work as for any set. The most-missed page leaves out "most common
+  wrong answer" for these cards, as it could only be the other option.
+- **Database:** `study_type` allows `true_false` on sets, attempts and the generation log.
+  Sets now have a `study_type` check of their own; it's `NOT VALID` because one legacy
+  set from August says `identification`. The app shows any unknown study type as
+  flashcards (`toStudyType()`), as it always has.
+
+### Typing the answer (#66)
+
+- Flashcard sets have brass **Flip / Type / Match** buttons under the card (Match is #67,
+  below). Switching starts the set over. Any flashcard set works, including ones saved
+  before; no AI is used.
+- **Type:** the student types the term on the line under the clue, on the card itself,
+  and presses **Check** (or Enter). The card turns over to the term with *✓ Correct*,
+  *✓ Almost. It's spelled …* or *✗ Not quite. The answer is …*. **I don't know** shows
+  the answer and counts as wrong. **Next card** (focused, so Enter works) puts the card
+  on the pile its verdict says, so a small typo still goes to Got it. The finish note
+  shows the score, the % correct and how many had a small typo. Part III of a mixed quiz
+  (#69) is typed the same way on the quiz desk, where *Next* appears once it's checked.
+- **One check on both sides:** `checkTypedAnswer()` in `lib/answer-check.ts` runs on the
+  study screen for instant feedback and again on the server for the saved score. It
+  ignores capitals, accents, spaces, punctuation and a leading "the", "a" or "an", and
+  accepts one typo (a wrong, missing, extra or swapped letter) for answers of 5 or more
+  characters with no digits. Numbers and short terms must be exact, so "1899" isn't
+  "1898" and "ADP" isn't "ATP". Symbols like + and # count, so "C" isn't "C++".
+- **Saved like other attempts:** `POST /api/attempts` gets `mode: "type"` and each card's
+  `typed` text (up to 200 characters, or null for *I don't know*). The server ignores any
+  score or `correct` flag the browser sends. Only flashcard sets accept a mode (400
+  otherwise), and the database enforces the same rule (`attempts.mode`, null for the
+  normal way, so older attempts need no change).
+- **Teachers:** a student's attempt list says *Typed* or *Self-marked* for flashcard
+  assignments, and the most-missed page groups wrong typed answers that differ only in
+  capitals, spaces or punctuation (`typedAnswerKey()`). Recent scores on the set page say
+  "8 / 10 typed" or "8 / 10 got it".
+
+### Matching (#67)
+
+- **Match** splits the set into rounds of up to 5 cards, as evenly as possible
+  (`matchRounds()` in `lib/study-types.ts`): 12 cards are 4 + 4 + 4, never 5 + 5 + 2.
+- Each round lays its clues out as paper slips with its terms beside them (shuffled, and
+  never in the clues' order); on a phone the terms sit in two columns above the clues
+  (`components/study/MatchBoard.tsx`). The student picks a clue and then its term, or a
+  term and then its clue. A right pair stays together with a brass edge, and the clue
+  shows its term and, if it has one, its quote. A wrong pick flashes red pencil and the
+  student tries again, but that clue counts as missed. **Next round** (or **See
+  results**) appears once every clue is matched, and the round's cards go to the piles.
+- Each card's answer is the **first** term picked for its clue (`chosen`). It counts if it reads
+  the same as the card's own answer (`normalizeChoice`), so two cards with the same
+  answer can't be "wrong" for swapping. `POST /api/attempts` gets `mode: "match"` and the
+  server scores it the same way. Teachers see *Matched* on these attempts, and wrong
+  matches count on the most-missed page.
+
+### Reading cards aloud (#77)
+
+- **Read aloud** (a brass button under the card, on the flashcard and the quiz desk)
+  reads what's on screen: the
+  question (with the choices, or "True or false?" before a statement), the answer once a
+  flashcard is flipped, the right answer and any explanation once a question is answered,
+  in matching the round's clues, and a mixed quiz's part card (*Part 2. True or false. 3
+  questions.*). **Auto** reads each card as it appears and the answer when a card is
+  flipped; moving on, finishing or leaving stops the reading.
+- It uses the browser's built-in speech (`speechSynthesis` in `lib/speech.ts`): free, no AI
+  requests, and on most phones it works offline. Where a browser can't speak, the
+  controls aren't shown. The voice is the device's default, at 0.95 speed.
+- Auto is remembered on the device (`localStorage`, falling back to the open page if
+  storage is blocked). Both values are read with `useSyncExternalStore`, so the page
+  renders the same on the server and in the browser.
+
+### Student results for teachers (#58)
+
+- On a class page, **Open the grade book** opens `/teacher/classes/[id]/results`: one row
+  per student in the class (by name) and one column per assignment (soonest due first).
+  On phones the table scrolls sideways and the student column stays in place.
+- **Each cell** shows the student's best score (e.g. *9/10 · 90%*), how many attempts
+  they made, and a **Late** badge if their first finish came after the due date. A
+  student who finished on time and practised again later is still on time. Lateness is
+  judged against the current due date, so moving the due date relabels past work.
+- **Not started is not 0%.** Those cells say *Not started* (red, with *Past due*, once
+  the due date has passed) and are left out of the class average.
+- **Class average** per assignment: the mean of each finisher's best percentage, with
+  "*n* of *m* done".
+- **Selecting a student** opens their attempts on each assignment, newest first, with
+  the time, score, a Late badge and, for flashcards, whether it was typed, matched or
+  self-marked (`components/StudentResultsPanel.tsx`).
+- **Download CSV** builds the file in the browser from the same data: best %, attempts
+  and status for each assignment, plus the class average row. A cell starting with
+  `=`, `+`, `-` or `@` gets a leading `'` so spreadsheet apps don't run it as a
+  formula (student names are typed by users), and the file starts with a byte-order
+  mark so Excel keeps accents.
+- **Same rule as the attempts RLS** (`lib/class-results.ts`): only the teacher's own
+  class (404 otherwise, admins included), only students who are in it now, and only
+  attempts made from this class's assignments. Private study, and the same set
+  assigned to another class, never show up. The query filters and the grouping both
+  enforce this.
+- The summing-up rules (`summarizeAttempts`, `classAverage`, `resultsToCsv`) are in
+  `lib/results-shared.ts`, shared by the server and the page.
+
+### Most-missed questions (#59)
+
+- In the results table, each assignment's title opens
+  `/teacher/classes/[id]/assignments/[assignmentId]`: the set's questions, hardest first,
+  so the teacher knows what to reteach.
+- **Each student counts once, by their latest attempt** on that assignment (the current
+  state of what they know, not their first try). Only the class's current students and
+  attempts made from this assignment count, as in #58.
+- For each question: the % of those students who got it wrong ("2 of 3 students wrong"),
+  the correct answer, and the **most common wrong answer** (the option picked, or the
+  text typed, #66). A skipped question counts as wrong but isn't a wrong answer. For
+  flipped flashcards, anything but a "Got it" mark counts as wrong.
+- **Edited sets:** answers are matched to cards by id (`attempts.answers[].cardId`), so a
+  reworded card keeps its history, a deleted card disappears, and a card added since
+  shows "No answers yet" at the bottom. Right or wrong is what the student was scored
+  on at the time.
+- Ties are broken by how many students got it wrong, then by card order.
+  `questionStats()` in `lib/class-results.ts` does the counting.
+
+### Admin: users and roles (#60)
+
+- Admins get an **Admin** tab in the card box, to `/admin` and `/admin/users`
+  (`components/AdminOnly.tsx`). The page lists every user (newest first) with their role,
+  sign-up date and number of saved sets, and searches by part of an email or name.
+- **Changing a role** (student, teacher or admin) asks first, then calls
+  `PATCH /api/admin/users/[id]`. This is how new admins are added after the seeded ones.
+- **All in one database function**, `public.admin_change_role()` (service role only):
+  - It checks the actor is an admin. The route has already checked with
+    `requireRole(req, ['admin'])`.
+  - It locks every admin row before counting, so two admins demoting each other at
+    the same moment can't both succeed.
+  - It refuses to demote the **last admin** (the route answers 409).
+  - It sets `role_chosen_at`, so the sign-up chooser (#52) never offers a demoted user
+    "teacher" again.
+  - It writes **who, whom, from → to and when** to `audit_log`. Setting the same role
+    again changes nothing and isn't logged.
+- Emails come from `public.admin_list_users()`, also service-role only.
+- If admins change their own role, the page reloads their profile, so the admin pages
+  close right away if they're no longer an admin.
+
+### Admin: study sets (#61)
+
+- `/admin/sets` lists every set (newest first) with its owner, date, number of cards and
+  type, and an **Assigned to N classes** badge. It searches by title or owner. Legacy
+  sets show "No owner (old set)".
+- **Opening any set:** a new RLS policy lets admins read every set
+  (`private.is_admin()`), and cards follow their set, so the normal `/sets/[id]` page
+  works. Admins still can't edit or delete other people's sets through the database
+  API; edit controls stay owner-only.
+- **Deleting** asks first. For an assigned set, the confirmation says it will disappear
+  for those classes and that students' saved scores on it will be deleted.
+  `public.admin_delete_set()` (service role only) checks the actor is an admin, writes
+  the title, owner, type and number of classes to `audit_log`, and deletes the set in
+  the same transaction. Its cards, assignments and attempts cascade.
+- The optional "Report this set" button from #61 isn't built yet.
+
+### Admin: AI usage (#62)
+
+- Each row of `generation_logs` has the user (null when signed out), their role, the
+  study type, how long it took, success or the kind of failure (`no_file`,
+  `unreadable`, `ai_busy`, `ai_failed`, `server_error`), the model that made the guide,
+  and **`requests`**: how many requests went to each model, retries and backups
+  included. `generateStudyItems()` reports each request through an `onRequest`
+  callback. Requests are what use up the quota, so they're counted separately from guides.
+- **Days are quota days:** midnight to midnight **Pacific time**, when the free Gemini
+  quota resets (`quotaDay()` in `lib/admin.ts`, `private.quota_window_start()` in SQL).
+- `/admin/usage` shows **today** per model, in fallback order. For the main model it
+  shows "N of about 20 requests" (`MAIN_MODEL_DAILY_QUOTA`, from #45) with a bar that turns
+  amber at 75% and red at 100%, plus the guides each model made. Below that: the last 14
+  days (guides, failures, average wait, which models answered), the % failed, signed-out
+  generations, and the top 10 signed-in users.
+- The numbers come from `admin_generation_daily()` and `admin_top_generators()`
+  (service role only). Logging never throws: a lost log line is only written to the
+  server log.
+
+### Daily generation limits (#63)
+
+- **Per role, per quota day** (Pacific time): the defaults are signed out 2, student 5,
+  teacher 15 and admin no limit. They're stored in `app_settings` (server-only), and
+  admins change them in the **Daily limits** box on `/admin/usage`
+  (`PUT /api/admin/limits`). Changes apply from the next request, without a redeploy, and
+  each change is logged in `audit_log` (`settings_change`, from → to).
+- **Who's counted:** signed-in users by account. Signed-out visitors are counted by an
+  HMAC-SHA256 of their IP (`x-forwarded-for`, set by Vercel), keyed with
+  `IP_HASH_SECRET` or the service-role key, so IPs are never stored.
+- **No slipping past it with parallel requests:** `public.start_generation()` takes a lock
+  for that caller, counts today's finished guides plus requests still running, and then
+  either reserves a "running" log row (`success` null) or refuses. A refusal is logged as
+  `limit`, and the next Pacific midnight comes back as `resets_at`. Failed generations
+  don't use up guides, and a running row older than 2 minutes (a crashed request) stops
+  counting.
+- **Failed guides that asked the AI have their own cap** (#41), the same size as the
+  role's limit. Otherwise a guide that keeps failing (a photo with nothing to study in
+  it, say) could be repeated all day on the shared AI quota. A failure counts when its
+  log row has `requests`, so failures before the AI is asked (a file that's too big, a
+  page that can't be read) and refusals don't. `start_generation()` says which limit
+  refused (`reason`: `guides` or `failures`).
+- **Over the limit:** 429 with *"You've reached today's limit of N study guides."*, or
+  for failures *"Too many of your study guides couldn't be made today, so new ones are
+  paused to save the AI's daily quota."* The
+  upload page adds when more can be made, in the user's own time zone. If the check
+  itself fails (database trouble), the guide is generated anyway: the limits are about
+  sharing the quota fairly, not security.
+- The dashboard leaves out running requests and refusals, and shows refusals separately
+  ("refused by the daily limits").
+
+The plan for teacher and admin features is tracked in #50.
+
+## 3. Data model
+
+| Table | Columns | Notes |
+|---|---|---|
+| `flashcard_sets` | `id`, `user_id` → `auth.users`, `title`, `source_filename`, `study_type`, `created_at` | `user_id` is null for legacy sets made before sign-in was required |
+| `flashcards` | `id`, `set_id` → `flashcard_sets` (cascade), `question`, `answer`, `options` (jsonb: 4 choices for multiple choice, `["True","False"]` for true or false, null for flashcards and identification; in a mixed quiz this is what tells the parts apart), `explanation` (1–300 chars, true or false only, #68), `source_excerpt` and `source_location` (the quote a card was made from and its page or line, #21), `position` | Indexed on `set_id`. Ids stay the same when a card is edited (#55); a card's quote is cleared when its question or answer changes |
+| `profiles` | `id` → `auth.users` (cascade), `display_name`, `role`, `role_chosen_at`, `created_at` | `role_chosen_at` is for the sign-up role choice (#52) |
+| `classes` | `id`, `teacher_id` → `auth.users` (cascade), `name` (1–80 chars), `join_code` (unique), `created_at` | Indexed on `teacher_id` |
+| `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
+| `class_join_failures` | `id`, `user_id` → `auth.users` (cascade), `attempted_at` | Wrong join codes for the rate limit; indexed on (`user_id`, `attempted_at`); old rows are deleted as new ones arrive |
+| `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `due_at` (nullable), `created_at` | Unique (`class_id`, `set_id`); indexed on `set_id` |
+| `generation_logs` | `id`, `user_id` → `auth.users` (set null), `role`, `ip_hash` (signed out only), `model`, `study_type`, `duration_ms`, `success` (null while running), `error_kind` (incl. `limit`), `requests` (jsonb), `created_at` | One row per `/api/generate` request (#62, #63). Indexed on `created_at`, (`user_id`, `created_at`) and (`ip_hash`, `created_at`) |
+| `guide_history` | `id`, `user_id` → `auth.users` (cascade), `title`, `study_type`, `source_filename`, `source_credit` (jsonb `{ name, url }` for a web page or Wikipedia article), `items` (jsonb: the cards as generated, quotes included), `item_count` (generated from `items`), `set_id` → `flashcard_sets` (set null), `created_at` | History: one row per guide a signed-in user generated. `items` must be a non-empty array. Indexed on (`user_id`, `created_at`) and `set_id` |
+| `app_settings` | `key` (primary key), `value` (jsonb), `updated_at`, `updated_by` → `auth.users` (set null) | App-wide settings changed by admins; today just `generation_limits` (#63) |
+| `audit_log` | `id`, `actor_id` → `auth.users` (set null), `action` (`role_change` \| `set_delete`), `target_id`, `details` (jsonb), `created_at` | Admin actions (#60). `target_id` has no foreign key, so entries survive the target being deleted. Indexed on `created_at` |
+| `attempts` | `id` (made by the browser), `user_id` → `auth.users` (cascade), `set_id` → `flashcard_sets` (cascade), `assignment_id` → `assignments` (set null), `study_type`, `mode` (null, or `type` / `match` for flashcards, #66, #67), `score`, `total`, `answers` (jsonb), `completed_at` | One row per finished study session (#57). `total > 0` and `0 ≤ score ≤ total`. Indexed on (`user_id`, `set_id`, `completed_at`) and on `assignment_id` |
+
+## 4. Security model
+
+**Web links (#74)** make the server fetch an address a user typed, so
+`lib/web-page.ts` guards against server-side request forgery:
+- Only `http` and `https`, only ports 80 and 443, and no `user:password@`.
+- Every address the name resolves to must be public (not private, loopback,
+  link-local such as cloud metadata at `169.254.169.254`, carrier-grade NAT,
+  documentation, multicast or reserved; IPv4 written as IPv6 counts as IPv4). The check
+  runs in the connection's own DNS lookup, so the name can't switch to a private address
+  after being checked. IP addresses typed in the link (including tricks like `0x7f.1`)
+  are checked too.
+- Redirects (up to 3) go through the same checks.
+- At most 2 MB of page after unzipping (gzip, deflate or brotli), 10 seconds, and only
+  HTML or plain text.
+- The HTML is read with `indexOf` scans, not patterns like `/<[^>]*>/`: in a test,
+  that pattern took over 4 minutes on a page full of "<" with no ">".
+- It's tested against a local server (`lib/web-page.test.ts`) and was checked live on
+  2026-10-24: Wikipedia and example.com were read; the metadata address, `localhost`,
+  `[::1]` and `0x7f.1` were refused.
+
+**Two Supabase keys:**
+- The **anon key** is public and used in the browser. What it can do is limited entirely
+  by Row Level Security.
+- The **service-role key** bypasses RLS. It's only used in `lib/supabase-admin.ts` and
+  must never be imported by client code.
+
+**RLS policies** (as of 2026-10-22):
+
+| Table | Who | Can |
+|---|---|---|
+| `flashcard_sets` | Owner | Read, rename, delete their own sets. Renaming is the only change they can make: signed-in users may update the `title` column only (PR #84) |
+| `flashcard_sets` | Anyone | Read legacy sets with no owner |
+| `flashcard_sets` | Students in a class | Read a set while it's assigned to a class they're in (#56) |
+| `flashcard_sets` | Admins | Read every set, and so its cards (#61); no extra write rights |
+| `flashcard_sets` | Anyone | **Insert: nobody** (saves go through `/api/save-set`); browsers have no insert grant either (PR #84) |
+| `flashcards` | Anyone | Read a card exactly when they can read its set (the policy checks the set through the set's own RLS); no direct writes, and no insert, update or delete grants for browsers (edits go through `replace_set_cards()`, server-only; PR #84) |
+| `profiles` | The user | Read their own row and update `display_name` only; anon has no access |
+| `classes` | Teacher / members | The teacher reads their own classes; members read classes they joined; no direct writes |
+| `class_members` | Student / teacher | A student reads their own memberships; the teacher reads their roster; no direct writes (joining and leaving go through the server) |
+| `class_join_failures` | Nobody | Server-only: no grants or policies for anon or signed-in users |
+| `assignments` | Teacher / members | The class's teacher and its members read its assignments; no direct writes |
+| `audit_log` | Nobody | Server-only: no grants or policies for anon or signed-in users (#60) |
+| `generation_logs` | Nobody | Server-only, like `audit_log` (#62) |
+| `app_settings` | Nobody | Server-only; admins change limits through `PUT /api/admin/limits` (#63) |
+| `guide_history` | Owner | Read and remove their own entries; no direct inserts or updates (the server adds them and marks them saved) |
+| `attempts` | Student / teacher | A student reads their own attempts; the class's teacher reads attempts made from their class's assignments while the student is in the class (never private study); no direct writes (#57) |
+
+The `classes` and `class_members` policies need to check each other, which would make RLS
+recurse. So they use `private.is_class_teacher()` and `private.is_class_member()`:
+security-definer helpers in a schema the API doesn't expose. The `attempts` policy uses
+`private.teaches_student_in_assignment()` the same way.
+
+**Two holes fixed on 2026-10-20 (#46):**
+- An anon policy exposed **every** card, including private ones.
+- An insert policy allowed **anyone** to insert sets with any `user_id`.
+
+**Grants, not only policies (PR #84):** Supabase gives `anon` and `authenticated` every
+privilege on existing tables, and RLS is the only thing in the way. For `flashcards` and
+`flashcard_sets` the grants themselves are now cut back to what the browser uses, so a
+policy added by mistake later still can't open them up: no insert, truncate, trigger or
+references on either table, no update or delete on cards, and on sets an update grant for
+the `title` column only (anon has no update or delete).
+
+`supabase/tests/*.sql` re-checks these rules by simulating users inside a rolled-back
+transaction. Run them after every database change.
+
+## 5. Testing
+
+- `npm test`: Vitest.
+  - Unit and route tests for roles, `/api/profile/role`, the class, assignment,
+    attempt and class-results APIs, using `test-utils/fake-supabase.ts`. That's an
+    in-memory client with unique keys (23505) and cascading deletes.
+  - Component tests for `RoleChooser`, `StudyViewer` (the flashcard desk: piles, ← / →,
+    the Missed it pile dealt again, Type and Match; and the quiz desk: answer slips, the
+    Right / Wrong piles, the Wrong pile again, part cards and focus), `CardEditor`,
+    `AssignPanel`, the desk's card box and library card (the tabs each role gets, signing
+    in and out), `PageTurn` (the sheet, and the rise after Back and Forward), `PaperCard`, the desk layout at four widths, the
+    set page, My Sets (its decks, best scores, delete), the History pages (saving from a deck too), the User Guide, saving a guide made while signed out across the Google sign-in (`app/upload-sign-in-save.test.tsx`, #89) and the teacher and student pages, in jsdom with React Testing Library.
+    Component tests start with `// @vitest-environment jsdom`.
+- `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and
+  classes. Each prints expected vs. actual (10, 10 and 21 cases).
+- `supabase/tests/assignments-rls-check.sql` (16 cases): an assigned student can open the
+  set and its cards, a student outside the class can't, access ends on unassign, and
+  only the owner can edit.
+- `supabase/tests/generation-limits-check.sql` (23 cases): parallel requests count while
+  running and a third is refused, saying why; refusals are logged; failures and crashed
+  requests don't use up guides; a failed guide that asked the AI counts toward its own
+  cap (#41) and one that didn't doesn't; signed-out visitors are counted per IP hash;
+  "no limit" for admins; bad limits are rejected; a change takes effect on the next
+  request and is logged.
+- `supabase/tests/generation-logs-check.sql` (12 cases): browsers can't read or write the
+  log; rows at 00:30 and 23:30 Pacific time land on the right quota day; requests add up
+  across retries and backups; the top-users list leaves out signed-out generations.
+- `supabase/tests/admin-sets-check.sql` (15 cases): an admin can read another user's
+  private set and its cards but can't delete it directly; others can't call the admin
+  functions; deleting through `admin_delete_set()` removes the cards, assignment and
+  results and is logged. `sets-rls-check.sql` picks a non-admin as its "other user",
+  since admins can now read every set.
+- `supabase/tests/admin-users-check.sql` (16 cases): browsers can't read `audit_log` or call
+  the admin functions; a role change is logged; a non-admin is refused; the last admin
+  can't step down (also after two admins demote each other in turn).
+- `supabase/tests/attempts-rls-check.sql` (22 cases): students read only their own
+  attempts and can't write any; a teacher sees attempts from their class's assignment but
+  not private study, and stops seeing them when the student leaves or the set is
+  unassigned; plus the score and mode constraints (only flashcard sets can be typed or
+  matched) and the cascade when a set is deleted.
+- `supabase/tests/sets-editing-check.sql`: `replace_set_cards()` (13 cases), covering a
+  real edit, kept ids, each kind of refused save, that a refused save changes nothing,
+  that browsers can't call it, and that a rewritten card loses its quote while a moved
+  one keeps it (#21).
+- `supabase/tests/server-only-card-writes-check.sql` (10 cases, PR #84): browsers have no
+  write grants on cards and can't insert sets (column-level grants count too); anon can't
+  update or delete sets; signed-in users can update only a set's title and can still read
+  sets and cards and delete sets; an owner can rename their set but not change its study
+  type, add a card or edit one, and deleting the set takes its cards with it.
+- `supabase/tests/history-rls-check.sql` (13 cases): the server adds entries; `item_count`
+  counts the cards; empty or non-list cards and unknown study types are refused; owners
+  read and remove only their own entries and can't add or edit any; anon can't read;
+  deleting the saved set keeps the entry, as not saved.
+- `supabase/tests/study-types-check.sql` (13 cases, #68, #69): `true_false` and `mixed`
+  sets, attempts and generation logs are accepted and unknown study types refused; a true-or-false
+  attempt can't have a flashcard mode; explanations must be 1–300 characters; and
+  `replace_set_cards()` keeps, changes and clears explanations and is still
+  service-role only.
+- Every check file clears the simulated sign-in (`request.jwt.claims`) before acting as
+  `anon`; otherwise `auth.uid()` would still be the previous user.
+- AI changes were checked with mocked `fetch` (retries, fallbacks, validation) and a few
+  real API calls. `lib/gemini.test.ts` does this in the test suite with canned
+  responses, so it never uses the quota. Keep real calls to a minimum because of the
+  20-requests-a-day quota.
+
+## Known limitations
+
+- **Free-tier AI quota:** about 20 requests a day on `gemini-3.5-flash`, shared by
+  everyone. The backups help, but a paid tier is being discussed in #45.
+- **The daily limits (#63) count signed-out visitors per IP**, so someone switching
+  networks or using many IPs gets more, and so does someone with many Google accounts.
+  Failed guides that asked the AI have their own cap (#41). `/admin/usage`
+  shows how close today is to the quota. Logging started on 2026-10-23, so there's no
+  usage history before that.
+- **Legacy sets with no owner (28 of them) are publicly readable**, and nobody can edit
+  their cards.
+- **Text extraction:** a long document is sampled down to 30,000 characters, so the AI
+  only sees part of it (#38); PDFs are read in the browser and only their text is sent
+  (#44), so they can be up to 100 MB and 2,000 pages, but a scanned PDF over 4 MB can't be
+  read (the AI needs the pictures themselves, and they don't fit in a request), other files
+  are limited to 4 MB, and only PDF, Word,
+  PowerPoint and TXT files and JPG, PNG or WebP photos work so far, plus links to public
+  web pages; pages that need signing in, or that build their text with JavaScript, have
+  little text to read (HEIC photos from a
+  computer aren't accepted; phones convert them when uploading); notes can also be
+  pasted (#20, #70, #71, #72). Text
+  boxes in Word files may come out on their own lines.
+- **3 existing ESLint errors** (`react-hooks/set-state-in-effect`) in `app/page.tsx` and
+  `app/my-sets/page.tsx`.
+- **Topics come from English Wikipedia only**, from the best search match (#79). A topic
+  with no article, or a very narrow one, needs notes instead. The difficulty isn't saved
+  with the set.
+- **Read aloud uses the device's default voice** (#77), so Filipino text may be read with an
+  English accent. Choosing a voice and speed is listed in #77 for later.
+- **Flipped flashcard scores are self-reported** (*Got it* / *Missed it*). Typed (#66) and
+  matched (#67) answers and multiple choice are checked against the real answers, but a
+  teacher can't yet require a way of studying.
+- **Results list only students who are in the class now.** If a student leaves, their
+  results disappear from the teacher's view, and come back if they rejoin.
+- **Late is judged against the current due date**, so moving a due date relabels work
+  that was already done.
+- **The join-code guessing limit is per account** (10 wrong codes per 15 minutes).
+  Someone with many Google accounts could guess faster. With about 887 million possible
+  codes, that's still impractical, and #63 will add wider rate limits.
+- **Open dependency advisories** (`npm audit`, 2026-10-20):
+  - **`next` 16.3.3** (used by the live site) has published advisories. They include a
+    critical remote-code-execution bug in `next/og` and a high-severity SSRF in image
+    optimization. FlashForge doesn't use `next/og`, `next/image` or an `images`
+    config, so it's likely not exploitable, but the fix is to upgrade to **16.3.8**
+    (along with `eslint-config-next`). This hasn't been done yet.
+  - **Dev tools only:** `vitest` 3.2.7 still pulls in `tinypool` and `@vitest/mocker`
+    advisories, and `eslint-config-next` pulls in `fast-glob`, `micromatch` and
+    `braces` advisories. These only matter if someone controls our test or lint config,
+    and fixing them needs major-version upgrades.

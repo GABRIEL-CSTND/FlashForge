@@ -1,0 +1,26 @@
+// Shared by server and client code (lib/roles.ts is server-only).
+export type Role = 'student' | 'teacher' | 'admin';
+
+export const ROLES: readonly Role[] = ['student', 'teacher', 'admin'];
+
+// What a user may pick for themselves at sign-up (#52). Admin is never
+// self-selectable; admins are seeded or promoted by another admin.
+export const SELF_SELECTABLE_ROLES = ['student', 'teacher'] as const;
+export type SelfSelectableRole = (typeof SELF_SELECTABLE_ROLES)[number];
+
+export function isSelfSelectableRole(value: unknown): value is SelfSelectableRole {
+  return (SELF_SELECTABLE_ROLES as readonly unknown[]).includes(value);
+}
+
+// Roles that can use teacher features. Admins can do everything teachers can.
+export const TEACHER_ROLES: readonly Role[] = ['teacher', 'admin'];
+
+// Roles that can use the admin pages and routes (#60).
+export const ADMIN_ROLES: readonly Role[] = ['admin'];
+
+// Roles that join classes as members (#54).
+export const STUDENT_ROLES: readonly Role[] = ['student'];
+
+export function canUseTeacherTools(role: Role | null | undefined): boolean {
+  return role != null && TEACHER_ROLES.includes(role);
+}

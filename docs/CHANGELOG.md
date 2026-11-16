@@ -1,0 +1,562 @@
+# Changelog
+
+Notable changes to FlashForge, newest first. Issue and PR numbers refer to
+[GABRIEL-CSTND/FlashForge](https://github.com/GABRIEL-CSTND/FlashForge).
+
+## Desk redesign (on `dev`, not on the live site yet)
+
+The new look, built in 7 phases on the `UI_changes` branch and merged into `dev` on
+2026-11-11. It changes how the app looks, not how it works.
+
+### Changed
+- **Friendly error and 404 pages** (2026-11-14, #91): a page that breaks shows *Something
+  went wrong* on the desk sheet, with *Try again* and *Back to desk* (`app/error.tsx`), and an
+  address that isn't a page shows a 404 on the desk with links to make a deck or open My Sets
+  (`app/not-found.tsx`), instead of Next's plain ones. History's empty note now links to
+  *Make a deck*. *Try again* uses `retry()`, which loads the page again. Tests: 2 new.
+- **You watch the deck being made** (2026-11-12): while the AI writes the guide, the notes
+  sheet turns into a scene on the desk instead of a checklist under it. A pencil writes a
+  card line by line, the card goes onto a small deck, the deck is riffle shuffled and a fresh
+  card comes up, over and over until the cards arrive (`components/make/MakingDeck.tsx`).
+  - Under it: what's being made (*Making 10 medium flashcards*, from what, how long it can
+    take) and the same steps as before, which screen readers follow.
+  - The notes sheet, the deck being made and the new cards turn into one another like pages
+    (`components/desk/DeskTurn.tsx`). A failed guide turns back to the notes sheet, with the
+    problem on the Make card as before.
+  - It shows the work going on until the first cards arrive. Since #94 (below), flashcards
+    and multiple choice stream their cards, so the scene gives way to the spread early.
+  - With reduced motion it holds still: the card written, the pencil beside it.
+  - Tests: one for the scene in place of the notes sheet; 862 in all. Checked in Edge, frame
+    by frame through the loop, on a phone's width, with reduced motion, and on the real page
+    with the AI's answer made up in the browser (no quota used).
+- **Cards land as they're written** (2026-11-14, #94): for flashcards and multiple choice,
+  the API sends the first cards while the AI writes the rest, so the deck being made turns
+  into the spread as soon as they're written, and the cards land one at a time (*4 of 10
+  cards written…*). **Start studying** works straight away: new cards join the back of the
+  deck. Save waits for the whole deck.
+  - Gemini streams its answer, and `createItemScanner()` in `lib/gemini.ts` picks out each
+    card as soon as it's complete. Each is checked like the final deck, which keeps the same
+    cards in the same order.
+  - If the AI stops partway, the cards on the desk stay as a shorter deck. If it had to
+    start again, the study desk starts over with the new deck. Leaving a deck that's still
+    being written stops it.
+  - True or false, mixed quizzes and the backup model still arrive whole, as does a deck
+    brought back after signing in (#89's sign-in save, merged in).
+  - Tests: streaming in `lib/gemini.ts`, the study desks taking new cards, and the home page
+    (the first cards, a deck cut short, leaving mid-way).
+- **Pages turn instead of swapping** (2026-11-07): moving to another page fades the old one
+  out as it sinks a little, and the new one rises into place (React's `<ViewTransition>` in
+  `components/desk/PageTurn.tsx`, around every page). A deck picked up in the library still
+  morphs into the page it opens.
+  - Back and Forward ease the new page in too (React runs no view transition for them),
+    except after a phone's swipe back, which the browser already animates.
+  - What a page loads arrives instead of popping in: decks, folders and class trays one
+    after another, and pages that showed only "Loading…" all at once, the study desk
+    included. "Loading…" only shows when loading takes more than a moment.
+  - With reduced motion, pages and what they load only fade.
+  - Tests: 6 for `PageTurn`; 851 in all. Checked in Edge with the animations slowed down.
+- **The old look is gone** (phase 7, 2026-11-06): the admin pages (users, sets, AI usage),
+  the role chooser, the card editor and the last set and History screens use the desk's
+  colors, and the redesign's seven phases are done.
+  - Tailwind's gray, red and amber classes became the desk's `muted`, `pencil` and
+    `brass-ink` in 16 files. Green stays only as `green-800` for right answers and saved
+    states, which reads at 4.5:1 on paper.
+  - Emoji buttons are words now: *Save this study guide*, *Save to My Sets*, *Assign to
+    class*, *Delete this set*. The tests use the new names.
+  - A class page's loading and not-found states lie on the desk, so the paper sheet doesn't
+    flash in first.
+  - What's next: the team signs off on the printed desk, and `UI_changes` goes to `dev`.
+  - Tests: 845 in all.
+- **The teacher pages are on the desk** (phase 6, 2026-11-06), following the canvas's
+  `Desk-Printed-Teacher`.
+  - **Your classes** (was *Teacher dashboard*): each class is a kraft folder with its name,
+    student count and join code on a brass plate; a new class is named in the empty folder at
+    the end.
+  - **A class**: the join code on a paper plate (*Copy code*, *Get a new code*), the assigned
+    sets as decks tagged with their due date or *Overdue*, and the roster on a sheet of paper.
+    *📊 Student results* is now **Open the grade book**.
+  - **The grade book** (was *Student results*) is on a sheet of paper; **An assignment**'s page
+    lays its cards out hardest first, each with its % wrong and a red bar.
+  - The "Assign to class" and student results dialogs moved onto the paper colors.
+  - Not yet: overdue counts on the folders (the classes API doesn't return them) and assigning
+    from the class page; sets are still assigned from the set page.
+  - Tests: the class and assignment page tests use the new names: 845 in all.
+- **The library is on the desk** (phase 5, 2026-11-06): My Sets, History and My Classes lay
+  their sets out as decks on the leather, each with a paper tag, as in the canvas's
+  `Desk-Printed-Library`.
+  - **My Sets** tags each deck with its best score (*Best 9 of 10*) or *Not studied yet*,
+    and ends with a **New deck** outline. Delete is a word under the deck instead of 🗑.
+  - **History** tags each guide with its day and *saved* or *not saved*, and an unsaved one
+    can be saved with **Save to My Sets** right there. Remove replaces 🗑 (same name for
+    screen readers: *Remove <title> from history*).
+  - **My Classes** puts each class in a tray with its name and teacher on a label, and its
+    assignments as decks tagged with the due date, *Overdue*, or *Done · best 8/10*. Join a
+    class is a paper card beside the trays. The "+ New set" and "My Sets" links are gone:
+    the card box has the tabs.
+  - Picking up a deck morphs it into the set or guide it opens (React `<ViewTransition>`,
+    where the browser supports it), through a new *Opening the deck…* state on `/sets/[id]`
+    and `/history/[id]`.
+  - New in `components/desk/`: `LibraryDesk`, `LibraryDeck`, `PaperTag`, `DeckMorph`,
+    `OpeningDeck`; helpers in `lib/library.ts`. The old lint error in `app/my-sets/page.tsx`
+    is fixed, so lint shows 2 known errors now.
+  - Tests: a new My Sets page test, saving from History, the library helpers, and the
+    class and History tests updated for the decks: 845 in all.
+- **Quizzes are taken on the desk** (phase 4, 2026-11-05): multiple choice, true or
+  false and mixed quizzes use the same desk as flashcards: the deck on the left, the
+  question card in the middle, and **Right** and **Wrong** piles on the right (trays on a
+  phone).
+  - The answers are paper slips under the card: four lettered slips (A–D) for multiple
+    choice, True and False for a statement. Picking one shows the verdict on the card
+    (multiple choice now gets *✓ Correct* or *✗ Not quite. The answer is …* too), the
+    correction of a false statement and the quote. The right slip lifts with a brass
+    edge and a wrong pick is struck through.
+  - **Next question** (*Next statement* in true or false) puts the card on its pile, and
+    the last one says **See your score**. *← Prev* is gone, as in the flashcard desk.
+  - A mixed quiz opens each part with its own card (*Part II*, **Begin Part II**), and
+    Part III is typed on the card like the flashcards' Type mode.
+  - At the end, **Try the wrong ones again** deals the Wrong pile again for practice (not
+    saved), and **Start over** (was *Try Again*) starts the quiz over and is saved as
+    before.
+  - Quizzes get the pencil (*Edit cards*) and the brass Read aloud and Auto buttons; Auto
+    reads a part's card too.
+  - `components/study/QuizViewer.tsx` is replaced by `QuizDesk.tsx` and `AnswerSlips.tsx`.
+    The line to type on (`TypedForm.tsx`), the pencil (`components/desk/Pencil.tsx`), the
+    line above the desk and the text sizes are shared with the flashcard desk now.
+  - Tests: the quiz tests use the new button names, plus tests for the slips, the piles,
+    the practice round, focus and reading a part's card: 832 in all.
+- **Making a deck happens on the desk** (phase 3, 2026-11-05): one notes sheet takes a
+  file (dropped or chosen), notes, a link or a topic, and says what it found ("Looks like a
+  topic"), with *Use it as notes* when the guess is wrong. A web address works without
+  https://. The "Make me 10 medium flashcards" card replaces the option buttons: each word
+  opens paper slips. *Generate Study Guide* is now **Make my deck**. The new cards land one
+  by one in a spread, and **Start studying** gathers them onto the study desk. The steps
+  while it works are a paper tag. Tests: 825 in all.
+- **Flashcards are studied on the desk** (phase 2, 2026-11-05): the deck on the left, the
+  card in the middle and the Got it / Missed it piles on the right. On a phone the deck
+  peeks out above the card and the piles are trays under it.
+  - Click the card to turn it over, then click a pile or press → (Got it) or ← (Missed
+    it). Every card gets sorted, so *← Prev*, *Next →* and "not marked" are gone.
+  - When the deck is done, a note shows the score, and clicking the Missed it pile deals
+    those cards again for practice (not saved). *Review Again* starts the whole deck
+    over and is saved as before.
+  - **Type** writes the answer on the card. *Check* turns it over with the verdict, and
+    *Next card* puts it on the pile the verdict says.
+  - **Match** lays out rounds of up to 5 as paper slips: pick a clue and then its term,
+    or the other way round. A right pair gets a brass edge and shows its quote; a wrong
+    pick flashes red and that clue counts as missed. The first term picked for each clue
+    is what's saved, so scores work as before. The dropdowns and *Check answers* are gone.
+  - Brass buttons for Flip, Type, Match and Read aloud. The pencil on the desk opens the
+    card editor, in place of the *✏️ Edit cards* link (quizzes show an *Edit cards* link).
+  - Multiple choice, true or false and mixed quizzes look as they did until phase 4.
+  - `components/StudyViewer.tsx` was split into `components/study/*`, keeping its
+    scoring and Read aloud code; new `PaperCard` and `useDeskLayout` in `components/desk/`.
+  - Tests: the flashcard tests were rewritten for the desk, plus tests for the card and
+    the desk layout at four widths: 815 tests in all.
+- **Every page sits on a desk** (phase 1, 2026-11-05): a green leather desk with the page
+  on a sheet of cream paper, Instrument Sans for text, Fraunces for titles, and brass as
+  the one accent color.
+  - The header links moved into a **card box** at the top left: its brass *FlashForge*
+    button starts a new guide, and a tab sticks up for each section you can open (My
+    Sets, History, then My Classes, Classes or Admin, by role). The open section's tab
+    stands tallest.
+  - The account moved onto a **library card** at the top right: your name, role and
+    Sign out, or Sign in with Google.
+  - Main buttons are brass with dark text. `.btn-primary` itself turned brass, so every
+    main button changed at once (the plan had a separate `.btn-brass` class). Links are
+    a darker brass that's readable on paper.
+  - Choices filled with the accent color (Upload a file / Paste text / Web link / Topic,
+    and Flip / Type / Match) have dark text, since white on brass was hard to read.
+  - The leather and paper textures are small tiles made by `scripts/make-textures.cjs`.
+- **No dark mode for now:** the paper always stays light.
+- Lint skips the Claude app's worktrees (`.claude/`), as the tests already did, and
+  allows `require()` in Node scripts.
+- The header tests (`app/upload-header.test.tsx`) became tests for the card box and the
+  library card (`components/desk/`): 805 tests in all.
+
+## Unreleased (on `dev`, not on the live site yet)
+
+Everything here was done between 2026-10-20 and 2026-10-24. It reaches the live site when `dev` is merged
+into `main`. There is only one Supabase database, so changes marked **(live)** are
+already applied there.
+
+### Security
+- **Browsers can't write cards, even if a policy slips later (live)** (PR #84 and its review):
+  RLS already stopped browsers from adding sets or changing cards, but the tables still
+  granted them insert, update and delete. Those grants are gone, so the public key can't
+  write cards or add sets at all. Signed-in users can still rename and delete their own
+  sets, but renaming is now the only change they can make: before, an owner could change
+  a set's study type straight through the database, leaving, say, a "multiple choice" set
+  whose cards have no choices. Unused truncate, trigger and references grants were
+  removed too. (Migrations `20261112000100_server_only_card_writes.sql` and
+  `20261112000200_tighten_set_grants.sql`, checked by
+  `supabase/tests/server-only-card-writes-check.sql`.)
+- **Failed guides can't be repeated all day** (#41): a guide that failed after the AI was
+  asked didn't count toward the daily limit, so someone could keep sending, say, a photo
+  with nothing to study in it, and about 20 tries used up the AI quota everyone shares.
+  Failed guides that asked the AI now have their own daily cap, the same size as the
+  limit; past it, new guides are paused until the quota resets, with a message saying
+  why. Failures before the AI is asked still don't count. (Migration
+  `20261031000100_limit_failed_guides.sql`.)
+- Web links (#74) are fetched with protections against server-side request forgery:
+  only http/https on ports 80 and 443, every resolved address must be public (checked
+  as the connection is made, and again after each redirect), and pages are capped at
+  2 MB and 10 seconds. The page text is read without patterns that a hostile page could
+  make slow.
+- Saving a generated guide now checks the study type and every card with the card
+  editor's rules, so a set can't be saved in a shape the study screen can't show, and an
+  unknown study type is refused by the database too (#68).
+- Admins can now read every study set (to check reported or broken content), but still
+  can't edit or delete other people's sets except through the logged admin delete
+  (#61). All 8 database check files pass (117 cases).
+- Role changes by admins happen in one locked database transaction that refuses to
+  remove the last admin, and every change is written to a new server-only `audit_log`
+  (#60, 16 of 16 database checks pass).
+- Study results can only be written by the server, which scores them from the real cards
+  (#57). Teachers can read a student's results only for their own class's assignments,
+  and never private study. All 6 database check files pass (86 cases).
+- Card access now always follows set access (#56): the cards policy checks the set
+  through the set's own RLS, so the two can't drift apart. All 5 database check files pass
+  (69 cases), and they now reset the simulated sign-in before acting as anonymous.
+- **Closed two database holes (live)** (#46). Anyone with the public anon key could read
+  every flashcard, including 110 cards in private sets, and anyone could insert sets
+  with any owner. Both policies were removed. The public API now returns only legacy
+  ownerless cards, and anonymous inserts are rejected.
+- **Database schema and RLS policies are now in the repo** (`supabase/migrations/`),
+  with SQL checks in `supabase/tests/` that simulate users in a rolled-back
+  transaction (#46).
+- The Gemini API key is sent in a request header instead of the URL (#40).
+- Vitest updated 3.2.4 → 3.2.7 (fixes a critical advisory for the Vitest UI server).
+  Advisories that are still open are listed under *Known limitations* in
+  `docs/ARCHITECTURE.md`.
+
+### Added
+- **Privacy page and deleting your account** (2026-11-14, #88, PR #96): a *Privacy* page at
+  `/privacy`, linked from the library card, says what's kept, who can see it (classmates,
+  teachers, admins, and Google on the Gemini free tier) and how long. Signed in, *Delete my
+  account and data* deletes the account through Supabase Auth, and the database removes
+  everything tied to it in the same step (`DELETE /api/profile/data`, `lib/user-data.ts`).
+  - A teacher's account takes their classes and assigned sets along, and so their students'
+    scores on those sets. Records of AI use and admin actions stay, without the person.
+  - The last admin can't delete their account. A failed delete is reported as one: the
+    account isn't left alive behind a "deleted" message.
+  - Tests: the delete route, `deleteUserData()` and the page, including the facts its text
+    must keep right.
+- **User Guide** (#25, PR #93): a *Guide* page at `/guide`, reached from a new *Guide* tab
+  in the card box (shown to everyone, signed in or not) and from the home page's tip note.
+  It covers making a deck (the notes sheet, the Make card, watching the deck being made,
+  the spread), each kind of source, the study formats and modes, the library and History,
+  classes for teachers and students, and an FAQ. From the review: facts the app doesn't
+  back up were corrected (the join code format, when the daily limit resets, what Auto
+  read-aloud does, keyboard keys, typo tolerance, which cards have quotes, no spaced
+  repetition), and the page is a static server component. Tests: 10 for the page, 6 for
+  the card box; 872 in all.
+- **History (live)**: signed in, every study guide you make is kept on a new **History** page
+  (linked next to My Sets), saved or not: newest first, with its type, number of
+  questions, date and a *Saved* badge. Open one to study it again, or save it to My Sets
+  if you didn't; 🗑 removes it from History (a saved set stays in My Sets). Leaving a new
+  guide no longer warns that it will be lost when it's in History. New `guide_history`
+  table (migration `20261029000200_guide_history.sql`): only its owner can read or remove
+  an entry, and only the server adds them. Guides made before this, or while signed out,
+  aren't in History.
+- **Large PDFs** (#44): a big lecture PDF no longer fails or takes ages to send. The
+  browser now reads the PDF itself and sends only its text, so a 12 MB, 300-page PDF goes
+  up as about 32 KB and gets past the 4 MB request limit; PDFs can now be up to 100 MB and
+  2,000 pages. While it reads, the upload page shows how far it has got (*Reading your PDF
+  on this device (12 of 140 pages)*). The guide and its page numbers come out exactly as
+  they do for a PDF sent whole. A scanned PDF (pictures of pages) is still sent as a file,
+  so a scan over 4 MB gets a plain message saying why; a password-protected PDF and one with
+  too many pages get their own. Other files keep the 4 MB limit.
+- **Whole long documents** (#38): a PDF or text file longer than the 30,000 characters the
+  AI takes is no longer cut off after roughly its first 10 pages. Pages, or paragraphs,
+  from across the whole document are sent instead, always with the first and the last,
+  and each keeps its real page or line number for the quotes under the cards. Wherever
+  something was left out, the AI sees a "part of the document left out" line, so a
+  sentence cut off at the end of one page isn't read as going on in a later one, and no
+  quote is accepted across that gap.
+- **Quotes under cards** (#21): once a card is answered, it shows the sentence of the notes it
+  was made from, and the page of a PDF or the line of a text file or pasted notes ("From
+  the document · Page 3"). The AI is asked for the sentence, and the app only shows it if
+  it's really in the notes. Saved with the set. Not for photos or scanned PDFs, which have
+  no text to check against.
+- **Topics and difficulty** (#79): with no notes, students can type a topic ("photosynthesis",
+  "the OSI model"); the app looks it up on Wikipedia, makes the guide from the best
+  article (skipping "may refer to" pages) and credits it with a link. While it works,
+  the progress steps say it's looking the topic up on Wikipedia. Every guide can
+  also be **Easy**, **Medium** or **Hard**, for any kind of guide and any source. Still
+  one AI request per guide.
+- **Read aloud** (#77): a **🔊 Read aloud** button on the study screen reads the card that's
+  showing (question and choices, the answer once flipped or answered, the clues in
+  matching), and **Auto** reads each card as it appears. Uses the browser's built-in voice,
+  so it's free and needs no AI; it's hidden where a browser can't speak.
+- **Progress while a study guide is being made** (#42): the upload page now shows each step of
+  the wait: uploading, reading, then writing with the AI, with what's done, what's under
+  way and a seconds counter, so the wait feels shorter and it's clear the app hasn't
+  frozen. If the AI needs another try, or a slower backup takes over, it says so under the
+  writing step. The steps are real: the server reports each stage as it starts (as a
+  stream of one JSON event per line, only when the page asks for it), and answers exactly
+  as before otherwise, so the daily limits, errors and the usage log are unchanged. If the
+  page is closed while the AI is working, the usage log still waits for the real outcome,
+  so abandoned requests count toward the daily limit like finished ones.
+- **Web links** (#74): paste a link to an article or other public page, and the server
+  fetches it and keeps its main text (no menus, ads or footers). Pages that need signing in
+  get a clear message. With this, all of more file types (#20) is done.
+- **Scanned PDFs** (#73): a PDF made of scanned pages has little or no text for the app to
+  read, so it used to fail with "Could not extract enough readable text". Now such a PDF
+  (under 100 characters of text) goes to the AI itself, which reads the pages, still in
+  one request. PDFs with text are read as before.
+- **Photos of notes** (#72): upload a JPG, PNG or WebP photo of notes, a whiteboard or a
+  textbook page. The AI reads the photo itself, still in one request. Big phone photos are
+  shrunk in the browser first (to 1,600 pixels), and a photo with nothing readable gets a
+  clear message instead of an error. In a test, a photo of handwritten-style cell biology
+  notes gave 5 good flashcards, and the Gemma backup could read it too.
+- **Word and PowerPoint files** (#71): the upload page takes `.docx` and `.pptx` (slides in
+  order, then speaker notes) besides PDF and TXT. Old `.doc` and `.ppt` files get a clear
+  "save it as .docx/.pptx or PDF first", and files over 4 MB are stopped before upload
+  with their size instead of failing on the hosting limit. Uses the small
+  [fflate](https://github.com/101arrowz/fflate) library (0.8.3) to unzip them, with limits
+  against zip bombs.
+- **Paste text** (#70): the upload page has an *Upload a file / Paste text* switch, so notes
+  from Google Docs, a website or a chat can be used without making a file. Up to 30,000
+  characters (what the AI reads from a file), with a counter and a clear message when the
+  text is too short or too long. The guide is titled by the text's first line. Part of
+  more file types (#20).
+- **Mixed quiz** (#69, live database): a study guide laid out like a school exam, made with
+  one AI request: Part I multiple choice (about 40%), Part II true or false (30%) and
+  Part III identification (30%, typed and checked). Studied part by part, with each
+  part's score on the finish screen; the editor adds cards of any of the three kinds.
+  Together with #65–#68 this completes the study types plan (#64).
+- **True or false** (#68, live database): a new kind of study guide. The AI writes
+  statements from the notes, about half true and half false; each false one changes one
+  key detail and comes with the corrected fact, shown after answering. Scored like
+  multiple choice, editable (statement, True/False, optional explanation), and works with
+  assignments and results. The upload page now says what each kind of guide is. New
+  `flashcards.explanation` column.
+- **Matching** (#67, live database): a third way to study flashcard sets. The set is split
+  into even rounds of up to 5; students pick the term for each clue from the round's
+  shuffled terms (each used once), then check the round. Scored on the server like other
+  attempts, shown as *Matched* to teachers, and wrong matches count on the most-missed
+  page.
+- **Type the answer** (#66, live database): flashcard sets have a **Flip / Type** switch.
+  In Type, students type each term and the app checks it right away: capitals, accents,
+  spaces and punctuation don't matter, and one small typo is forgiven on longer words
+  (never on numbers or short terms). The server runs the same check for the saved score,
+  so typed scores can't be self-marked. Teachers see which attempts were typed or
+  self-marked, and the most-missed page shows the most common wrong typed answer. New
+  `attempts.mode` column.
+- **Choose how many questions** (#65): 5, 10, 15, 20 or 30 on the upload page (10 by
+  default), for every kind of study guide. It's still one AI request per guide, so the
+  daily limits don't change. Bigger guides give the AI a little more time, and the
+  "slower backup" notice waits a little longer for them. Part of the new study types plan
+  (#64).
+- **User roles (live)** (#51): `profiles` table (`student` / `teacher` / `admin`), a
+  sign-up trigger that creates a student profile, and the first admin
+  (castanedag438@gmail.com). Users can't change their own role. `lib/roles.ts` has
+  `requireRole()` for teacher and admin routes (401/403).
+- **Choose student or teacher at sign-up** (#52). Signed-in users who haven't chosen
+  (including the 2 existing students) see a one-time screen. Teachers land on the
+  `/teacher` dashboard, and the upload page links to it. `POST /api/profile/role`
+  allows each user exactly one choice, never `admin`.
+- **Classes with join codes (live database)** (#53):
+  - Teachers create classes on `/teacher` and each class gets a code like `K7M-2QX`.
+  - A class page shows the code (copy, or get a new one; the old one stops working) and
+    the roster (names and emails), and lets the teacher rename the class, remove students
+    and delete it.
+  - Teachers can only see and change their own classes, with up to 50 each.
+  - New tables `classes` and `class_members`, with RLS and a `class_roster()` function
+    (16 of 16 database checks pass).
+- **Assign sets to classes** (#56, live database):
+  - On a set they own, teachers pick one or more of their classes and an optional due
+    date (**📌 Assign to class**).
+  - The class page lists assigned sets with due dates and an Overdue badge, and lets the
+    teacher change the due date or unassign.
+  - Students see each class's assigned sets on **My classes**, in their own time zone, and
+    can open them.
+  - New `assignments` table. Students can read a set and its cards only while it's
+    assigned to a class they're in.
+- **Daily generation limits** (#63, live database): signed out 2, students 5, teachers 15
+  and admins unlimited per day (Pacific time) by default. Admins change them on
+  `/admin/usage`, and changes apply from the next request. Over the limit the upload
+  page says *"You've reached today's limit of N study guides."* and when more can be made.
+  Parallel requests can't slip past it, and signed-out visitors are counted by a hash of
+  their IP (never stored as is).
+- **AI usage dashboard** (#62, live database): every generation is logged (after the
+  response is sent, so it's never slower) with the model that answered and the requests
+  made to each model. `/admin/usage` shows today's requests per model against the main
+  model's ~20-a-day free quota, the last 14 days (guides, failures, average wait, backups
+  used) and the top users. Days follow Pacific time, when the quota resets.
+- **Admin: study sets** (#61, live database): `/admin/sets` lists every set with its
+  owner, cards and how many classes it's assigned to, with search. Admins can open any set
+  and delete it after a confirmation that warns when classes will lose it and students'
+  scores on it will be deleted. Deletions are logged in `audit_log`.
+- **Admin: users and roles** (#60, live database): admins get an **Admin** link and an
+  `/admin/users` page to find any user (by email or name) and make them a student, teacher
+  or admin, with a confirmation. The last admin can't be demoted, and each change is
+  logged with who, whom, from → to and when.
+- **Most-missed questions** (#59): from the results table, each assignment opens its
+  questions hardest first, with the % of students who got each wrong (by their latest
+  attempt) and, for multiple choice, the wrong answer picked most often. Edited sets are
+  handled by card id: deleted cards drop out and new ones show "No answers yet".
+- **Student results for teachers** (#58):
+  - Each class has a **📊 Student results** page: every student × assignment with the
+    best score, number of attempts, and Late or Not started (never shown as 0%), plus
+    each assignment's class average.
+  - Selecting a student lists all of their attempts on the class's assignments.
+  - **Download CSV** for a grade book (safe against spreadsheet formulas, and Excel keeps
+    accents).
+  - Teachers see only their own class, its current students, and attempts made from its
+    assignments, never private study.
+- **Saved study results** (#57, live database):
+  - Finished study sessions are saved with their score for signed-in users. Flashcards
+    get **✓ Got it / ✗ Missed it** buttons after flipping (self-marking; flashcard scoring
+    was removed in September), and multiple choice is scored as before.
+  - The server works out multiple-choice scores from the real answers, so they can't be
+    faked (flashcard marks are the student's own), and a retried save never counts twice.
+  - The finish screen says whether the teacher can see the result (opened from a class
+    assignment) or only the student (private study), and lists recent scores.
+  - My classes marks finished assignments **Done · best 8/10** instead of Overdue.
+  - New `attempts` table: students read their own; teachers read their students' results
+    on their own class's assignments only (17 of 17 database checks pass).
+- **Card editor** (#55, live database): the owner of a set can edit questions and
+  answers, delete, add (up to 50) and reorder cards, and for multiple choice edit the 4
+  choices and pick the correct one. Everything saves at once in one transaction
+  (`replace_set_cards()`), and edited cards keep their ids. The editor and the server use
+  the same rules (`lib/card-rules.ts`), and AI generation now uses the same choice-matching
+  rule.
+- **Students join classes with a code** (#54, live database):
+  - Students get a **My classes** page (`/classes`, linked in the header) to join with a
+    code, see their classes and teachers, and leave a class.
+  - Before joining, they're told their teacher will see their name, email and scores.
+  - Joining twice changes nothing. Codes are checked on the server, and after 10 wrong
+    codes in 15 minutes a student has to wait (new `class_join_failures` table, server-only).
+  - Teachers' class pages now tell them where students enter the code.
+- **Gemma 4 as a last-resort AI backup** (PR #49): when both Gemini models are busy or
+  out of quota, requests fall through to `gemma-4-26b-a4b-it`, and they go back to
+  Gemini automatically once its quota resets. After 15 seconds the page tells users a
+  slower backup may be in use.
+- **Automated tests** (`npm test`, 748 tests):
+  - Vitest (#51).
+  - React Testing Library and jsdom for component tests (#52).
+  - `test-utils/fake-supabase.ts`, an in-memory Supabase client for route tests (#53),
+    with time-window filters for the join rate limit (#54).
+- Plan for teacher and admin features, with a 6-week schedule: parent issue #50 and
+  sub-issues #51–#63.
+
+### Changed
+- **Short answers only:** AI-generated cards whose answer is too long are now filtered
+  out, so every card stays short and easy to identify. The prompt already asked for
+  answers of 1 to 4 words, but the code still let flashcard answers run to 8 words and
+  multiple-choice choices to 80 characters with no word limit. Now every answer (flashcard
+  and identification answers, and every multiple-choice choice, right or wrong) must be
+  at most 6 words and 60 characters, or the whole card is dropped. The multiple-choice
+  prompts now ask for 1-to-4-word choices too, so fewer cards are lost. Questions and
+  true-or-false statements are unchanged.
+- **Cleaner look, UI polish phase 1:** the Geist font (the starter template's Arial was
+  still forced), soft gray borders instead of black outlines (white in dark mode), a
+  FlashForge icon instead of the starter template's, and a browser title per page
+  ("My Sets · FlashForge").
+- **One set of buttons and one link color, UI polish phase 2:** about nine hand-written
+  button styles became `.btn-primary` / `.btn-secondary` (23 buttons). Links use one blue
+  that stays readable in dark mode. Selected options and hover outlines use the accent
+  color, which is now a single variable, so the team's brand color is a one-line change.
+  Fixed a few colors that were hard to read in dark mode.
+- `npm test` only runs this project's own tests: it skips the Claude app's worktrees
+  in `.claude/` and `node_modules` at any depth (before, a side session's copy added 96
+  false failures).
+- **Identification-style flashcards** (#35): the question is a clue or definition, and
+  the answer is a 1–4 word term. In tests on three sample texts, 30 of 30 answers were
+  4 words or fewer.
+- **Faster generation** (#39): Gemini's thinking is set to `low`; successful calls took
+  about 1.4–12 seconds.
+- **Retries and fallbacks** (#40): timeouts, retries with backoff, a fallback to
+  `gemini-3.5-flash-lite`, and friendly error messages instead of raw API errors.
+  Unreadable files get a clear message.
+- **Multiple-choice checks** (#37): the server checks there are exactly 4 options and
+  exactly one correct answer, and shuffles the options so the correct answer isn't
+  always in the same spot.
+- Generation timeout raised to 90 seconds to make room for the Gemma backup.
+- New README, plus `docs/ARCHITECTURE.md` and this changelog (#47).
+
+### Fixed
+- **Lint passes with no errors** (#89, 2026-11-12): the last 2 errors were in the upload
+  page's "sign in to save" flow, two effects that set state as soon as they ran. A guide
+  made while signed out is now read back from `sessionStorage` with
+  `useSyncExternalStore` (`lib/pending-guide.ts`), and the automatic save after signing in
+  remembers that it ran in a ref. It works as before, with two small fixes: if the
+  automatic save fails, the guide is kept instead of being lost on the next reload, and
+  leftover data that isn't a guide is ignored instead of crashing the page. Tests: 6 new
+  in `app/upload-sign-in-save.test.tsx` (the flow had none); 861 in all.
+- **Guides came out a card or two short** (2026-11-12): a 10-card guide made from a
+  subnetting PDF had 8 or 9 cards. The check for garbled AI output took binary numbers
+  ("11111111", "11111111.11111111.11111111.11000000") for a stutter and dropped those
+  cards, along with hyphenated terms of 4 parts like "state-of-the-art". Numbers and
+  4-part terms now pass; real garbage ("hahahaha", "status-code-404-not-found", HTML) is
+  still dropped. The AI is also asked for more spare cards (12 for 10 flashcards, 13 for
+  10 multiple choice, up from 11 and 12), so a dropped card or two no longer shortens the
+  guide. Tests: 4 new in `lib/gemini.test.ts`; 855 in all.
+- On phones, the links at the top of the upload page (My Classes, My Sets, History, the
+  email and Sign out) ran off the screen in one line. They now wrap onto a second line.
+- **Quotes under cards** (#21), from the review of PR #80:
+  - A quote that isn't in the notes word for word is cut down to its longest real part.
+    It used to be stitched together from pieces found anywhere in the notes, so a false
+    statement could show as a "quote" ("The mitochondria is the organelle that … stores
+    … DNA."). Pieces are never joined now.
+  - The page or line is found by whole words, so a sentence on page 2 isn't reported as
+    page 1 because a longer word there contains it.
+  - The label says where the guide came from (*From the document*, *From the notes*,
+    *From the web page* or *From Wikipedia*) instead of "From your document", which was
+    wrong for links, topics and other people's sets.
+  - Rewriting a card's question or answer drops its quote, which may no longer back it
+    (`replace_set_cards()`, migration `20261029000100_clear_edited_quotes.sql`).
+- **Whole long documents** (#38), from the review of PR #81: the pages kept were
+  sometimes fewer than would fit (a binary search that assumed more pages always take
+  more room); every count is tried now. A typed topic's guide is no longer told to cover
+  the whole article, so it stays on the topic.
+- On phones, a teacher's class page could be wider than the screen when a set had a
+  long title, cutting off the Rename, Unassign and Remove buttons. Long titles now
+  shorten with "…" instead.
+- Date pickers, checkboxes and other built-in controls were hard to see in dark mode
+  (e.g. a dark calendar icon on a dark background). The page now sets `color-scheme`.
+- On phones, My Sets, My classes and the Teacher dashboard could be wider than the screen
+  when a set title or class name was long, cutting off buttons such as + New set, Create
+  class, Join, Leave and 🗑. Long names now shorten with "…" instead.
+- **The Exit button did nothing on a freshly generated study guide.** It now returns
+  to the upload page and asks first if the guide hasn't been saved.
+- Network failures while generating now show an error instead of leaving the button
+  stuck on "Generating…".
+- The browser tab title said "Create Next App" (#47).
+
+### Removed
+- `components/FileUpload.tsx`, which was unused (#47).
+
+### Findings
+- The free Gemini tier allows only about **20 requests a day** on the main model, for
+  everyone combined (details in #45).
+- Gemma 4 isn't a drop-in replacement: it rejects Gemini's structured output and
+  thinking settings, its fast mode produces garbage, and it answered only 1 of 4 test
+  requests.
+
+## 2026-10-04
+- Signed-in owners can rename a saved study guide (PR #34, #19).
+
+## 2026-09-13
+- The flashcard *Finish* button shows a completion screen instead of doing nothing
+  (PR #4).
+
+## 2026-09-05
+- Saving is explicit and requires sign-in (#15, #18); owners can delete saved sets (#17).
+
+## 2026-09-03
+- Flashcard saving moved to the server with the service-role key, and overly
+  permissive anon RLS policies were tightened.
+
+## 2026-09-02
+- Google sign-in (#13), the My Sets dashboard (#16), and an Exit button during study
+  (#12). Flashcard scoring was removed.
+
+## 2026-08-30
+- Study type selector: flashcards or multiple choice (#8, #9), immediate feedback and a
+  score summary for multiple choice (#10, #11), capped at 10 questions.
+
+## 2026-08-29
+- Project created with Next.js, Supabase, and Vercel (#28). Upload UI for PDF/TXT
+  (#29), text extraction (#5), AI generation (#6), the Supabase schema, and the set page.
