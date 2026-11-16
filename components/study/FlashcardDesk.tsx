@@ -55,6 +55,8 @@ export interface FlashcardDeskProps {
   // How many cards the deck will have, while the AI is still writing it, so the
   // count can read "4 of 10" and go up as each card is written.
   expected?: number;
+  // Option to allow going back to previous cards (#101, #102). Defaults to true.
+  allowBack?: boolean;
 }
 
 // Flashcards on the desk (desk redesign, phase 2): the deck on the left, the
@@ -75,6 +77,7 @@ export default function FlashcardDesk({
   quoteLabel = 'From the document',
   arrive = false,
   expected,
+  allowBack = true,
 }: FlashcardDeskProps) {
   const count = cards.length;
   const [mode, setMode] = useState<FlashcardMode>('flip');
@@ -217,13 +220,59 @@ export default function FlashcardDesk({
     land([{ index: current, pile, answer: { result: pile } }], deck.pos + 1);
   };
 
-  // ← and → sort the card while the card or a pile has focus.
-  const onDeskKey = (e: React.KeyboardEvent) => {
-    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-    if (!finished && mode !== 'flip') return;
-    e.preventDefault();
-    sortTo(e.key === 'ArrowRight' ? 'got' : 'missed');
+  const canGoBack = allowBack && deck.pos > 0 && !finished && mode !== 'match';
+
+  const goBack = () => {
+    if (!canGoBack) return;
+    const prevPos = deck.pos - 1;
+    const prevIndex = deck.order[prevPos];
+    const { [prevIndex]: _removedPile, ...nextPile } = deck.pile;
+    const nextLanded = deck.landed.filter((i) => i !== prevIndex);
+    setDeck({
+      ...deck,
+      pos: prevPos,
+      pile: nextPile,
+      landed: nextLanded,
+    });
+    setFlipped(false);
+    setBackSeen(false);
+    setChecked(null);
+    setFlying(null);
+    lift();
+    if (!deck.practice) {
+      const { [prevIndex]: _removedAnswer, ...nextAnswers } = answers;
+      setAnswers(nextAnswers);
+    }
   };
+
+  // ← and → sort the card while the card or a pile has focus.
+  // Backspace, ↑, or P steps back to the previous card.
+  const onDeskKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      if (!finished && mode !== 'flip') return;
+      e.preventDefault();
+      sortTo(e.key === 'ArrowRight' ? 'got' : 'missed');
+    } else if (e.key === 'ArrowUp' || e.key === 'p' || e.key === 'P' || e.key === 'Backspace') {
+      if (canGoBack) {
+        e.preventDefault();
+        goBack();
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'ArrowUp' || e.key === 'p' || e.key === 'P' || e.key === 'Backspace') {
+        if (canGoBack) {
+          e.preventDefault();
+          goBack();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canGoBack, deck, answers]);
 
   const checkTyped = (typed: string | null) => {
     if (current === undefined || checked) return;
@@ -271,13 +320,13 @@ export default function FlashcardDesk({
   // slip (hidden), or in the deck.
   const placed = slots ?? {};
   const place = (i: number): { spot: Spot | null; z: number; shown: boolean; turned: boolean } => {
+    if (i === current) return { spot: middleSpot(placed, lifted), z: 300, shown: true, turned: flipped };
     const pile = deck.pile[i];
     if (pile) {
       const list = pile === 'got' ? gotList : missedList;
       const j = list.indexOf(i);
       return { spot: pileSpot(kind, placed, size, pile, j), z: 200 + j, shown: list.length - j <= MAX_LAYERS, turned: true };
     }
-    if (i === current) return { spot: middleSpot(placed, lifted), z: 300, shown: true, turned: flipped };
     if (round.includes(i)) return { spot: deckSpot(kind, placed, size, 0), z: 150, shown: false, turned: false };
     const top = roundIndex >= 0 ? rounds[roundIndex][1] : deck.pos + (current === undefined ? 0 : 1);
     const depth = Math.max(0, deck.order.indexOf(i) - top);
@@ -304,7 +353,7 @@ export default function FlashcardDesk({
         </p>
       </div>
       {full && mode === 'flip' && <p className="text-[13px] text-muted">{kind === 'phone' ? 'Tap the card to flip it' : 'Click the card to flip it'}</p>}
-      {full && mode === 'type' && <TypedForm key={`${run}-${i}`} onCheck={checkTyped} />}
+      {full && mode === 'type' && <TypedForm key={`${run}-${deck.pos}-${i}`} onCheck={checkTyped} />}
     </div>
   );
 
@@ -508,7 +557,16 @@ export default function FlashcardDesk({
   const notes = saveSlot ? <div className="paper paper-shadow rounded px-4 py-3 text-sm text-ink">{saveSlot}</div> : null;
   const pencil = onEdit ? <Pencil onClick={onEdit} /> : null;
   const tools = finished ? null : (
-    <StudyTools mode={mode} onMode={changeMode} speechAvailable={speechAvailable} onSpeak={() => speak(speech)} autoRead={autoRead} onAutoRead={setAutoRead} />
+    <StudyTools
+      mode={mode}
+      onMode={changeMode}
+      speechAvailable={speechAvailable}
+      onSpeak={() => speak(speech)}
+      autoRead={autoRead}
+      onAutoRead={setAutoRead}
+      onPrevious={allowBack ? goBack : undefined}
+      canPrevious={canGoBack}
+    />
   );
 
   if (kind === 'phone') {

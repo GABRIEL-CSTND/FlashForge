@@ -50,9 +50,28 @@ const ICONS: Record<FlashcardMode | 'speak', ReactNode> = {
 
 // A round brass button with its name underneath. The whole thing is the
 // button, so the touch target is the icon and the word.
-function Tool({ label, icon, pressed, onClick }: { label: string; icon: ReactNode; pressed?: boolean; onClick: () => void }) {
+function Tool({
+  label,
+  icon,
+  pressed,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  icon: ReactNode;
+  pressed?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
   return (
-    <button type="button" onClick={onClick} aria-pressed={pressed} className="desk-tool flex w-[68px] flex-col items-center gap-1.5 text-xs font-medium text-on-desk/85">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={pressed}
+      aria-label={label}
+      className={`desk-tool flex w-[68px] flex-col items-center gap-1.5 text-xs font-medium text-on-desk/85 ${disabled ? 'opacity-35 cursor-not-allowed' : ''}`}
+    >
       <span aria-hidden="true" className={`inline-flex h-[52px] w-[52px] items-center justify-center rounded-full ${pressed ? 'brass' : 'brass-ring'}`}>
         {icon}
       </span>
@@ -64,6 +83,7 @@ function Tool({ label, icon, pressed, onClick }: { label: string; icon: ReactNod
 // Flip, Type and Match (changing one starts the deck over), then Read aloud
 // and its Auto switch (#77) where the browser can speak. Quizzes have one way
 // to answer, so they leave out `mode` and get only Read aloud.
+// Also includes Previous button (#101) to step back to the previous card.
 export default function StudyTools({
   mode,
   onMode,
@@ -71,6 +91,8 @@ export default function StudyTools({
   onSpeak,
   autoRead,
   onAutoRead,
+  onPrevious,
+  canPrevious = false,
 }: {
   mode?: FlashcardMode;
   onMode?: (mode: FlashcardMode) => void;
@@ -78,6 +100,8 @@ export default function StudyTools({
   onSpeak: () => void;
   autoRead: boolean;
   onAutoRead: (on: boolean) => void;
+  onPrevious?: () => void;
+  canPrevious?: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-start justify-center gap-x-2 gap-y-3 sm:gap-x-4">
@@ -87,6 +111,19 @@ export default function StudyTools({
             <Tool key={m} label={FLASHCARD_MODE_LABELS[m]} icon={ICONS[m]} pressed={mode === m} onClick={() => onMode(m)} />
           ))}
         </div>
+      )}
+      {onPrevious && (
+        <Tool
+          label="Previous"
+          icon={
+            <svg {...ICON_PROPS}>
+              <path d="M19 12H5" />
+              <path d="m12 19-7-7 7-7" />
+            </svg>
+          }
+          disabled={!canPrevious}
+          onClick={onPrevious}
+        />
       )}
       {speechAvailable && (
         <div className="flex items-start gap-1">

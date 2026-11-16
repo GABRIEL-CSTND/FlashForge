@@ -522,6 +522,28 @@ describe('mixed quiz (#69)', () => {
         .map((li) => li.textContent)
     ).toEqual(['Part I · Multiple choice0 / 1', 'Part II · True or false1 / 1', 'Part III · Identification1 / 1']);
   });
+
+  it('advances through mixed quiz even if true_false card has options: null', () => {
+    const onComplete = vi.fn();
+    const DEMO_MIXED = [
+      { id: 'c1', question: 'What metabolic pathway...', answer: 'Glycolysis', options: ['Glycolysis', 'Krebs Cycle', 'Oxidative phosphorylation', 'Fermentation'] },
+      { id: 'c2', question: 'Enzymes accelerate chemical reactions...', answer: 'true', options: null },
+      { id: 'c3', question: 'Active Transport', answer: 'Movement of ions...', options: null },
+    ];
+    render(<StudyViewer title="General Biology" studyType="mixed" cards={DEMO_MIXED} onComplete={onComplete} />);
+    click('Begin Part I →');
+    click('Glycolysis');
+    click('On to Part II →');
+    expect(screen.getByRole('heading', { name: 'Part II' })).toBeTruthy();
+    click('Begin Part II →');
+    click('True');
+    click('On to Part III →');
+    click('Begin Part III →');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: 'Movement of ions' } });
+    click('Check');
+    click('See your score →');
+    expect(onComplete).toHaveBeenCalled();
+  });
 });
 
 describe('read aloud (#77)', () => {
@@ -774,5 +796,147 @@ describe('cards that arrive while studying', () => {
     expect(screen.getByText('Question 1 of 2')).toBeTruthy();
     click('Next question →');
     expect(screen.getByText('Question 2 of 2')).toBeTruthy();
+  });
+});
+
+describe('going back to previous card (#101)', () => {
+  it('allows going back to previous flashcard in flip mode and updates pile count', () => {
+    render(<StudyViewer title="Plants" studyType="flashcard" cards={FLASH_CARDS} />);
+    expect(screen.getByText('Card 1 of 3')).toBeTruthy();
+    expect(screen.getByText('Fluid inside the chloroplast')).toBeTruthy();
+
+    // On card 1, previous is disabled
+    const prevButton = screen.getByRole('button', { name: 'Previous' });
+    expect(prevButton.hasAttribute('disabled')).toBe(true);
+
+    // Answer card 1 as Got it
+    flip();
+    sortTo('Got it');
+
+    // Now on card 2, tally shows Got it 1
+    expect(screen.getByText('Card 2 of 3')).toBeTruthy();
+    expect(screen.getByText('Enzyme that fixes CO2')).toBeTruthy();
+    expect(screen.getByText(/\. Got it 1, Missed it 0\./)).toBeTruthy();
+
+    // Click Previous to step back
+    expect(prevButton.hasAttribute('disabled')).toBe(false);
+    fireEvent.click(prevButton);
+
+    // Card 1 is restored, and Got it count is back to 0
+    expect(screen.getByText('Card 1 of 3')).toBeTruthy();
+    expect(screen.getByText('Fluid inside the chloroplast')).toBeTruthy();
+    expect(screen.getByText(/\. Got it 0, Missed it 0\./)).toBeTruthy();
+
+    // Now sort card 1 as Missed it instead
+    flip();
+    sortTo('Missed it');
+
+    // On card 2 again, Missed it count is 1
+    expect(screen.getByText('Card 2 of 3')).toBeTruthy();
+    expect(screen.getByText(/\. Got it 0, Missed it 1\./)).toBeTruthy();
+
+    // Test stepping back via keyboard (ArrowUp)
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(screen.getByText('Card 1 of 3')).toBeTruthy();
+    expect(screen.getByText(/\. Got it 0, Missed it 0\./)).toBeTruthy();
+  });
+
+  it('allows going back to previous flashcard in type mode', () => {
+    render(<StudyViewer title="Plants" studyType="flashcard" cards={FLASH_CARDS} />);
+    click('Type');
+
+    expect(screen.getByText('Card 1 of 3')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: 'Stroma' } });
+    click('Check');
+    click('Next card →');
+
+    // On card 2
+    expect(screen.getByText('Card 2 of 3')).toBeTruthy();
+    expect(screen.getByText('Enzyme that fixes CO2')).toBeTruthy();
+
+    // Step back
+    click('Previous');
+    expect(screen.getByText('Card 1 of 3')).toBeTruthy();
+    expect(screen.getByText('Fluid inside the chloroplast')).toBeTruthy();
+    expect(screen.getByLabelText('Your answer')).toBeTruthy();
+  });
+
+  it('allows going back to previous question in a quiz without resetting the score', () => {
+    const onComplete = vi.fn<(r: StudyResult) => void>();
+    render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} onComplete={onComplete} />);
+
+    expect(screen.getByText('Question 1 of 2')).toBeTruthy();
+    click('Network');
+    click('Next question →');
+
+    // On Question 2, Right pile has 1
+    expect(screen.getByText('Question 2 of 2')).toBeTruthy();
+    expect(screen.getByText(/\. Right 1, Wrong 0\./)).toBeTruthy();
+
+    // Click Previous under the card
+    click('← Previous');
+
+    // Returns to Question 1 with Right 1 preserved, answer and verdict showing
+    expect(screen.getByText('Question 1 of 2')).toBeTruthy();
+    expect(screen.getByText('Layer 3?')).toBeTruthy();
+    expect(screen.getByText(/\. Right 1, Wrong 0\./)).toBeTruthy();
+    expect(screen.getByText('✓ Correct')).toBeTruthy();
+
+    // Move forward to Question 2 again
+    click('Next question →');
+    expect(screen.getByText('Question 2 of 2')).toBeTruthy();
+
+    // Answer question 2
+    click('TCP');
+    click('See your score →');
+
+    // Verified: Both questions scored correctly
+    expect(onComplete).toHaveBeenCalledWith({
+      answers: [
+        { cardId: 'c1', chosen: 'Network' },
+        { cardId: 'c2', chosen: 'TCP' },
+      ],
+      correct: 2,
+      total: 2,
+    });
+  });
+
+  it('respects allowBack=false to disable going back (#102 prep)', () => {
+    render(<StudyViewer title="Plants" studyType="flashcard" cards={FLASH_CARDS} allowBack={false} />);
+    flip();
+    sortTo('Got it');
+    expect(screen.getByText('Card 2 of 3')).toBeTruthy();
+
+    // Previous tool button is not rendered
+    expect(screen.queryByRole('button', { name: 'Previous' })).toBeNull();
+
+    // Header Previous button is not rendered
+    expect(screen.queryByRole('button', { name: 'Previous card' })).toBeNull();
+  });
+
+  it('renders True/False options even if options was null in the database', () => {
+    const onComplete = vi.fn<(r: StudyResult) => void>();
+    const tfCardsWithoutOptions = [
+      { id: 'tf1', question: 'Energy flows unidirectionally.', answer: 'True', options: null },
+      { id: 'tf2', question: 'Mitochondria are in nucleus.', answer: 'False', options: null },
+    ];
+    render(<StudyViewer title="Ecology" studyType="true_false" cards={tfCardsWithoutOptions} onComplete={onComplete} />);
+    expect(screen.getByText('True or false')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'True' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'False' })).toBeTruthy();
+
+    click('True');
+    click('Next statement →');
+    click('False');
+    click('See your score →');
+
+    expect(onComplete).toHaveBeenCalledWith({
+      answers: [
+        { cardId: 'tf1', chosen: 'True' },
+        { cardId: 'tf2', chosen: 'False' },
+      ],
+      correct: 2,
+      total: 2,
+    });
   });
 });

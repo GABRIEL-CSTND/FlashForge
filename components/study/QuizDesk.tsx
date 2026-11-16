@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'rea
 import Pencil from '@/components/desk/Pencil';
 import { deckSpot, MAX_LAYERS, middleSpot, pileSpot, spotTransform, useDeskLayout, type Slots, type Spot } from '@/components/desk/useDeskLayout';
 import { checkTypedAnswer } from '@/lib/answer-check';
-import { cardKind } from '@/lib/card-rules';
+import { TRUE_FALSE_OPTIONS, cardKind, isTrueFalseOptions, toTrueFalse } from '@/lib/card-rules';
 import { speak, stopSpeaking, useAutoRead, useCanSpeak } from '@/lib/speech';
 import { MIXED_PARTS, STUDY_TYPE_LABELS, type StudyType } from '@/lib/study-types';
 import AnswerSlips from './AnswerSlips';
@@ -62,7 +62,10 @@ const freshDeck = (sheetCount: number): QuizDeck => ({
 });
 
 const questionsWord = (n: number) => `${n} question${n === 1 ? '' : 's'}`;
-const partOf = (c: StudyItem) => MIXED_PARTS.find((p) => p.kind === cardKind(c.options)) ?? MIXED_PARTS[0];
+const partOf = (c: StudyItem, studyType: StudyType) => {
+  const kind = studyType === 'mixed' ? cardKind(c.options) : studyType === 'true_false' ? 'true_false' : 'multiple_choice';
+  return MIXED_PARTS.find((p) => p.kind === kind) ?? MIXED_PARTS[0];
+};
 
 // A sheet that is done but goes on no pile (a part's card, once begun) is put
 // aside: it lifts off above the card and fades.
@@ -89,6 +92,8 @@ export interface QuizDeskProps {
   // How many questions the quiz will have, while the AI is still writing it, so the
   // count can read "4 of 10" and go up as each question is written.
   expected?: number;
+  // Option to allow going back to previous cards (#101, #102). Defaults to true.
+  allowBack?: boolean;
 }
 
 // Quizzes on the desk (desk redesign, phase 4): multiple choice, true or false
@@ -111,10 +116,22 @@ export default function QuizDesk({
   quoteLabel = 'From the document',
   arrive = false,
   expected,
+  allowBack = true,
 }: QuizDeskProps) {
   const mixed = studyType === 'mixed';
+  // Ensure true_false questions always have ['True', 'False'] options even if
+  // options was null in the database.
+  const normalizedGivenCards = useMemo(() => {
+    return givenCards.map((c) => {
+      const isTf = studyType === 'true_false' || isTrueFalseOptions(c.options) || toTrueFalse(c.answer) !== null;
+      if (isTf && !isTrueFalseOptions(c.options)) {
+        return { ...c, options: [...TRUE_FALSE_OPTIONS] };
+      }
+      return c;
+    });
+  }, [givenCards, studyType]);
   // A mixed quiz goes part by part (#69), keeping the saved order within each.
-  const cards = useMemo(() => (mixed ? byPart(givenCards) : givenCards), [givenCards, mixed]);
+  const cards = useMemo(() => (mixed ? byPart(normalizedGivenCards) : normalizedGivenCards), [normalizedGivenCards, mixed]);
   const sheets = useMemo(() => quizSheets(cards, mixed), [cards, mixed]);
   const total = cards.length;
 
@@ -248,6 +265,12 @@ export default function QuizDesk({
     movedOn.current = true;
     fly(current);
     const nextPos = deck.pos + 1;
+    if (deck.pile[current]) {
+      setDeck({ ...deck, pos: nextPos });
+      const nextSheet = sheets[deck.order[nextPos]];
+      setAnswer(nextSheet?.kind === 'question' ? answers[nextSheet.index] ?? null : null);
+      return;
+    }
     if (sheet.kind === 'part' || !answer) {
       setDeck({ ...deck, pos: nextPos });
       return;
@@ -260,6 +283,43 @@ export default function QuizDesk({
     setAnswers(nextAnswers);
     if (nextPos >= deck.order.length) report(nextAnswers);
   };
+
+  const canGoBack = allowBack && passDone > 0 && !finished;
+
+  const goBack = () => {
+    if (!canGoBack) return;
+    movedOn.current = true;
+    let targetPos = deck.pos - 1;
+    while (targetPos >= 0 && sheets[deck.order[targetPos]].kind !== 'question') {
+      targetPos--;
+    }
+    if (targetPos < 0) return;
+
+    const targetSheetIndex = deck.order[targetPos];
+    const targetSheet = sheets[targetSheetIndex];
+    if (targetSheet.kind !== 'question') return;
+
+    setDeck({
+      ...deck,
+      pos: targetPos,
+    });
+    setAnswer(answers[targetSheet.index] ?? null);
+    setFlying(null);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'ArrowUp' || e.key === 'p' || e.key === 'P' || e.key === 'Backspace') {
+        if (canGoBack) {
+          e.preventDefault();
+          goBack();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canGoBack, deck, answers]);
 
   // The Wrong pile, dealt again: those questions go back into the deck and the
   // Right pile stays where it is.
@@ -282,13 +342,13 @@ export default function QuizDesk({
   // Where each sheet lies: on a pile, in the middle, in the deck, or put aside.
   const placed = slots ?? {};
   const place = (s: number): { spot: Spot | null; z: number; shown: boolean } => {
+    if (s === current) return { spot: middleSpot(placed, false), z: 300, shown: true };
     const pile = deck.pile[s];
     if (pile) {
       const list = pile === 'got' ? rightList : wrongList;
       const j = list.indexOf(s);
       return { spot: pileSpot(kind, placed, size, pile, j), z: 200 + j, shown: list.length - j <= MAX_LAYERS };
     }
-    if (s === current) return { spot: middleSpot(placed, false), z: 300, shown: true };
     const k = deck.order.indexOf(s);
     if (k > deck.pos) {
       const depth = k - deck.pos - 1;
@@ -304,7 +364,7 @@ export default function QuizDesk({
   // the line to type on.
   const questionFace = (i: number, full: boolean) => {
     const c = cards[i];
-    const part = partOf(c);
+    const part = partOf(c, studyType);
     const typed = interactionFor(c) === 'typed';
     const given = full ? answer : null;
     // The question keeps all its lines: when the card holds more than fits, the
@@ -504,16 +564,24 @@ export default function QuizDesk({
             : 'Next question →';
   const ready = sheet?.kind === 'part' || !!answer;
 
-  // Under the card: the answers to pick from, then Next. Next keeps its place
-  // while it's hidden, so the desk doesn't jump when it appears.
+  // Under the card: the answers to pick from, then Previous and Next.
   const underCard = finished ? null : (
     <div className="mt-4 flex w-full flex-col items-center gap-4" style={{ maxWidth: size.w }}>
       {card && interaction === 'choice' && (
         <AnswerSlips key={`${run}-${current}`} options={card.options ?? []} answer={card.answer} picked={answer?.chosen} onPick={pick} kind={kind} />
       )}
-      <div className="flex min-h-12 w-full items-center justify-center">
+      <div className="flex min-h-12 w-full items-center justify-center gap-3">
+        {canGoBack && (
+          <button
+            type="button"
+            onClick={goBack}
+            className={`paper paper-shadow min-h-12 rounded-full px-6 text-[15px] font-medium text-ink hover:brightness-95 ${kind === 'phone' ? 'flex-1' : ''}`}
+          >
+            ← Previous
+          </button>
+        )}
         {ready && (
-          <button ref={nextRef} type="button" onClick={next} className={`btn btn-primary min-h-12 rounded-full px-7 text-[15px] ${kind === 'phone' ? 'w-full' : ''}`}>
+          <button ref={nextRef} type="button" onClick={next} className={`btn btn-primary min-h-12 rounded-full px-7 text-[15px] ${kind === 'phone' ? 'flex-1' : ''}`}>
             {nextLabel}
           </button>
         )}
@@ -529,7 +597,13 @@ export default function QuizDesk({
     : sheet?.kind === 'part'
       ? `Part ${sheet.part.numeral} · ${sheet.part.label}`
       : `Question ${passDone + 1} of ${Math.max(passCount, expected ?? 0)}`;
-  const header = <DeskHeader onExit={onExit} progress={progress} tally={`. Right ${right}, Wrong ${wrong}.`} />;
+  const header = (
+    <DeskHeader
+      onExit={onExit}
+      progress={progress}
+      tally={`. Right ${right}, Wrong ${wrong}.`}
+    />
+  );
 
   const label = (
     <div className="paper paper-shadow -rotate-1 rounded px-4 py-2.5 text-ink">
@@ -541,7 +615,12 @@ export default function QuizDesk({
   const pencil = onEdit ? <Pencil onClick={onEdit} /> : null;
   const tools =
     finished || !speechAvailable ? null : (
-      <StudyTools speechAvailable={speechAvailable} onSpeak={() => speak(speech)} autoRead={autoRead} onAutoRead={setAutoRead} />
+      <StudyTools
+        speechAvailable={speechAvailable}
+        onSpeak={() => speak(speech)}
+        autoRead={autoRead}
+        onAutoRead={setAutoRead}
+      />
     );
 
   if (kind === 'phone') {

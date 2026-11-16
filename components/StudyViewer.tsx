@@ -34,6 +34,8 @@ interface StudyViewerProps {
   arrive?: boolean;
   // How many cards the deck will have, while the AI is still writing it.
   expected?: number;
+  // Option to allow going back to previous cards (#101, #102). Defaults to true.
+  allowBack?: boolean;
 }
 
 // The study screen, on the desk: flashcards in components/study/
