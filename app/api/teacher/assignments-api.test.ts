@@ -109,6 +109,12 @@ describe('assigning a set from its page', () => {
     expect(rows().find((r) => r.class_id === CLASSES.a)?.due_at).toBe(inDays(2));
   });
 
+  it('assigns with allowBack: false for exam mode (#102)', async () => {
+    const res = await assign('t1', SETS.bio, { classIds: [CLASSES.a], dueAt: inDays(3), allowBack: false });
+    expect(res).toEqual({ status: 201, body: { ok: true, assigned: [CLASSES.a], alreadyAssigned: [] } });
+    expect(rows().find((r) => r.class_id === CLASSES.a)?.allow_back).toBe(false);
+  });
+
   it.each([
     ['no classes', { classIds: [] }, 'Pick at least one class.'],
     ['a malformed class id', { classIds: ['nope'] }, 'Pick at least one class.'],
@@ -160,6 +166,21 @@ describe('managing assignments on the class page', () => {
     expect(await json(await classAssignment.PATCH(req('PATCH', 't1', { dueAt: null }), path))).toEqual({ status: 200, body: { dueAt: null } });
     expect(rows().find((r) => r.id === bioAssignment)?.due_at).toBeNull();
     expect((await classAssignment.PATCH(req('PATCH', 't1', { dueAt: inDays(-2) }), path)).status).toBe(400);
+  });
+
+  it('updates allowBack on an existing assignment (#102)', async () => {
+    const path = ctx({ id: CLASSES.a, assignmentId: bioAssignment });
+    expect(await json(await classAssignment.PATCH(req('PATCH', 't1', { allowBack: false }), path))).toEqual({
+      status: 200,
+      body: { allowBack: false },
+    });
+    expect(rows().find((r) => r.id === bioAssignment)?.allow_back).toBe(false);
+
+    expect(await json(await classAssignment.PATCH(req('PATCH', 't1', { allowBack: true }), path))).toEqual({
+      status: 200,
+      body: { allowBack: true },
+    });
+    expect(rows().find((r) => r.id === bioAssignment)?.allow_back).toBe(true);
   });
 
   it('unassigns, so it disappears from the student\'s list', async () => {

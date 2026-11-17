@@ -88,8 +88,33 @@ export default function SetPage() {
   const [assigning, setAssigning] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>({ status: 'idle' });
   const [history, setHistory] = useState<AttemptSummary[]>([]);
+  const [allowBack, setAllowBack] = useState(true);
 
   useEffect(() => {
+    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const allowBackParam = searchParams?.get('allowBack');
+    if (allowBackParam === 'false') {
+      setAllowBack(false);
+    } else if (allowBackParam === 'true') {
+      setAllowBack(true);
+    } else {
+      const stored = typeof window !== 'undefined' ? window.localStorage.getItem(`allowBack-${params.id}`) : null;
+      if (stored === 'false') setAllowBack(false);
+    }
+
+    if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
+      const assignmentParam = searchParams?.get('assignment');
+      const query = assignmentParam ? `?assignment=${encodeURIComponent(assignmentParam)}` : '';
+      window.fetch(`/api/sets/${params.id}/settings${query}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && typeof data.allowBack === 'boolean') {
+            setAllowBack(data.allowBack);
+          }
+        })
+        .catch(() => {});
+    }
+
     const load = async () => {
       const { data: setData, error: setError } = await supabase
         .from('flashcard_sets')
@@ -177,6 +202,21 @@ export default function SetPage() {
 
     setSet({ ...set, title: trimmed });
     setIsEditingTitle(false);
+  };
+
+  const toggleAllowBack = async () => {
+    if (!set) return;
+    const next = !allowBack;
+    setAllowBack(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(`allowBack-${set.id}`, String(next));
+    }
+    try {
+      await apiFetch(`/api/sets/${set.id}/settings`, {
+        method: 'PATCH',
+        body: { allowBack: next },
+      });
+    } catch {}
   };
 
   const saveCards = async (payload: CardPayload[]): Promise<SaveResult> => {
@@ -299,6 +339,12 @@ export default function SetPage() {
           >
             Rename this set
           </button>
+          <button
+            onClick={toggleAllowBack}
+            className="text-sm text-muted hover:underline"
+          >
+            {allowBack ? 'Disable back' : 'Allow back'}
+          </button>
           {canUseTeacherTools(profile?.role) && (
             <button
               onClick={() => setAssigning(true)}
@@ -366,6 +412,7 @@ export default function SetPage() {
       title={set.title}
       studyType={set.study_type}
       cards={cards}
+      allowBack={allowBack}
       onFinish={() => router.push('/')}
       onEdit={isOwner ? () => setEditingCards(true) : undefined}
       saveSlot={deleteSlot}

@@ -62,9 +62,9 @@ vi.mock('@/lib/api-client', async (importOriginal) => {
           cls.assignments = cls.assignments.filter((a) => a.id !== m![2]);
           return ok({ unassigned: true });
         }
-        const dueAt = (init.body as { dueAt: string | null }).dueAt;
-        cls.assignments = cls.assignments.map((a) => (a.id === m![2] ? { ...a, dueAt } : a));
-        return ok({ dueAt });
+        const body = init.body as { dueAt?: string | null; allowBack?: boolean };
+        cls.assignments = cls.assignments.map((a) => (a.id === m![2] ? { ...a, ...body } : a));
+        return ok({ ...body });
       }
       if ((m = path.match(/^\/api\/teacher\/classes\/([^/]+)\/join-code$/))) {
         const cls = find(m[1])!;
@@ -298,5 +298,15 @@ describe('class page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete this class' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Something went wrong. Please try again.');
     expect(state.push).not.toHaveBeenCalled();
+  });
+
+  it('toggles allowBack option on an assignment (#102)', async () => {
+    render(<TeacherClassPage />);
+    const button = await screen.findByRole('button', { name: 'Disallow going back on Photosynthesis' });
+    expect(button.textContent).toBe('No back');
+    fireEvent.click(button);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Allow going back on Photosynthesis' })).toBeTruthy());
+    expect(state.calls.find((c) => c.method === 'PATCH' && (c.body as any)?.allowBack === false)).toBeTruthy();
   });
 });

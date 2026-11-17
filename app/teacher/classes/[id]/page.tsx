@@ -27,6 +27,7 @@ interface Assignment {
   studyType: string;
   dueAt: string | null;
   createdAt: string;
+  allowBack?: boolean;
 }
 
 interface ClassDetail {
@@ -195,6 +196,23 @@ function ClassView({ id }: { id: string }) {
     }
   };
 
+  const toggleAllowBack = async (assignment: Assignment) => {
+    const nextAllowBack = assignment.allowBack === false ? true : false;
+    const data = await run(() =>
+      apiFetch(`/api/teacher/classes/${id}/assignments/${assignment.id}`, {
+        method: 'PATCH',
+        body: { allowBack: nextAllowBack },
+      })
+    );
+    if (data) {
+      update({
+        assignments: cls.assignments.map((a) =>
+          a.id === assignment.id ? { ...a, allowBack: data.allowBack as boolean } : a
+        ),
+      });
+    }
+  };
+
   const unassign = async (assignment: Assignment) => {
     if (!window.confirm(`Unassign "${assignment.setTitle}" from ${cls.name}? Students will no longer see it.`)) return;
     const data = await run(() =>
@@ -212,6 +230,11 @@ function ClassView({ id }: { id: string }) {
   };
 
   const assignmentTag = (a: Assignment): { text: string; tone: TagTone } => {
+    if (a.allowBack === false) {
+      if (!a.dueAt) return { text: 'No back', tone: 'pencil' };
+      if (isOverdue(a.dueAt)) return { text: `Overdue · No back`, tone: 'pencil' };
+      return { text: `Due ${formatDueDate(a.dueAt)} · No back`, tone: 'brass' };
+    }
     if (!a.dueAt) return { text: 'No due date', tone: 'muted' };
     if (isOverdue(a.dueAt)) return { text: `Overdue · was due ${formatDueDate(a.dueAt)}`, tone: 'pencil' };
     return { text: `Due ${formatDueDate(a.dueAt)}`, tone: 'brass' };
@@ -328,7 +351,7 @@ function ClassView({ id }: { id: string }) {
               <LibraryDeck
                 key={a.id}
                 index={i}
-                href={`/sets/${a.setId}`}
+                href={`/sets/${a.setId}${a.allowBack === false ? '?allowBack=false' : ''}`}
                 morph={`deck-${a.setId}`}
                 kind={STUDY_TYPE_LABELS[toStudyType(a.studyType)]}
                 title={a.setTitle}
@@ -336,7 +359,7 @@ function ClassView({ id }: { id: string }) {
                 tag={assignmentTag(a)}
                 actions={
                   <div className="flex flex-col items-start">
-                    <div className="flex gap-4">
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
                       <button
                         type="button"
                         onClick={() => {
@@ -348,6 +371,15 @@ function ClassView({ id }: { id: string }) {
                         className={DESK_TEXT_BUTTON}
                       >
                         Due date
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleAllowBack(a)}
+                        disabled={busy}
+                        aria-label={a.allowBack === false ? `Allow going back on ${a.setTitle}` : `Disallow going back on ${a.setTitle}`}
+                        className={DESK_TEXT_BUTTON}
+                      >
+                        {a.allowBack === false ? 'Allow back' : 'No back'}
                       </button>
                       <button type="button" onClick={() => unassign(a)} disabled={busy} aria-label={`Unassign ${a.setTitle}`} className={DESK_TEXT_BUTTON}>
                         Unassign

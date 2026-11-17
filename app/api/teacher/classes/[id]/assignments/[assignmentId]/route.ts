@@ -3,7 +3,7 @@ import { requireRole } from '@/lib/roles';
 import { TEACHER_ROLES } from '@/lib/role-types';
 import { isUuid } from '@/lib/ids';
 import { parseDueAt } from '@/lib/due-dates';
-import { unassign, updateAssignmentDue } from '@/lib/assignments';
+import { unassign, updateAssignment, updateAssignmentDue } from '@/lib/assignments';
 import { getAssignmentQuestions } from '@/lib/class-results';
 import { errorResponse, notFound, readJsonBody } from '@/lib/route-helpers';
 
@@ -28,17 +28,30 @@ export async function GET(req: NextRequest, { params }: Context) {
   }
 }
 
-// Change the due date: { dueAt: string | null } (#56).
+// Change assignment options: { dueAt?: string | null, allowBack?: boolean } (#56, #102).
 export async function PATCH(req: NextRequest, { params }: Context) {
   try {
     const user = await requireRole(req, TEACHER_ROLES);
     const { id, assignmentId } = await params;
-    const due = parseDueAt((await readJsonBody(req))?.dueAt);
-    if (!due.ok) return NextResponse.json({ error: due.error }, { status: 400 });
+    if (!isUuid(id) || !isUuid(assignmentId)) return notFound('Assignment');
 
-    const updated =
-      isUuid(id) && isUuid(assignmentId) && (await updateAssignmentDue(user.id, id, assignmentId, due.dueAt));
-    return updated ? NextResponse.json({ dueAt: due.dueAt }) : notFound('Assignment');
+    const body = await readJsonBody(req);
+    const patch: { dueAt?: string | null; allowBack?: boolean } = {};
+    if (body && 'dueAt' in body) {
+      const due = parseDueAt(body.dueAt);
+      if (!due.ok) return NextResponse.json({ error: due.error }, { status: 400 });
+      patch.dueAt = due.dueAt;
+    }
+    if (body && typeof body.allowBack === 'boolean') {
+      patch.allowBack = body.allowBack;
+    }
+
+    const updated = await updateAssignment(user.id, id, assignmentId, patch);
+    if (!updated) return notFound('Assignment');
+    const responseBody: Record<string, unknown> = {};
+    if ('dueAt' in patch) responseBody.dueAt = updated.dueAt ?? null;
+    if ('allowBack' in patch) responseBody.allowBack = updated.allowBack;
+    return NextResponse.json(responseBody);
   } catch (err) {
     return errorResponse(err, 'teacher/classes/[id]/assignments/[assignmentId] PATCH');
   }

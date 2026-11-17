@@ -19,6 +19,7 @@ interface AssignedSet {
   studyType: string;
   dueAt: string | null;
   createdAt: string;
+  allowBack?: boolean;
   // The student's own results on this assignment, or null if not done (#57).
   myProgress: { attempts: number; bestScore: number; bestTotal: number; lastCompletedAt: string } | null;
 }
@@ -216,7 +217,7 @@ function MyClasses() {
                             <LibraryDeck
                               key={a.id}
                               index={i + k}
-                              href={`/sets/${a.setId}?assignment=${a.id}`}
+                              href={`/sets/${a.setId}?assignment=${a.id}${a.allowBack === false ? '&allowBack=false' : ''}`}
                               morph={morph}
                               kind={STUDY_TYPE_LABELS[toStudyType(a.studyType)]}
                               title={a.setTitle}
@@ -277,6 +278,11 @@ function MyClasses() {
 // An assignment's tag: done with its best score, overdue, when it's due, or no date.
 function assignmentTag(a: AssignedSet): { text: string; tone: TagTone } {
   if (a.myProgress) return { text: `Done · best ${a.myProgress.bestScore}/${a.myProgress.bestTotal}`, tone: 'ink' };
+  if (a.allowBack === false) {
+    if (!a.dueAt) return { text: 'No back', tone: 'pencil' };
+    if (isOverdue(a.dueAt)) return { text: `Overdue · No back`, tone: 'pencil' };
+    return { text: `Due ${formatDueDate(a.dueAt)} · No back`, tone: 'brass' };
+  }
   if (!a.dueAt) return { text: 'No due date', tone: 'muted' };
   if (isOverdue(a.dueAt)) return { text: `Overdue · was due ${shortDate(a.dueAt)}`, tone: 'pencil' };
   return { text: `Due ${formatDueDate(a.dueAt)}`, tone: 'brass' };

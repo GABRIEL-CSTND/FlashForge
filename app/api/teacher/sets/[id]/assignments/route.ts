@@ -20,7 +20,7 @@ export async function GET(req: NextRequest, { params }: Context) {
   }
 }
 
-// Assign the set to classes: { classIds: string[], dueAt: string | null }.
+// Assign the set to classes: { classIds: string[], dueAt: string | null, allowBack?: boolean }.
 // Classes that already have it are left as they are and listed in alreadyAssigned.
 export async function POST(req: NextRequest, { params }: Context) {
   try {
@@ -36,7 +36,8 @@ export async function POST(req: NextRequest, { params }: Context) {
     const due = parseDueAt(body?.dueAt);
     if (!due.ok) return NextResponse.json({ error: due.error }, { status: 400 });
 
-    const result = await assignSet(user.id, id, classIds, due.dueAt);
+    const allowBack = body?.allowBack !== false;
+    const result = await assignSet(user.id, id, classIds, due.dueAt, allowBack);
     if (!result.ok) return notFound(result.reason === 'set-not-found' ? 'Study set' : 'Class');
     return NextResponse.json(result, { status: result.assigned.length > 0 ? 201 : 200 });
   } catch (err) {

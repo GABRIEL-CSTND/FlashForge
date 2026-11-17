@@ -40,6 +40,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [selected, setSelected] = useState<string[]>([]);
   const [dueLocal, setDueLocal] = useState('');
+  const [allowBack, setAllowBack] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
 
@@ -67,9 +68,16 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
     setSaving(true);
     setMessage(null);
     try {
+      const body: { classIds: string[]; dueAt: string | null; allowBack?: boolean } = {
+        classIds: selected,
+        dueAt: checked.dueAt,
+      };
+      if (!allowBack) {
+        body.allowBack = false;
+      }
       const res = await apiFetch(`/api/teacher/sets/${setId}/assignments`, {
         method: 'POST',
-        body: { classIds: selected, dueAt: checked.dueAt },
+        body,
       });
       if (!res.ok) {
         setMessage({ kind: 'error', text: errorMessage(res.data) });
@@ -89,6 +97,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
       });
       setSelected([]);
       setDueLocal('');
+      setAllowBack(true);
       setState(await fetchOptions(setId));
     } catch {
       setMessage({ kind: 'error', text: OFFLINE_MESSAGE });
@@ -179,6 +188,24 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
                 className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
               />
               <p className="text-xs text-muted">Students see it in their own time zone.</p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="flex items-start gap-3 rounded-lg border p-3 text-sm cursor-pointer hover:border-accent">
+                <input
+                  type="checkbox"
+                  checked={allowBack}
+                  onChange={(e) => setAllowBack(e.target.checked)}
+                  disabled={saving}
+                  className="mt-0.5 h-4 w-4 shrink-0"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">Allow going back on cards</span>
+                  <span className="block text-xs text-muted">
+                    When turned off, students cannot return to previous questions or cards.
+                  </span>
+                </span>
+              </label>
             </div>
           </>
         )}

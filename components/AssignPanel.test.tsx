@@ -125,4 +125,24 @@ describe('AssignPanel', () => {
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(2);
   });
+
+  it('allows teachers to disallow going back on cards for exams (#102)', async () => {
+    panel();
+    fireEvent.click(await screen.findByRole('checkbox', { name: /Bio 101/ }));
+    const allowBackCheckbox = screen.getByRole('checkbox', { name: /Allow going back on cards/ });
+    expect(allowBackCheckbox).toBeTruthy();
+    expect((allowBackCheckbox as HTMLInputElement).checked).toBe(true);
+
+    // Uncheck to disallow going back (exam mode)
+    fireEvent.click(allowBackCheckbox);
+    expect((allowBackCheckbox as HTMLInputElement).checked).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Assign' }));
+    await screen.findByRole('status');
+    expect(state.calls.find((c) => c.method === 'POST')?.body).toEqual({
+      classIds: ['c1'],
+      dueAt: null,
+      allowBack: false,
+    });
+  });
 });
