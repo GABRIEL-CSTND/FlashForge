@@ -63,17 +63,20 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-// The "Make me 10 medium flashcards" card: each word opens paper slips.
-const word = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}: `) });
-const slips = (name: string) => {
-  fireEvent.click(word(name));
-  return within(screen.getByRole('group', { name }));
-};
-const pick = (name: string, option: string) => fireEvent.click(slips(name).getByRole('button', { name: new RegExp(`^${option}`) }));
-const make = () => fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
-const makeButton = () => screen.getByRole('button', { name: 'Make my deck' }) as HTMLButtonElement;
+// The study deck creation controls
+const make = () => fireEvent.click(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }));
+const makeButton = () => screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }) as HTMLButtonElement;
 const typeOnSheet = (text: string) =>
   fireEvent.change(screen.getByRole('textbox', { name: 'Your notes, a link or a topic' }), { target: { value: text } });
+
+const openSlip = (name: string) => {
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}: `) }));
+  return within(screen.getByRole('group', { name }));
+};
+const pickSlip = (name: string, option: string | RegExp) => {
+  const group = openSlip(name);
+  fireEvent.click(group.getByRole('button', { name: typeof option === 'string' ? new RegExp(`^${option}`) : option }));
+};
 
 function chooseFile() {
   const input = document.getElementById('file-input') as HTMLInputElement;
@@ -81,41 +84,34 @@ function chooseFile() {
 }
 
 describe('upload page options', () => {
-  it('starts with 10 medium flashcards', () => {
+  it('starts with 10 medium flashcards and hides test type in flashcard mode', () => {
     render(<UploadPage />);
-    expect(word('How many').textContent).toBe('10');
-    expect(word('How hard').textContent).toBe('medium');
-    expect(word('What kind').textContent).toBe('flashcards');
-    const counts = slips('How many');
-    expect(counts.getAllByRole('button').map((b) => b.textContent)).toEqual(['5', '10', '15', '20', '30']);
-    expect(counts.getByRole('button', { name: '10' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Flashcards: 10' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Difficulty: Medium' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Mode: Flashcards' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Test type:/ })).toBeNull();
+    expect(screen.getByText('FLASHCARDS')).toBeTruthy();
   });
 
-  it('offers true or false, and says what each kind of deck is (#68)', () => {
+  it('offers true or false, and other quiz formats when quiz mode is selected (#68)', () => {
     render(<UploadPage />);
-    const kinds = slips('What kind');
-    expect(kinds.getAllByRole('button').map((b) => b.querySelector('.font-semibold')?.textContent)).toEqual([
-      'Flashcards',
-      'Multiple choice',
-      'True or false',
-      'Mixed quiz',
-    ]);
-    expect(kinds.getByRole('button', { name: /^Flashcards/ }).textContent).toContain('Flip, type or match them');
-    expect(kinds.getByRole('button', { name: /^True or false/ }).textContent).toContain('Decide whether each statement is true or false');
-    expect(kinds.getByRole('button', { name: /^Mixed quiz/ }).textContent).toContain(
-      'Part I multiple choice, Part II true or false, Part III identification'
-    );
-    fireEvent.click(kinds.getByRole('button', { name: /^True or false/ }));
-    expect(screen.queryByRole('group', { name: 'What kind' })).toBeNull();
-    expect(word('What kind').textContent).toBe('true-or-false statements');
+    pickSlip('Mode', 'Quiz');
+    expect(screen.getByRole('button', { name: 'Mode: Quiz' })).toBeTruthy();
+    expect(screen.getByText('QUESTIONS')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Test type: Multiple Choice' })).toBeTruthy();
+    pickSlip('Test type', 'True or false');
+    expect(screen.getByRole('button', { name: 'Test type: True or False' })).toBeTruthy();
   });
 
-  it('closes the slips with Escape and gives focus back to the word', () => {
+  it('offers difficulty levels with descriptions and allows switching', () => {
     render(<UploadPage />);
-    slips('How hard');
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('group', { name: 'How hard' })).toBeNull();
-    expect(document.activeElement).toBe(word('How hard'));
+    expect(screen.getByText('A mix of main ideas and details.')).toBeTruthy();
+    pickSlip('Difficulty', 'Hard');
+    expect(screen.getByRole('button', { name: 'Difficulty: Hard' })).toBeTruthy();
+    expect(screen.getByText('Specific details and how ideas connect, with tricky choices.')).toBeTruthy();
+    pickSlip('Difficulty', 'Easy');
+    expect(screen.getByRole('button', { name: 'Difficulty: Easy' })).toBeTruthy();
+    expect(screen.getByText('The main terms and ideas, with clear clues.')).toBeTruthy();
   });
 
   it('takes Word and PowerPoint files, and explains the ones it cannot take (#71)', () => {
@@ -158,11 +154,8 @@ describe('upload page options', () => {
 
   it('makes a deck from a typed topic at the chosen difficulty, and credits the article (#79)', async () => {
     render(<UploadPage />);
-    expect(slips('How hard').getByRole('button', { name: /^Hard/ }).textContent).toContain(
-      'Specific details and how ideas connect, with tricky choices.'
-    );
-    fireEvent.click(screen.getByRole('button', { name: /^Hard/ }));
-    expect(word('How hard').textContent).toBe('hard');
+    pickSlip('Difficulty', 'Hard');
+    expect(screen.getByRole('button', { name: 'Difficulty: Hard' })).toBeTruthy();
     typeOnSheet('x');
     expect(screen.getByText('Looks like a topic. We’ll look it up on Wikipedia.')).toBeTruthy();
     make();
@@ -234,10 +227,9 @@ describe('upload page options', () => {
 
   it('sends the chosen kind of deck and number of cards with the file (#65)', async () => {
     render(<UploadPage />);
-    pick('What kind', 'Multiple choice');
-    pick('How many', '20');
-    expect(word('How many').textContent).toBe('20');
-    expect(word('What kind').textContent).toBe('multiple-choice questions');
+    pickSlip('Mode', 'Quiz');
+    pickSlip('Test type', 'Multiple choice');
+    pickSlip('Questions', '20');
     chooseFile();
     make();
     expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
@@ -295,7 +287,7 @@ describe('progress while generating', () => {
     const server = serverYouControl();
     render(<UploadPage />);
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }));
 
     // Nothing from the server yet: the upload is the step under way.
     await waitFor(() => expect(currentStep()).toBe('Uploading your file'));
@@ -323,7 +315,7 @@ describe('progress while generating', () => {
     const server = serverYouControl();
     render(<UploadPage />);
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }));
     await waitFor(() => expect(server.fetchMock).toHaveBeenCalled());
     const init = (server.fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
     expect((init.headers as Record<string, string>).Accept).toBe(PROGRESS_MIME);
@@ -336,14 +328,14 @@ describe('progress while generating', () => {
     const server = serverYouControl();
     render(<UploadPage />);
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }));
 
     expect(await screen.findByRole('heading', { name: 'Making 10 medium flashcards' })).toBeTruthy();
     expect(screen.getByText('from notes.txt')).toBeTruthy();
     // The pencil and the shuffling deck are only for the eyes; the steps are read out.
     expect(document.querySelector('.making-scene')?.getAttribute('aria-hidden')).toBe('true');
     expect(screen.getByRole('list', { name: 'Progress' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Make my deck' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Generate Study Deck|Make my deck/i })).toBeNull();
 
     server.send(RESULT);
     server.end();
@@ -375,7 +367,7 @@ describe('progress while generating', () => {
     const server = serverYouControl();
     render(<UploadPage />);
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }));
     await screen.findByRole('heading', { name: 'Making 10 medium flashcards' });
 
     // The first cards turn the deck being made into the spread, landing one at a time.
@@ -399,7 +391,7 @@ describe('progress while generating', () => {
     const server = serverYouControl();
     render(<UploadPage />);
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }));
     server.send(cardsSoFar(2));
     await screen.findByText(CARD_LIST[1].question);
 
@@ -415,41 +407,41 @@ describe('progress while generating', () => {
     vi.stubGlobal('confirm', vi.fn(() => true));
     render(<UploadPage />);
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }));
     server.send(cardsSoFar(1));
     await screen.findByText(CARD_LIST[0].question);
 
     fireEvent.click(screen.getByRole('button', { name: '← Exit' }));
     const init = (server.fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
     expect(init.signal?.aborted).toBe(true);
-    expect(await screen.findByRole('button', { name: 'Make my deck' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /Generate Study Deck|Make my deck/i })).toBeTruthy();
 
     // Its answer, if it still comes, is ignored.
     server.send(WHOLE_DECK);
     server.end();
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(screen.queryByText(CARD_LIST[2].question)).toBeNull();
-    expect(screen.getByRole('button', { name: 'Make my deck' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i })).toBeTruthy();
   });
 
   it('shows what went wrong, and clears the steps, when the server fails', async () => {
     const server = serverYouControl();
     render(<UploadPage />);
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }));
     server.send({ type: 'step', step: 'reading' });
     server.send({ type: 'result', status: 503, body: { error: 'The AI is busy right now. Please try again.' } });
     server.end();
     expect(await screen.findByText('The AI is busy right now. Please try again.')).toBeTruthy();
     expect(screen.queryByRole('list', { name: 'Progress' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Make my deck' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i })).toBeTruthy();
   });
 
   it('tells the user when the connection drops mid-way', async () => {
     const server = serverYouControl();
     render(<UploadPage />);
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }));
     server.send({ type: 'step', step: 'writing' });
     server.end();
     expect(await screen.findByText(/connection was interrupted/)).toBeTruthy();
@@ -460,7 +452,7 @@ describe('progress while generating', () => {
     const first = serverYouControl();
     render(<UploadPage />);
     chooseFile();
-    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }));
     first.send({ type: 'step', step: 'writing' });
     await waitFor(() => expect(currentStep()).toBe('Writing your study guide with AI'));
     first.send({ type: 'result', status: 503, body: { error: 'The AI is busy right now. Please try again.' } });
@@ -468,7 +460,7 @@ describe('progress while generating', () => {
     await screen.findByText('The AI is busy right now. Please try again.');
 
     const second = serverYouControl();
-    fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }));
     await waitFor(() => expect(currentStep()).toBe('Uploading your file'));
     second.send(RESULT);
     second.end();
@@ -482,7 +474,7 @@ describe('big PDFs (#44)', () => {
     const input = document.getElementById('file-input') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [new File([new Uint8Array(megabytes * MB)], name, { type: 'application/pdf' })] } });
   };
-  const generate = () => fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+  const generate = () => fireEvent.click(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }));
   const currentStep = () => document.querySelector('[aria-current="step"]')?.textContent ?? null;
   const PAGES = ['The Calvin cycle takes place in the stroma.', 'Mitochondria make most of the cell’s ATP.'];
 
@@ -492,7 +484,7 @@ describe('big PDFs (#44)', () => {
     choosePdf('Week 4 lecture.pdf', 12);
     // Picked without complaint, so the button is ready.
     expect(screen.getByText('Week 4 lecture.pdf')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Make my deck' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }) as HTMLButtonElement).disabled).toBe(false);
 
     generate();
     expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
@@ -557,7 +549,7 @@ describe('big PDFs (#44)', () => {
     expect(await screen.findByText(message)).toBeTruthy();
     expect(sentForms).toHaveLength(0);
     expect(screen.queryByRole('list', { name: 'Progress' })).toBeNull();
-    expect((screen.getByRole('button', { name: 'Make my deck' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('turns away an enormous PDF as soon as it is picked', () => {
@@ -567,7 +559,7 @@ describe('big PDFs (#44)', () => {
     Object.defineProperty(huge, 'size', { value: 150 * MB });
     fireEvent.change(input, { target: { files: [huge] } });
     expect(screen.getByText(/This PDF is 150 MB. PDFs can be up to 100 MB/)).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Make my deck' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('does not read anything that is not a PDF', async () => {
@@ -577,5 +569,13 @@ describe('big PDFs (#44)', () => {
     await screen.findByText('Fluid inside the chloroplast');
     expect(planPdfUpload).not.toHaveBeenCalled();
     expect(sentForms[0]).toEqual(expect.objectContaining({ file: 'file:notes.txt' }));
+  });
+
+  it('shows landing nav and hero section when signed out, with deck builder below', () => {
+    render(<UploadPage />);
+    expect(screen.getByRole('navigation', { name: 'Main navigation' })).toBeTruthy();
+    expect(screen.getByText('AI-POWERED STUDY ENGINE')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Start Learning/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Upload Material to Build Study Deck' })).toBeTruthy();
   });
 });

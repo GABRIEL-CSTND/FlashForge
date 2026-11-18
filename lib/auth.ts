@@ -24,13 +24,27 @@ export function useUser() {
   return { user, loading };
 }
 
-export async function signInWithGoogle() {
+export async function signInWithGoogle(options?: { redirectTo?: string }) {
   await supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: `${window.location.origin}/` },
+    options: {
+      redirectTo: options?.redirectTo ?? `${window.location.origin}/`,
+      queryParams: {
+        prompt: 'select_account',
+      },
+    },
   });
 }
 
 export async function signOut() {
   await supabase.auth.signOut();
 }
+
+export async function signInWithPassword(email: string, password: string) {
+  return await supabase.auth.signInWithPassword({ email, password });
+}
+
+export async function signUpWithPassword(email: string, password: string) {
+  return await supabase.auth.signUp({ email, password });
+}
+
