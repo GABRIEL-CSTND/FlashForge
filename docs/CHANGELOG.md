@@ -3,10 +3,16 @@
 Notable changes to FlashForge, newest first. Issue and PR numbers refer to
 [GABRIEL-CSTND/FlashForge](https://github.com/GABRIEL-CSTND/FlashForge).
 
-## Desk redesign (on `dev`, not on the live site yet)
+## Unreleased (on `dev`, not on the live site yet)
 
-The new look, built in 7 phases on the `UI_changes` branch and merged into `dev` on
-2026-11-11. It changes how the app looks, not how it works.
+Nothing yet. Changes merged into `dev` after the 2026-11-16 release go here, and reach the
+live site with the next release of `dev` to `main`.
+
+## 2026-11-16: the desk redesign
+
+Released to the live site on 2026-11-16 (PR #99, `main` = `bde2106`), together with the next
+section. The new look was built in 7 phases on the `UI_changes` branch and merged into `dev`
+on 2026-11-11. It changes how the app looks, not how it works.
 
 ### Changed
 - **Friendly error and 404 pages** (2026-11-14, #91): a page that breaks shows *Something
@@ -173,11 +179,11 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
 - The header tests (`app/upload-header.test.tsx`) became tests for the card box and the
   library card (`components/desk/`): 805 tests in all.
 
-## Unreleased (on `dev`, not on the live site yet)
+## 2026-11-16
 
-Everything here was done between 2026-10-20 and 2026-10-24. It reaches the live site when `dev` is merged
-into `main`. There is only one Supabase database, so changes marked **(live)** are
-already applied there.
+Released to the live site on 2026-11-16 (PR #99), with the desk redesign above: everything
+done on `dev` between the 2026-10-04 release and 2026-11-14. There is only one Supabase
+database, so changes marked **(live)** were applied there before the release.
 
 ### Security
 - **Browsers can't write cards, even if a policy slips later (live)** (PR #84 and its review):
