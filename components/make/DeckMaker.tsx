@@ -2,6 +2,8 @@
 
 import { useState, useRef } from 'react';
 import { FILE_ACCEPT, fileKind, MAX_SOURCE_CHARS, type TypedSource } from '@/lib/sources';
+import SlipDropdown from '@/components/desk/SlipDropdown';
+import type { SlipOption } from '@/components/desk/SlipMenu';
 import {
   DIFFICULTIES,
   DIFFICULTY_HINTS,
@@ -34,11 +36,69 @@ function fileMeta(file: File): string {
   return `${kind ? FILE_KIND_NAMES[kind] : 'File'} · ${size}`;
 }
 
-const QUIZ_TYPES: { value: StudyType; label: string }[] = [
-  { value: 'multiple_choice', label: 'Multiple Choice' },
-  { value: 'true_false', label: 'True or False' },
-  { value: 'mixed', label: 'Mixed Quiz' },
+const MODE_SLIP_OPTIONS: SlipOption<'flashcards' | 'quiz'>[] = [
+  {
+    value: 'flashcards',
+    label: 'Flashcards',
+    hint: 'A clue on the front and a short term on the back. Flip, type or match them.',
+  },
+  {
+    value: 'quiz',
+    label: 'Quiz',
+    hint: 'Practice questions: multiple choice, true or false, or mixed quizzes.',
+  },
 ];
+
+const TEST_TYPE_SLIP_OPTIONS: SlipOption<StudyType>[] = [
+  {
+    value: 'multiple_choice',
+    label: 'Multiple choice',
+    hint: 'Pick the right answer out of 4.',
+  },
+  {
+    value: 'true_false',
+    label: 'True or false',
+    hint: 'Decide whether each statement is true or false, and see the correction.',
+  },
+  {
+    value: 'mixed',
+    label: 'Mixed quiz',
+    hint: 'Like a school exam: Part I multiple choice, Part II true or false, Part III identification.',
+  },
+];
+
+const COUNT_SLIP_OPTIONS: SlipOption<number>[] = [
+  { value: 5, label: '5' },
+  { value: 10, label: '10' },
+  { value: 15, label: '15' },
+  { value: 20, label: '20' },
+  { value: 30, label: '30' },
+];
+
+const DIFFICULTY_SLIP_OPTIONS: SlipOption<Difficulty>[] = [
+  {
+    value: 'easy',
+    label: 'Easy',
+    hint: 'The main terms and ideas, with clear clues.',
+  },
+  {
+    value: 'medium',
+    label: 'Medium',
+    hint: 'A mix of main ideas and details.',
+  },
+  {
+    value: 'hard',
+    label: 'Hard',
+    hint: 'Specific details and how ideas connect, with tricky choices.',
+  },
+];
+
+const QUIZ_TYPE_DISPLAY: Record<StudyType, string> = {
+  flashcard: 'Flashcards',
+  multiple_choice: 'Multiple Choice',
+  true_false: 'True or False',
+  mixed: 'Mixed Quiz',
+};
 
 export default function DeckMaker({
   file,
@@ -104,13 +164,6 @@ export default function DeckMaker({
   const handleQuizTypeChange = (newType: StudyType) => {
     setLastQuizType(newType);
     onStudyType(newType);
-  };
-
-  const handleCountChange = (val: string) => {
-    const num = parseInt(val, 10);
-    if (!isNaN(num)) {
-      onCount(num);
-    }
   };
 
   const kind = asNotes ? 'text' : detected;
@@ -344,92 +397,51 @@ export default function DeckMaker({
           <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-[#736a5e]">
             MODE
           </span>
-          <div
-            role="group"
-            aria-label="Mode"
-            className="inline-flex h-[38px] items-center rounded-lg border border-[#d6c7b5] bg-[#faf6ed] p-0.5 shadow-sm"
-          >
-            <button
-              type="button"
-              onClick={() => handleModeChange('flashcards')}
-              disabled={making}
-              aria-pressed={!isQuiz}
-              className={`h-full rounded-md px-3.5 text-sm font-semibold transition cursor-pointer flex items-center justify-center ${
-                !isQuiz
-                  ? 'bg-[#201813] text-white shadow-sm'
-                  : 'bg-transparent text-[#201813] hover:bg-[#ede5d8]'
-              }`}
-            >
-              Flashcards
-            </button>
-            <button
-              type="button"
-              onClick={() => handleModeChange('quiz')}
-              disabled={making}
-              aria-pressed={isQuiz}
-              className={`h-full rounded-md px-3.5 text-sm font-semibold transition cursor-pointer flex items-center justify-center ${
-                isQuiz
-                  ? 'bg-[#201813] text-white shadow-sm'
-                  : 'bg-transparent text-[#201813] hover:bg-[#ede5d8]'
-              }`}
-            >
-              Quiz
-            </button>
-          </div>
+          <SlipDropdown
+            name="Mode"
+            label={isQuiz ? 'Quiz' : 'Flashcards'}
+            options={MODE_SLIP_OPTIONS}
+            value={isQuiz ? 'quiz' : 'flashcards'}
+            onChange={handleModeChange}
+            disabled={making}
+            minWidth="min-w-[130px]"
+            menuWidth="w-72"
+          />
         </div>
 
         {/* TEST TYPE - only shown in Quiz mode */}
         {isQuiz && (
           <div>
-            <label
-              htmlFor="test-type-select"
-              className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-[#736a5e]"
-            >
+            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-[#736a5e]">
               TEST TYPE
-            </label>
-            <div className="relative">
-              <select
-                id="test-type-select"
-                aria-label="Test type"
-                value={currentQuizType}
-                onChange={(e) => handleQuizTypeChange(e.target.value as StudyType)}
-                disabled={making}
-                className="h-[38px] appearance-none rounded-lg border border-[#d6c7b5] bg-[#faf6ed] pl-3.5 pr-8 text-sm font-medium text-[#201813] shadow-sm hover:border-[#bda993] focus:outline-none focus:ring-1 focus:ring-[#ad8539] cursor-pointer"
-              >
-                {QUIZ_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[#736a5e]">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </div>
-            </div>
+            </span>
+            <SlipDropdown
+              name="Test type"
+              label={QUIZ_TYPE_DISPLAY[currentQuizType] ?? 'Multiple Choice'}
+              options={TEST_TYPE_SLIP_OPTIONS}
+              value={currentQuizType}
+              onChange={handleQuizTypeChange}
+              disabled={making}
+              minWidth="min-w-[155px]"
+              menuWidth="w-72"
+            />
           </div>
         )}
 
         {/* QUESTIONS / FLASHCARDS COUNT */}
         <div>
-          <label
-            htmlFor="questions-input"
-            className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-[#736a5e]"
-          >
+          <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-[#736a5e]">
             {isQuiz ? 'QUESTIONS' : 'FLASHCARDS'}
-          </label>
-          <input
-            id="questions-input"
-            aria-label="Question count"
-            type="number"
-            min={5}
-            max={30}
-            step={5}
+          </span>
+          <SlipDropdown
+            name={isQuiz ? 'Questions' : 'Flashcards'}
+            label={String(count)}
+            options={COUNT_SLIP_OPTIONS}
             value={count}
-            onChange={(e) => handleCountChange(e.target.value)}
+            onChange={onCount}
             disabled={making}
-            className="h-[38px] w-20 rounded-lg border border-[#d6c7b5] bg-[#faf6ed] px-3 text-center text-sm font-medium text-[#201813] shadow-sm hover:border-[#bda993] focus:outline-none focus:ring-1 focus:ring-[#ad8539]"
+            minWidth="min-w-[85px]"
+            menuWidth="w-40"
           />
         </div>
 
@@ -438,33 +450,16 @@ export default function DeckMaker({
           <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-[#736a5e]">
             DIFFICULTY
           </span>
-          <div
-            role="group"
-            aria-label="Difficulty"
-            className="inline-flex h-[38px] items-center rounded-lg border border-[#d6c7b5] bg-[#faf6ed] p-0.5 shadow-sm"
-          >
-            {DIFFICULTIES.map((d) => {
-              const active = difficulty === d;
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => onDifficulty(d)}
-                  disabled={making}
-                  title={DIFFICULTY_HINTS[d]}
-                  aria-label={`${DIFFICULTY_LABELS[d]}: ${DIFFICULTY_HINTS[d]}`}
-                  aria-pressed={active}
-                  className={`h-full rounded-md px-3.5 text-sm font-semibold transition cursor-pointer flex items-center justify-center ${
-                    active
-                      ? 'bg-[#201813] text-white shadow-sm'
-                      : 'bg-transparent text-[#201813] hover:bg-[#ede5d8]'
-                  }`}
-                >
-                  {DIFFICULTY_LABELS[d]}
-                </button>
-              );
-            })}
-          </div>
+          <SlipDropdown
+            name="Difficulty"
+            label={DIFFICULTY_LABELS[difficulty]}
+            options={DIFFICULTY_SLIP_OPTIONS}
+            value={difficulty}
+            onChange={onDifficulty}
+            disabled={making}
+            minWidth="min-w-[125px]"
+            menuWidth="w-72"
+          />
           <p className="mt-1 text-[11.5px] text-[#736a5e] max-w-[240px]">
             {DIFFICULTY_HINTS[difficulty]}
           </p>

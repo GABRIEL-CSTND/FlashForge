@@ -35,17 +35,10 @@ export function LandingNav() {
 
           <Link
             href="/sign-in"
-            className="text-sm font-medium text-[#f5efe3]/90 hover:text-white transition cursor-pointer"
+            className="inline-flex items-center justify-center rounded-xl border border-[#b88c3e] bg-[#cca152] px-4 py-2 text-sm font-bold text-[#261a0e] shadow-[0_3px_0_#9a7231,0_4px_8px_rgba(0,0,0,0.15)] hover:bg-[#bf9442] active:translate-y-[2px] active:shadow-none transition cursor-pointer"
           >
             Sign In
           </Link>
-
-          <button
-            type="button"
-            className="inline-flex items-center justify-center rounded-xl border border-[#b88c3e] bg-[#cca152] px-4 py-2 text-sm font-bold text-[#261a0e] shadow-[0_3px_0_#9a7231,0_4px_8px_rgba(0,0,0,0.15)] hover:bg-[#bf9442] active:translate-y-[2px] active:shadow-none transition cursor-pointer"
-          >
-            Get Started
-          </button>
         </div>
       </div>
     </nav>
@@ -151,6 +144,9 @@ export default function LandingHero() {
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <button
               type="button"
+              onClick={() => {
+                document.getElementById('deck-builder')?.scrollIntoView({ behavior: 'smooth' });
+              }}
               className="inline-flex items-center justify-center rounded-xl border border-[#b88c3e] bg-[#cca152] px-6 py-3 text-[15px] font-bold text-[#261a0e] shadow-[0_4px_0_#9a7231,0_6px_10px_rgba(0,0,0,0.15)] hover:bg-[#bf9442] active:translate-y-[2px] active:shadow-none transition cursor-pointer"
             >
               Start Learning →

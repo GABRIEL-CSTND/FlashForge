@@ -69,6 +69,15 @@ const makeButton = () => screen.getByRole('button', { name: /Generate Study Deck
 const typeOnSheet = (text: string) =>
   fireEvent.change(screen.getByRole('textbox', { name: 'Your notes, a link or a topic' }), { target: { value: text } });
 
+const openSlip = (name: string) => {
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}: `) }));
+  return within(screen.getByRole('group', { name }));
+};
+const pickSlip = (name: string, option: string | RegExp) => {
+  const group = openSlip(name);
+  fireEvent.click(group.getByRole('button', { name: typeof option === 'string' ? new RegExp(`^${option}`) : option }));
+};
+
 function chooseFile() {
   const input = document.getElementById('file-input') as HTMLInputElement;
   fireEvent.change(input, { target: { files: [new File(['Photosynthesis notes'], 'notes.txt', { type: 'text/plain' })] } });
@@ -77,38 +86,31 @@ function chooseFile() {
 describe('upload page options', () => {
   it('starts with 10 medium flashcards and hides test type in flashcard mode', () => {
     render(<UploadPage />);
-    expect((screen.getByRole('spinbutton', { name: 'Question count' }) as HTMLInputElement).value).toBe('10');
-    expect(screen.getByRole('button', { name: /Medium/ }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Flashcards' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.queryByRole('combobox', { name: 'Test type' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Flashcards: 10' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Difficulty: Medium' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Mode: Flashcards' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Test type:/ })).toBeNull();
     expect(screen.getByText('FLASHCARDS')).toBeTruthy();
   });
 
   it('offers true or false, and other quiz formats when quiz mode is selected (#68)', () => {
     render(<UploadPage />);
-    fireEvent.click(screen.getByRole('button', { name: 'Quiz' }));
-    expect(screen.getByRole('button', { name: 'Quiz' }).getAttribute('aria-pressed')).toBe('true');
+    pickSlip('Mode', 'Quiz');
+    expect(screen.getByRole('button', { name: 'Mode: Quiz' })).toBeTruthy();
     expect(screen.getByText('QUESTIONS')).toBeTruthy();
-    const select = screen.getByRole('combobox', { name: 'Test type' }) as HTMLSelectElement;
-    expect([...select.options].map((o) => o.text)).toEqual([
-      'Multiple Choice',
-      'True or False',
-      'Mixed Quiz',
-    ]);
-    fireEvent.change(select, { target: { value: 'true_false' } });
-    expect(select.value).toBe('true_false');
+    expect(screen.getByRole('button', { name: 'Test type: Multiple Choice' })).toBeTruthy();
+    pickSlip('Test type', 'True or false');
+    expect(screen.getByRole('button', { name: 'Test type: True or False' })).toBeTruthy();
   });
 
   it('offers difficulty levels with descriptions and allows switching', () => {
     render(<UploadPage />);
-    const diffGroup = screen.getByRole('group', { name: 'Difficulty' });
-    expect(within(diffGroup).getAllByRole('button').map((b) => b.textContent)).toEqual(['Easy', 'Medium', 'Hard']);
     expect(screen.getByText('A mix of main ideas and details.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Hard/ }));
-    expect(screen.getByRole('button', { name: /Hard/ }).getAttribute('aria-pressed')).toBe('true');
+    pickSlip('Difficulty', 'Hard');
+    expect(screen.getByRole('button', { name: 'Difficulty: Hard' })).toBeTruthy();
     expect(screen.getByText('Specific details and how ideas connect, with tricky choices.')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Easy/ }));
-    expect(screen.getByRole('button', { name: /Easy/ }).getAttribute('aria-pressed')).toBe('true');
+    pickSlip('Difficulty', 'Easy');
+    expect(screen.getByRole('button', { name: 'Difficulty: Easy' })).toBeTruthy();
     expect(screen.getByText('The main terms and ideas, with clear clues.')).toBeTruthy();
   });
 
@@ -152,8 +154,8 @@ describe('upload page options', () => {
 
   it('makes a deck from a typed topic at the chosen difficulty, and credits the article (#79)', async () => {
     render(<UploadPage />);
-    fireEvent.click(screen.getByRole('button', { name: /Hard/ }));
-    expect(screen.getByRole('button', { name: /Hard/ }).getAttribute('aria-pressed')).toBe('true');
+    pickSlip('Difficulty', 'Hard');
+    expect(screen.getByRole('button', { name: 'Difficulty: Hard' })).toBeTruthy();
     typeOnSheet('x');
     expect(screen.getByText('Looks like a topic. We’ll look it up on Wikipedia.')).toBeTruthy();
     make();
@@ -225,11 +227,9 @@ describe('upload page options', () => {
 
   it('sends the chosen kind of deck and number of cards with the file (#65)', async () => {
     render(<UploadPage />);
-    fireEvent.click(screen.getByRole('button', { name: 'Quiz' }));
-    const select = screen.getByRole('combobox', { name: 'Test type' });
-    fireEvent.change(select, { target: { value: 'multiple_choice' } });
-    const countInput = screen.getByRole('spinbutton', { name: 'Question count' });
-    fireEvent.change(countInput, { target: { value: '20' } });
+    pickSlip('Mode', 'Quiz');
+    pickSlip('Test type', 'Multiple choice');
+    pickSlip('Questions', '20');
     chooseFile();
     make();
     expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();

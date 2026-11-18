@@ -10,7 +10,7 @@ afterEach(() => {
 describe('Sign Up Page', () => {
   it('renders the sign up card with all fields and navigation links', () => {
     render(<SignUpPage />);
-    expect(screen.getByRole('link', { name: 'Return to hero page' }).getAttribute('href')).toBe('/');
+    expect(screen.getByRole('link', { name: 'Return to sign in page' }).getAttribute('href')).toBe('/sign-in');
     expect(screen.getByRole('heading', { name: 'Create your account' })).toBeTruthy();
     expect(screen.getByText('Sign up to sync your study decks across devices.')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Sign up with Gmail/i })).toBeTruthy();

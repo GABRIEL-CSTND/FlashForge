@@ -20,10 +20,10 @@ export default function SignUpPage() {
   return (
     <main className="flex min-h-[100dvh] w-full flex-col items-center justify-center px-4 py-12">
       <div className="relative w-full max-w-[420px] rounded-[24px] border border-[#e3d8c8] bg-[#fbf8f0] p-7 shadow-[0_12px_40px_rgba(0,0,0,0.4)] sm:p-9">
-        {/* Return to hero page button */}
+        {/* Return to sign in page button */}
         <Link
-          href="/"
-          aria-label="Return to hero page"
+          href="/sign-in"
+          aria-label="Return to sign in page"
           className="absolute left-5 top-5 inline-flex h-9 w-9 items-center justify-center rounded-full text-[#706454] transition hover:bg-[#ede3d1]/80 hover:text-[#1e1915] active:scale-95 sm:left-6 sm:top-6 cursor-pointer"
         >
           <svg

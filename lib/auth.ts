@@ -24,10 +24,15 @@ export function useUser() {
   return { user, loading };
 }
 
-export async function signInWithGoogle() {
+export async function signInWithGoogle(options?: { redirectTo?: string }) {
   await supabase.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: `${window.location.origin}/` },
+    options: {
+      redirectTo: options?.redirectTo ?? `${window.location.origin}/`,
+      queryParams: {
+        prompt: 'select_account',
+      },
+    },
   });
 }
 
