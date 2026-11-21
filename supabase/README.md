@@ -41,9 +41,17 @@ soon as it's applied.
 | `20261112000100_server_only_card_writes.sql` | PR #84 | 2026-11-12 |
 | `20261112000200_tighten_set_grants.sql` | PR #84 review | 2026-11-12 |
 | `20261121000100_guide_source_files.sql` | #111 (PR #121) | Found applied on 2026-11-21, before the PR was merged |
+| `20261121000110_guide_source_files_room.sql` | #111 (PR #121 review) | 2026-11-21 |
 | `20261121000200_class_content_categories.sql` | #115 (PR #122) | Found applied on 2026-11-21, before the PR was merged |
+| `20261121000300_class_source_material.sql` | #116 (PR #123) | 2026-11-21 |
+| `20261121000400_class_file_posts.sql` | #112 (PR #124) | 2026-11-21 |
 
 Add a row here whenever you apply a new migration.
+
+**Not applied yet:** `20261121000310_private_card_quotes.sql` (#116, PR #123) moves the
+cards' quotes to `private.card_source_quotes`. Apply it with the release to `main`, not
+before: until then the live site reads the quotes from the cards and would show none.
+Then add its row above.
 
 ## Running SQL with the Supabase CLI
 
