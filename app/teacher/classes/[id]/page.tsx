@@ -9,6 +9,7 @@ import { shortDate } from '@/lib/library';
 import { STUDY_TYPE_LABELS, toStudyType } from '@/lib/study-types';
 import { useParams, useRouter } from 'next/navigation';
 import TeacherOnly from '@/components/TeacherOnly';
+import ClassFiles from '@/components/ClassFiles';
 import { apiFetch, errorMessage } from '@/lib/api-client';
 import { CLASS_CONTENT, CLASS_NAME_MAX_LENGTH, formatJoinCode, groupClassContent, isClassContentCategory, studentLabel, type ClassContentCategory } from '@/lib/classes-shared';
 import { formatDueDate, fromLocalInputValue, isOverdue, parseDueAt, toLocalInputValue } from '@/lib/due-dates';
@@ -422,6 +423,8 @@ function ClassView({ id }: { id: string }) {
           </section>
         ))}
       </section>
+
+      <ClassFiles classId={id} canPost />
 
       <section aria-labelledby="students-heading" className="sheet paper-shadow mt-12 max-w-3xl rotate-[-0.3deg] rounded-md px-6 pb-4 pt-5 text-ink">
         <h2 id="students-heading" className="text-[22px] font-normal">
