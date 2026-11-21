@@ -715,6 +715,34 @@ part) and Gemma (no streaming) are sent whole.
   (with sentences quoted from the user's document) stay until the user removes them, or
   their account is deleted.
 
+### Source files (#111)
+
+*View source file* shows the file a guide was made from: on the new deck right after it's
+made (the file is still in the browser, signed in or not), and later in History and on the
+saved set, for its owner only.
+
+- **What's kept:** `/api/generate` passes the file to `addToHistory()`, which keeps it in
+  `guide_source_files` as base64 text, beside the History entry. A PDF the browser read
+  (#44) arrives as its pages' text; signed in, the browser also sends the original when both
+  fit in one 4 MB request, only to be kept (the AI reads the pages, and the server doesn't
+  read the PDF again). Otherwise the pages' text is kept (kind `pdf-text`). Signed-out
+  guides keep nothing, and guides made before #111 have no file.
+- **One copy:** saving the guide as a set (`markSaved()`) gives the set the same row
+  (`set_id`, filled in by a trigger on `guide_history`, only for a set of the file's owner).
+  Deleting the History entry or the set only unlinks it; the row goes with the last of the
+  two.
+- **Room:** the files are in Postgres, and the free plan's database turns read-only at
+  500 MB, so a trigger limits them: up to 25 MB of files a user, and 150 MB for everyone.
+  When a new file doesn't fit a user's space, the files of their oldest unsaved guides make
+  room; it isn't kept if their saved sets' files fill the space, or if everyone's space is
+  full. The guide is made either way, without *View source file*. The limits are in
+  `private.source_file_room()`. Moving the files to Supabase Storage would lift them.
+- **Reading:** `components/SourceFileViewer.tsx` reads the row with the user's session (RLS:
+  only the owner, by History entry or by set), shows a PDF or a photo in the page and the
+  text of a TXT, Word or PowerPoint file, and offers a download.
+- **Checked by** `supabase/tests/guide-source-files-check.sql`: only the owner reads it,
+  saving shares the row, either side can be deleted first, and both limits.
+
 ## 2. Auth and roles
 
 - **Sign-in:** Google OAuth through Supabase (`lib/auth.ts`). Anyone can generate and
@@ -1181,6 +1209,7 @@ runs the game**, and the browsers talk through Supabase Realtime.
 | `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `due_at` (nullable), `created_at` | Unique (`class_id`, `set_id`); indexed on `set_id` |
 | `generation_logs` | `id`, `user_id` → `auth.users` (set null), `role`, `ip_hash` (signed out only), `model`, `study_type`, `duration_ms`, `success` (null while running), `error_kind` (incl. `limit`), `requests` (jsonb), `created_at` | One row per `/api/generate` request (#62, #63). Indexed on `created_at`, (`user_id`, `created_at`) and (`ip_hash`, `created_at`) |
 | `guide_history` | `id`, `user_id` → `auth.users` (cascade), `title`, `study_type`, `source_filename`, `source_credit` (jsonb `{ name, url }` for a web page or Wikipedia article), `items` (jsonb: the cards as generated, quotes included), `item_count` (generated from `items`), `set_id` → `flashcard_sets` (set null), `created_at` | History: one row per guide a signed-in user generated. `items` must be a non-empty array. Indexed on (`user_id`, `created_at`) and `set_id` |
+| `guide_source_files` | `id`, `user_id` → `auth.users` (cascade), `history_id` → `guide_history` (set null, unique), `set_id` → `flashcard_sets` (set null, unique), `name`, `kind` (`pdf`, `pdf-text`, `docx`, `pptx`, `txt`, `jpeg`, `png`, `webp`), `content_base64` (up to 4 MB of file), `size_bytes` (generated) | The file a guide was made from (#111): one row for its History entry and the set it was saved as, deleted when neither is left. Owners read their own; only the server adds them. Up to 25 MB a user and 150 MB in all (`private.source_file_room()`). Indexed on `user_id` |
 | `app_settings` | `key` (primary key), `value` (jsonb), `updated_at`, `updated_by` → `auth.users` (set null) | App-wide settings changed by admins; today just `generation_limits` (#63) |
 | `audit_log` | `id`, `actor_id` → `auth.users` (set null), `action` (`role_change` \| `set_delete`), `target_id`, `details` (jsonb), `created_at` | Admin actions (#60). `target_id` has no foreign key, so entries survive the target being deleted. Indexed on `created_at` |
 | `attempts` | `id` (made by the browser), `user_id` → `auth.users` (cascade), `set_id` → `flashcard_sets` (cascade), `assignment_id` → `assignments` (set null), `study_type`, `mode` (null, or `type` / `match` for flashcards, #66, #67), `score`, `total`, `answers` (jsonb), `completed_at` | One row per finished study session (#57). `total > 0` and `0 ≤ score ≤ total`. Indexed on (`user_id`, `set_id`, `completed_at`) and on `assignment_id` |

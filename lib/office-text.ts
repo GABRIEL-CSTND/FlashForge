@@ -1,6 +1,6 @@
 import { unzipSync } from 'fflate';
 
-// SERVER-ONLY. The text of Word (.docx) and PowerPoint (.pptx) files (#71).
+// The text of Word (.docx) and PowerPoint (.pptx) files (#71).
 // Both are zip files of XML. Word keeps its text in <w:t> runs inside <w:p>
 // paragraphs (word/document.xml); PowerPoint uses <a:t> inside <a:p>, one XML
 // file per slide (ppt/slides/slideN.xml) and per speaker-notes page.

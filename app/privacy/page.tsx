@@ -88,6 +88,8 @@ export default function PrivacyPage() {
             <h3 className="font-medium text-sm text-ink">Guide History</h3>
             <p className="text-xs text-muted leading-relaxed">
               Study guides generated while signed in are kept in your private <strong>History</strong> log, allowing you to review past materials or save them to your library later.
+              If you use a file, we keep a private copy with the guide, and the deck you save from it uses the same copy. For a PDF over about 4 MB, we keep the text read from it instead.
+              We keep up to 25 MB of your files: when a new one doesn&apos;t fit, the files of your oldest unsaved guides are removed to make room.
             </p>
           </div>
 
@@ -122,6 +124,7 @@ export default function PrivacyPage() {
         <div className="space-y-3 text-sm text-muted leading-relaxed">
           <p>
             <strong className="text-ink">Your Decks & History:</strong> Other students and teachers can&apos;t see the decks in your My Sets or your History. A deck a teacher assigns to a class can be studied by the students in that class.
+            Only you can open its source file through FlashForge.
           </p>
           <p>
             <strong className="text-ink">Class Assignments:</strong> When you join a class, the teacher of that class can see your name, email, and your scores on sets assigned specifically to that class (in their Grade Book). Teachers <em>cannot</em> view your private, unassigned sets or unrelated history.

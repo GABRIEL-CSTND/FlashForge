@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser, signInWithGoogle } from '@/lib/auth';
 import StudyViewer, { StudyItem } from '@/components/StudyViewer';
+import SourceFileViewer from '@/components/SourceFileViewer';
 import { generateErrorText } from '@/lib/generation-limits';
 import GenerationProgress from '@/components/GenerationProgress';
 import NotesSheet from '@/components/make/NotesSheet';
@@ -31,6 +32,7 @@ import {
   isPhoto,
   linkFromInput,
   linkProblem,
+  MAX_UPLOAD_BYTES,
   pastedTextProblem,
   pickedFileProblem,
   quoteSourceLabel,
@@ -201,6 +203,8 @@ export default function UploadPage() {
     if (source === 'file' && file && fileKind(file.name, file.type) === 'pdf') {
       // A PDF is read here, in the browser, and only its text is sent (#44): a big
       // lecture file can't fail the request-size limit or take long to upload.
+      // Signed in, the original goes too when both fit in one request, only to be
+      // kept with the guide in History (#111); the server doesn't read it again.
       // Opening a big PDF takes a moment before the first page is counted.
       setPdfRead({ done: 0, total: 0 });
       const plan = await planPdfUpload(file, (done, total) => setPdfRead({ done, total }));
@@ -210,8 +214,10 @@ export default function UploadPage() {
         return;
       }
       if (plan.kind === 'pages') {
-        formData.append('pages', JSON.stringify(plan.pages));
+        const pages = JSON.stringify(plan.pages);
+        formData.append('pages', pages);
         formData.append('fileName', file.name);
+        if (user && file.size + new Blob([pages]).size <= MAX_UPLOAD_BYTES) formData.append('file', file);
       } else {
         // Scanned, or not readable here: the server reads the file itself.
         setPdfRead(null);
@@ -416,11 +422,15 @@ export default function UploadPage() {
     const writing = !result || visible < target;
     const startStudying = () => setView('study');
     const saveSlot = writing ? (
-      <p className="text-center text-sm text-muted">
-        The rest of the cards are still being written. You can save the deck when it is done.
-      </p>
+      <div className="space-y-2 text-center">
+        {file && <SourceFileViewer source={file} />}
+        <p className="text-sm text-muted">
+          The rest of the cards are still being written. You can save the deck when it is done.
+        </p>
+      </div>
     ) : (
       <div className="text-center space-y-2">
+        {file && <SourceFileViewer source={file} />}
         {cutShort && (
           <p className="text-xs text-pencil">
             We couldn&apos;t write the rest of your cards, so this deck has {deck.items.length}.

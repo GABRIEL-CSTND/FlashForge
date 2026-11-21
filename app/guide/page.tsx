@@ -276,7 +276,7 @@ export default function GuidePage() {
               <strong className="text-ink">My Sets:</strong> Each saved set is displayed as a real deck on the green leather desk, tagged with your best score (e.g. <em>Best 9 of 10</em>) or <em>Not studied yet</em>. Picking up a deck morphs smoothly into your study session.
             </li>
             <li>
-              <strong className="text-ink">History:</strong> Every study guide you generate while signed in is automatically archived in History, tagged by date and marked as <em>saved</em> or <em>not saved</em>. You can study any past guide or save it to My Sets anytime.
+              <strong className="text-ink">History:</strong> Every study guide you generate while signed in is automatically archived in History, tagged by date and marked as <em>saved</em> or <em>not saved</em>. You can study any past guide or save it to My Sets anytime. If you made it from a file, <strong>View source file</strong> opens the file (for a PDF over about 4 MB, the text read from it). FlashForge keeps up to 25 MB of your files; when a new one doesn&apos;t fit, your oldest unsaved guides give theirs up.
             </li>
             <li>
               <strong className="text-ink">Library Card:</strong> Shows your account name, role, and Sign out button. Sign in with Google to sync all your decks, progress, and class memberships across devices.

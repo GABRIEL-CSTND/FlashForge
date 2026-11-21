@@ -19,6 +19,15 @@ with the next release of `dev` to `main`.
 
 ### Added
 
+- **View source file (#111):** a guide made from a file keeps the file, so its owner can open
+  it again from History or the saved set: PDFs and photos show in the page, TXT, Word and
+  PowerPoint files as text, and any can be downloaded. The new deck has it too, right after
+  it's made, signed in or not. Signed in, the browser sends a PDF's original along with its
+  text (#44) when both fit in one request; for a bigger PDF the text is kept. Saving a guide
+  gives the set the same copy, and each user keeps up to 25 MB of files (150 MB for
+  everyone), the oldest unsaved guides' files making room first. Only the owner can open
+  them. Migrations `20261121000100_guide_source_files.sql` and
+  `20261121000110_guide_source_files_room.sql`. See ARCHITECTURE, "Source files".
 - **Play live (#26): quiz friends at the same time**, in the style of jklm.fun's PopSauce.
   *Play live* on the front of the card box opens `/play`: pick a nickname, then open a room
   or join one with its 4-character code (or link, `/play/K7MQ`). No account is needed.

@@ -6,8 +6,10 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/supabase', () => ({
   supabase: { auth: { getSession: async () => ({ data: { session: null } }) } },
 }));
+// Signed out unless a test signs someone in.
+const auth = vi.hoisted(() => ({ user: null as null | { id: string; email: string } }));
 vi.mock('@/lib/auth', () => ({
-  useUser: () => ({ user: null, loading: false }),
+  useUser: () => ({ user: auth.user, loading: false }),
   signInWithGoogle: vi.fn(),
   signOut: vi.fn(),
 }));
@@ -36,6 +38,7 @@ let sentForms: Record<string, string>[];
 
 beforeEach(() => {
   sentForms = [];
+  auth.user = null;
   pdf.plan = null;
   vi.mocked(planPdfUpload).mockClear();
   vi.stubGlobal(
@@ -514,6 +517,30 @@ describe('big PDFs (#44)', () => {
     await screen.findByText('Fluid inside the chloroplast');
     expect(planPdfUpload).toHaveBeenCalledTimes(1);
     expect(sentForms[0]).toHaveProperty('pages');
+    // Signed out, nothing is kept, so the file stays on this device.
+    expect(sentForms[0]).not.toHaveProperty('file');
+  });
+
+  it('signed in, also sends the original to keep in History when it fits with the text (#111)', async () => {
+    auth.user = { id: 'sam', email: 'sam@example.com' };
+    pdf.plan = async () => ({ kind: 'pages', pages: PAGES });
+    render(<UploadPage />);
+    choosePdf('Week 4 lecture.pdf', 3);
+    generate();
+    await screen.findByText('Fluid inside the chloroplast');
+    expect(JSON.parse(sentForms[0].pages)).toEqual(PAGES);
+    expect(sentForms[0].file).toBe('file:Week 4 lecture.pdf');
+  });
+
+  it('signed in, sends only the text when the original would not fit with it', async () => {
+    auth.user = { id: 'sam', email: 'sam@example.com' };
+    pdf.plan = async () => ({ kind: 'pages', pages: PAGES });
+    render(<UploadPage />);
+    choosePdf('Week 4 lecture.pdf', 4);
+    generate();
+    await screen.findByText('Fluid inside the chloroplast');
+    expect(sentForms[0]).toHaveProperty('pages');
+    expect(sentForms[0]).not.toHaveProperty('file');
   });
 
   it('shows how far the reading has got, then moves on to sending', async () => {

@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
 import StudyViewer, { type StudyItem } from '@/components/StudyViewer';
+import SourceFileViewer from '@/components/SourceFileViewer';
 import OpeningDeck from '@/components/desk/OpeningDeck';
 import { apiFetch, errorMessage } from '@/lib/api-client';
 import { isUuid } from '@/lib/ids';
@@ -21,6 +22,7 @@ interface HistoryGuide {
   source_filename: string | null;
   // Credit for a web page or Wikipedia article.
   source_credit: { name: string; url: string } | null;
+  source_file?: { name: string } | null;
   items: StudyItem[];
   // The set it was saved as; null if it wasn't saved.
   set_id: string | null;
@@ -44,7 +46,7 @@ export default function HistoryGuidePage() {
     // Only the owner can read an entry (RLS), so anyone else finds nothing.
     supabase
       .from('guide_history')
-      .select('id, title, study_type, source_filename, source_credit, items, set_id')
+      .select('id, title, study_type, source_filename, source_credit, items, set_id, source_file:guide_source_files(name)')
       .eq('id', params.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -109,6 +111,9 @@ export default function HistoryGuidePage() {
   const credit = guide.source_credit;
   const saveSlot = (
     <div className="text-center space-y-2">
+      {guide.source_file && (
+        <SourceFileViewer key={guide.id} source={{ name: guide.source_file.name, historyId: guide.id }} />
+      )}
       {credit && /^https?:\/\//.test(credit.url) && (
         <p className="text-xs text-muted">
           From{' '}

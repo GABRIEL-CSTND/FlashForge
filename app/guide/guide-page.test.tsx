@@ -66,6 +66,9 @@ describe('user guide page (#25)', () => {
     expect(screen.getByText(/Card Box Tabs:/)).toBeTruthy();
     expect(screen.getByText(/My Sets:/)).toBeTruthy();
     expect(screen.getByText(/History:/)).toBeTruthy();
+    // A guide's file (#111): kept up to 25 MB a user, oldest unsaved first to go.
+    expect(document.body.textContent).toMatch(/View source file opens the file/);
+    expect(document.body.textContent).toMatch(/keeps up to 25 MB of your files/);
     expect(screen.getByText(/Library Card:/)).toBeTruthy();
   });
 
