@@ -80,6 +80,8 @@ describe('user guide page (#25)', () => {
     expect(screen.getByText(/Grade Book/)).toBeTruthy();
     // Class content categories (#115).
     expect(document.body.textContent).toMatch(/as a Learning material to practice with \(no due date, not scored\)/);
+    // Sharing a set's source material (#116).
+    expect(document.body.textContent).toMatch(/Tick Share source material with students when you post a set/);
   });
 
   // These were wrong in earlier versions of the guide (PR #83 and #93 reviews).

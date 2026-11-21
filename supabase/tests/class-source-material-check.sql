@@ -1,5 +1,7 @@
--- Run against a test database with the migrations applied and two users.
--- The fixtures are rolled back.
+-- #116: who can read a set's source material through study_set_source()
+-- (20261121000300). Holds with or without 20261121000310 (see
+-- card-quotes-private-check.sql). Run against a database with the migrations
+-- applied and two users. The fixtures are rolled back.
 begin;
 
 do $$
@@ -27,22 +29,19 @@ begin
     values (teacher, target_set, 'notes.txt', 'txt', 'aGVsbG8=');
   insert into public.flashcards (set_id, question, answer, source_excerpt, source_location, position)
     values (target_set, 'Question', 'Answer', 'Source text', 'Line 1', 0) returning id into card;
-  -- A reorder preserves the quote even when the compatibility columns are empty.
-  update public.flashcards set position = 1 where id = card;
 
   perform set_config('request.jwt.claims', json_build_object('sub', teacher)::text, true);
   execute 'set local role authenticated';
   preview := public.study_set_source(target_set);
-  if (preview #>> '{quotes,0,excerpt}') is distinct from 'Source text' then
-    raise exception 'The set owner lost the quote';
+  if (preview ->> 'name') is distinct from 'notes.txt'
+    or (preview #>> '{quotes,0,excerpt}') is distinct from 'Source text'
+    or (preview #>> '{quotes,0,id}') is distinct from card::text then
+    raise exception 'The set owner cannot read its source material';
   end if;
   reset role;
 
   perform set_config('request.jwt.claims', json_build_object('sub', student)::text, true);
   execute 'set local role authenticated';
-  if not exists (select 1 from public.flashcards where id = card and source_excerpt is null and source_location is null) then
-    raise exception 'The card is missing or raw source fields are visible';
-  end if;
   if public.study_set_source(target_set, class_item) is not null or public.study_set_source(target_set, class_item, true) is not null then
     raise exception 'A student can read source material by default';
   end if;
@@ -66,14 +65,13 @@ begin
   reset role;
   update public.assignments set allow_source_material = true where id = class_item;
 
-  update public.flashcards set answer = 'Rewritten answer' where id = card;
-  execute 'set local role authenticated';
-  if (public.study_set_source(target_set, class_item) -> 'quotes') is distinct from '[]'::jsonb then
-    raise exception 'A rewritten card kept an outdated quote';
-  end if;
+  perform set_config('request.jwt.claims', '{}', true);
+  execute 'set local role anon';
+  if public.study_set_source(target_set, class_item, true) is not null then raise exception 'A signed-out visitor can download the file'; end if;
   reset role;
 
   delete from public.class_members where class_id = classroom and student_id = student;
+  perform set_config('request.jwt.claims', json_build_object('sub', student)::text, true);
   execute 'set local role authenticated';
   if public.study_set_source(target_set, class_item, true) is not null then raise exception 'A former member can download the file'; end if;
   reset role;

@@ -19,6 +19,13 @@ with the next release of `dev` to `main`.
   everyone), the oldest unsaved guides' files making room first. Only the owner can open
   them. Migrations `20261121000100_guide_source_files.sql` and
   `20261121000110_guide_source_files_room.sql`. See ARCHITECTURE, "Source files".
+- **Share source material with a class (#116):** when a teacher posts a set to a class,
+  *Share source material with students* (off unless turned on; also a checkbox under the item
+  on the class page) lets the class's students open the set's file and see its cards' quotes
+  while they study it. Otherwise only the set's owner sees them. Migrations
+  `20261121000300_class_source_material.sql` (the setting, and `study_set_source()`, which the
+  set page now reads the quotes through) and `20261121000310_private_card_quotes.sql` (moves
+  the quotes off the cards; apply it with the release to `main`).
 - **Play live (#26): quiz friends at the same time**, in the style of jklm.fun's PopSauce.
   *Play live* on the front of the card box opens `/play`: pick a nickname, then open a room
   or join one with its 4-character code (or link, `/play/K7MQ`). No account is needed.

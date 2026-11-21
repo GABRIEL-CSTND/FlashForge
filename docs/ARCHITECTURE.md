@@ -661,6 +661,12 @@ part) and Gemma (no streaming) are sent whole.
   **When the owner edits cards**, `replace_set_cards()` clears the quote of a card whose
   question or answer changes, as the sentence may no longer back it; a card that only
   moves, or gets new wrong choices, keeps it.
+- **Read through `study_set_source()`** (#116), with the set, so a class's students only
+  get them when their teacher shares the set's source material. Once
+  `20261121000310_private_card_quotes.sql` is applied they're kept apart, in
+  `private.card_source_quotes`: the two columns stay as write inputs, and a trigger moves
+  what's written there and drops the quote of a card whose question or answer changes.
+  See "Sharing source material with a class" below.
 
 ### Editing a saved study set (#55)
 
@@ -742,6 +748,34 @@ saved set, for its owner only.
   text of a TXT, Word or PowerPoint file, and offers a download.
 - **Checked by** `supabase/tests/guide-source-files-check.sql`: only the owner reads it,
   saving shares the row, either side can be deleted first, and both limits.
+
+### Sharing source material with a class (#116)
+
+A set's source material is its file (see "Source files" above) and its cards' quotes. The
+set's owner always sees both; a class's students see them only when the teacher shares
+them, which is off unless turned on.
+
+- **One setting per class item:** `assignments.allow_source_material`, set with **Share
+  source material with students** in **Assign to class**, or with the checkbox under the
+  item on the class page (`PATCH /api/teacher/classes/[id]/assignments/[assignmentId]`
+  with `{ allowSourceMaterial }`, on its own).
+- **Read through one function:** the set page asks `study_set_source(set, classItem)`
+  (SECURITY DEFINER, for `anon` and `authenticated`) for the file's name and the quotes,
+  and *View source file* asks it for the file. It answers the set's owner. For a
+  student, it answers only with the id of a class item (`?assignment=` or `?material=`,
+  which *My classes* puts in the link) of one of their classes, for this set, posted by
+  the set's owner, with sharing on. A bare set link, another class's item, sharing turned
+  off, or leaving the class gets nothing. Sets made before sign-in (no owner) give their
+  quotes to anyone, as their cards are public anyway.
+- **Two migrations:** `20261121000300_class_source_material.sql` adds the setting and the
+  function, and is safe to apply before the code reaches the live site. Until
+  `20261121000310_private_card_quotes.sql` is applied, the quotes are still on the cards,
+  where a class's students could read them through the API, so sharing only hides them on
+  screen. That migration moves them to `private.card_source_quotes`. Apply it with the
+  release to `main`: older builds read the quotes from the cards and would show none.
+- **Checked by** `supabase/tests/class-source-material-check.sql` (who gets what) and
+  `card-quotes-private-check.sql` (after the move: hidden from the cards, kept for a card
+  that only moves, dropped for a rewritten one, gone with the card).
 
 ## 2. Auth and roles
 
@@ -1212,12 +1246,13 @@ runs the game**, and the browsers talk through Supabase Realtime.
 | Table | Columns | Notes |
 |---|---|---|
 | `flashcard_sets` | `id`, `user_id` → `auth.users`, `title`, `source_filename`, `study_type`, `created_at` | `user_id` is null for legacy sets made before sign-in was required |
-| `flashcards` | `id`, `set_id` → `flashcard_sets` (cascade), `question`, `answer`, `options` (jsonb: 4 choices for multiple choice, `["True","False"]` for true or false, null for flashcards and identification; in a mixed quiz this is what tells the parts apart), `explanation` (1–300 chars, true or false only, #68), `source_excerpt` and `source_location` (the quote a card was made from and its page or line, #21), `position` | Indexed on `set_id`. Ids stay the same when a card is edited (#55); a card's quote is cleared when its question or answer changes |
+| `flashcards` | `id`, `set_id` → `flashcard_sets` (cascade), `question`, `answer`, `options` (jsonb: 4 choices for multiple choice, `["True","False"]` for true or false, null for flashcards and identification; in a mixed quiz this is what tells the parts apart), `explanation` (1–300 chars, true or false only, #68), `source_excerpt` and `source_location` (the quote a card was made from and its page or line, #21; since `20261121000310`, only written: a trigger keeps them in `private.card_source_quotes`, #116), `position` | Indexed on `set_id`. Ids stay the same when a card is edited (#55); a card's quote is cleared when its question or answer changes |
+| `private.card_source_quotes` | `card_id` → `flashcards` (cascade, deferred), `excerpt`, `location` | The cards' quotes, once `20261121000310` is applied (#116). No grants: only `study_set_source()` reads them, and a trigger on `flashcards` writes them |
 | `profiles` | `id` → `auth.users` (cascade), `display_name`, `role`, `role_chosen_at`, `created_at` | `role_chosen_at` is for the sign-up role choice (#52) |
 | `classes` | `id`, `teacher_id` → `auth.users` (cascade), `name` (1–80 chars), `join_code` (unique), `created_at` | Indexed on `teacher_id` |
 | `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
 | `class_join_failures` | `id`, `user_id` → `auth.users` (cascade), `attempted_at` | Wrong join codes for the rate limit; indexed on (`user_id`, `attempted_at`); old rows are deleted as new ones arrive |
-| `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `category` (`assignment`, `quiz` or `material`, default `assignment`, #115), `due_at` (nullable; always null for a material), `created_at` | Unique (`class_id`, `set_id`); indexed on `set_id` |
+| `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `category` (`assignment`, `quiz` or `material`, default `assignment`, #115), `due_at` (nullable; always null for a material), `allow_source_material` (default false: whether the class's students see the set's file and quotes, #116), `created_at` | Unique (`class_id`, `set_id`); indexed on `set_id` |
 | `generation_logs` | `id`, `user_id` → `auth.users` (set null), `role`, `ip_hash` (signed out only), `model`, `study_type`, `duration_ms`, `success` (null while running), `error_kind` (incl. `limit`), `requests` (jsonb), `created_at` | One row per `/api/generate` request (#62, #63). Indexed on `created_at`, (`user_id`, `created_at`) and (`ip_hash`, `created_at`) |
 | `guide_history` | `id`, `user_id` → `auth.users` (cascade), `title`, `study_type`, `source_filename`, `source_credit` (jsonb `{ name, url }` for a web page or Wikipedia article), `items` (jsonb: the cards as generated, quotes included), `item_count` (generated from `items`), `set_id` → `flashcard_sets` (set null), `created_at` | History: one row per guide a signed-in user generated. `items` must be a non-empty array. Indexed on (`user_id`, `created_at`) and `set_id` |
 | `guide_source_files` | `id`, `user_id` → `auth.users` (cascade), `history_id` → `guide_history` (set null, unique), `set_id` → `flashcard_sets` (set null, unique), `name`, `kind` (`pdf`, `pdf-text`, `docx`, `pptx`, `txt`, `jpeg`, `png`, `webp`), `content_base64` (up to 4 MB of file), `size_bytes` (generated) | The file a guide was made from (#111): one row for its History entry and the set it was saved as, deleted when neither is left. Owners read their own; only the server adds them. Up to 25 MB a user and 150 MB in all (`private.source_file_room()`). Indexed on `user_id` |

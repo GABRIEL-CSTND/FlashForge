@@ -1,48 +1,22 @@
+-- #116: a teacher can share a set's source material (its file and its cards'
+-- quotes) with a class, one class item at a time. Sharing is off unless the
+-- teacher turns it on.
+--
+-- Safe to apply before this code reaches the live site: it only adds a column
+-- and a function. Hiding the quotes from the cards themselves is the next
+-- migration, 20261121000310_private_card_quotes.sql, which goes with the
+-- release to main.
+
 begin;
 
--- Files were private before this feature. Share them only by a teacher's choice.
 alter table public.assignments add column allow_source_material boolean not null default false;
 
--- Keep quotes off rows that any enrolled student can read. Keep the original
--- columns as write inputs for older app builds and replace_set_cards().
-lock table public.flashcards in share row exclusive mode;
-create table private.card_source_quotes (
-  card_id uuid primary key references public.flashcards (id) on delete cascade deferrable initially deferred,
-  excerpt text,
-  location text
-);
-revoke all on private.card_source_quotes from public, anon, authenticated;
-
-insert into private.card_source_quotes (card_id, excerpt, location)
-select id, source_excerpt, source_location from public.flashcards
-where source_excerpt is not null or source_location is not null;
-
-update public.flashcards set source_excerpt = null, source_location = null
-where source_excerpt is not null or source_location is not null;
-
-create function private.store_card_source_quote() returns trigger
-language plpgsql security definer set search_path = '' as $$
-begin
-  if tg_op = 'UPDATE' and (new.question is distinct from old.question or new.answer is distinct from old.answer) then
-    delete from private.card_source_quotes where card_id = old.id;
-  end if;
-  if new.source_excerpt is not null or new.source_location is not null then
-    insert into private.card_source_quotes (card_id, excerpt, location)
-    values (new.id, new.source_excerpt, new.source_location)
-    on conflict (card_id) do update set excerpt = excluded.excerpt, location = excluded.location;
-  end if;
-  new.source_excerpt := null;
-  new.source_location := null;
-  return new;
-end;
-$$;
-
-revoke all on function private.store_card_source_quote() from public, anon, authenticated;
-create trigger store_card_source_quote before insert or update on public.flashcards
-for each row execute function private.store_card_source_quote();
-
--- Both the initial preview and the subsequent file request check the exact
--- class item. A bare set URL or another class's item ID grants no access.
+-- A set's source material for the caller: the file's name and the cards' quotes,
+-- or the file itself (p_include_file). The set's owner always gets it. Anyone
+-- gets the quotes of a set made before sign-in, whose cards everyone can read
+-- anyway. A student gets it only through a class item that shares it: an item of
+-- one of their classes, for this set, posted by the set's owner, with sharing on.
+-- A bare set id, or another class's item, grants nothing.
 create function public.study_set_source(p_set_id uuid, p_class_item_id uuid default null, p_include_file boolean default false)
 returns jsonb
 language sql stable security definer set search_path = '' as $$
@@ -52,9 +26,9 @@ language sql stable security definer set search_path = '' as $$
   ) else jsonb_build_object(
     'name', (select f.name from public.guide_source_files f where f.set_id = s.id and f.user_id = s.user_id),
     'quotes', coalesce((
-      select jsonb_agg(jsonb_build_object('id', c.id, 'excerpt', q.excerpt, 'location', q.location))
-      from public.flashcards c join private.card_source_quotes q on q.card_id = c.id
-      where c.set_id = s.id
+      select jsonb_agg(jsonb_build_object('id', c.id, 'excerpt', c.source_excerpt, 'location', c.source_location))
+      from public.flashcards c
+      where c.set_id = s.id and (c.source_excerpt is not null or c.source_location is not null)
     ), '[]'::jsonb)
   ) end
   from public.flashcard_sets s
