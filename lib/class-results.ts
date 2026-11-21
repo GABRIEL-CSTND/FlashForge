@@ -72,7 +72,7 @@ export async function getClassResults(
 ): Promise<ClassResults | null> {
   const cls = await getClass(teacherId, classId, client);
   if (!cls) return null;
-  const assignments = (await listClassAssignments(teacherId, classId, client)) ?? [];
+  const assignments = ((await listClassAssignments(teacherId, classId, client)) ?? []).filter((a) => a.category !== 'material');
   const attempts = await attemptsFor(
     cls.students.map((s) => s.studentId),
     assignments.map((a) => a.id),
@@ -126,7 +126,7 @@ export async function getStudentResults(
   const student = cls.students.find((s) => s.studentId === studentId);
   if (!student) return { kind: 'student-not-found' };
 
-  const assignments = (await listClassAssignments(teacherId, classId, client)) ?? [];
+  const assignments = ((await listClassAssignments(teacherId, classId, client)) ?? []).filter((a) => a.category !== 'material');
   const attempts = await attemptsFor(
     [student.studentId],
     assignments.map((a) => a.id),
@@ -241,7 +241,7 @@ export async function getAssignmentQuestions(
   const cls = await getClass(teacherId, classId, client);
   if (!cls) return { kind: 'not-found' };
   const assignment = ((await listClassAssignments(teacherId, classId, client)) ?? []).find((a) => a.id === assignmentId);
-  if (!assignment) return { kind: 'not-found' };
+  if (!assignment || assignment.category === 'material') return { kind: 'not-found' };
 
   const { data: cards, error: cardsError } = await client
     .from('flashcards')

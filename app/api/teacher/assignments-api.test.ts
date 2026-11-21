@@ -16,6 +16,7 @@ import * as classAssignment from '@/app/api/teacher/classes/[id]/assignments/[as
 import * as classRoute from '@/app/api/teacher/classes/[id]/route';
 import * as studentClasses from '@/app/api/student/classes/route';
 import { listStudentAssignments } from '@/lib/assignments';
+import { resolveAssignment } from '@/lib/attempts';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 const USERS = {
@@ -100,6 +101,21 @@ describe('assigning a set from its page', () => {
       [CLASSES.a, inDays(7)],
       [CLASSES.b, inDays(7)],
     ]);
+  });
+
+  it('records quizzes for class credit and keeps learning-material practice private', async () => {
+    const classes = { classIds: [CLASSES.a] };
+    expect((await assign('t1', SETS.bio, { ...classes, category: 'quiz', dueAt: inDays(5) })).status).toBe(201);
+    expect((await assign('t1', SETS.net, { ...classes, category: 'material', dueAt: inDays(5) })).status).toBe(400);
+    expect((await assign('t1', SETS.net, { ...classes, category: 'material' })).status).toBe(201);
+    const [quiz, material] = rows();
+    expect(await resolveAssignment(USERS.stu.id, SETS.bio, quiz.id)).toBe(quiz.id);
+    expect(await resolveAssignment(USERS.stu.id, SETS.net, material.id)).toBeNull();
+
+    const path = ctx({ id: CLASSES.a, assignmentId: quiz.id as string });
+    expect(await json(await classAssignment.PATCH(req('PATCH', 't1', { category: 'material' }), path)))
+      .toEqual({ status: 200, body: { category: 'material', dueAt: null } });
+    expect(await resolveAssignment(USERS.stu.id, SETS.bio, quiz.id)).toBeNull();
   });
 
   it('leaves a class that already has the set as it is', async () => {
@@ -189,7 +205,7 @@ describe('what students see', () => {
     const res = await json(await studentClasses.GET(req('GET', 'stu')));
     expect(res.body.classes).toHaveLength(1);
     expect(res.body.classes[0].assignments).toEqual([
-      { id: expect.any(String), setId: SETS.bio, setTitle: 'Photosynthesis', studyType: 'flashcard', dueAt: inDays(2), createdAt: NOW.toISOString(), myProgress: null },
+      { id: expect.any(String), setId: SETS.bio, setTitle: 'Photosynthesis', studyType: 'flashcard', category: 'assignment', dueAt: inDays(2), createdAt: NOW.toISOString(), myProgress: null },
     ]);
     const outsider = await json(await studentClasses.GET(req('GET', 'out')));
     expect(outsider.body.classes).toEqual([]);

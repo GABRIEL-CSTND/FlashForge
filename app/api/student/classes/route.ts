@@ -21,17 +21,18 @@ export async function GET(req: NextRequest) {
   try {
     const user = await requireRole(req, STUDENT_ROLES);
     const [classes, assignments] = await Promise.all([listJoinedClasses(user.id), listStudentAssignments(user.id)]);
-    const progress = await progressForAssignments(user.id, assignments.map((a) => a.id));
+    const progress = await progressForAssignments(user.id, assignments.filter((a) => a.category !== 'material').map((a) => a.id));
     return NextResponse.json({
       classes: classes.map((c) => ({
         ...c,
         assignments: assignments
           .filter((a) => a.classId === c.id)
-          .map(({ id, setId, setTitle, studyType, dueAt, createdAt }) => ({
+          .map(({ id, setId, setTitle, studyType, category, dueAt, createdAt }) => ({
             id,
             setId,
             setTitle,
             studyType,
+            category,
             dueAt,
             createdAt,
             myProgress: progress.get(id) ?? null,

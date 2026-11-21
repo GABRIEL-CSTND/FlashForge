@@ -118,6 +118,15 @@ const studentResults = async (token: Token | undefined, classId: string, student
   );
 
 describe('GET /api/teacher/classes/[id]/results', () => {
+  it('includes quizzes and hides scores from sets moved to learning materials', async () => {
+    db.rows.assignments.find((a) => a.id === ASSIGNMENTS.xCards)!.category = 'material';
+    db.rows.assignments.find((a) => a.id === ASSIGNMENTS.xQuiz)!.category = 'quiz';
+    const gradebook = await results('t1', CLASSES.x);
+    expect(gradebook.body.assignments).toMatchObject([{ id: ASSIGNMENTS.xQuiz, category: 'quiz' }]);
+    expect(gradebook.body.students[0].results[ASSIGNMENTS.xCards]).toBeUndefined();
+    const individual = await studentResults('t1', CLASSES.x, USERS.ana.id);
+    expect(individual.body.assignments).toMatchObject([{ id: ASSIGNMENTS.xQuiz, category: 'quiz' }]);
+  });
   it('lists every current student × assignment, with not started as its own status', async () => {
     const res = await results('t1', CLASSES.x);
     expect(res.status).toBe(200);

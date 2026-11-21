@@ -183,11 +183,11 @@ export async function resolveAssignment(
   if (!isUuid(assignmentId)) return null;
   const { data: assignment, error } = await client
     .from('assignments')
-    .select('id, set_id, class_id')
+    .select('id, set_id, class_id, category')
     .eq('id', assignmentId)
     .maybeSingle();
   if (error) throw error;
-  if (!assignment || assignment.set_id !== setId) return null;
+  if (!assignment || assignment.set_id !== setId || assignment.category === 'material') return null;
 
   const { data: member, error: memberError } = await client
     .from('class_members')

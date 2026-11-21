@@ -16,6 +16,7 @@ interface StudentRow extends ResultsStudent {
 }
 
 interface AssignmentColumn {
+  category?: 'assignment' | 'quiz';
   id: string;
   setId: string;
   setTitle: string;
@@ -176,6 +177,7 @@ function ResultsView({ id }: { id: string }) {
                         {a.setTitle}
                       </Link>
                       <span className="block text-xs font-normal text-muted">
+                        {a.category === 'quiz' && 'Quiz · '}
                         {a.dueAt ? `Due ${formatDueDate(a.dueAt)}` : 'No due date'}
                       </span>
                     </th>

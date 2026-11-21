@@ -62,7 +62,9 @@ vi.mock('@/lib/api-client', async (importOriginal) => {
           cls.assignments = cls.assignments.filter((a) => a.id !== m![2]);
           return ok({ unassigned: true });
         }
-        const dueAt = (init.body as { dueAt: string | null }).dueAt;
+        const body = init.body as { category?: string; dueAt: string | null };
+        if (body.category) return ok({ category: body.category, dueAt: null });
+        const { dueAt } = body;
         cls.assignments = cls.assignments.map((a) => (a.id === m![2] ? { ...a, dueAt } : a));
         return ok({ dueAt });
       }
@@ -256,18 +258,27 @@ describe('class page', () => {
 
   it('lists assigned sets with due dates, an Overdue badge, and links to the sets', async () => {
     render(<TeacherClassPage />);
-    const section = (await screen.findByRole('heading', { name: 'Assigned sets (2)' })).closest('section')!;
+    const section = (await screen.findByRole('heading', { name: 'Assignments (2)' })).closest('section')!;
     const link = within(section).getByRole('link', { name: /^Pick up Photosynthesis/ });
     expect(link.getAttribute('href')).toBe('/sets/set-1');
     expect(within(section).getAllByText(/^Overdue · was due /)).toHaveLength(1);
     expect(section.textContent).toContain('Due ');
   });
 
+  it('moves an existing assignment into Learning materials and clears its due date controls', async () => {
+    render(<TeacherClassPage />);
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Category for Photosynthesis' }), { target: { value: 'material' } });
+    const materials = (await screen.findByRole('heading', { name: 'Learning materials (1)' })).closest('section')!;
+    expect(within(materials).getByRole('link', { name: /^Pick up Photosynthesis/ })).toBeTruthy();
+    expect(within(materials).queryByRole('button', { name: /Change due date/ })).toBeNull();
+    expect(state.calls.find((c) => c.method === 'PATCH')?.body).toEqual({ category: 'material' });
+  });
+
   it('unassigns a set after confirming', async () => {
     render(<TeacherClassPage />);
     fireEvent.click(await screen.findByRole('button', { name: 'Unassign Photosynthesis' }));
     expect(confirmMock).toHaveBeenCalledWith('Unassign "Photosynthesis" from Biology 101? Students will no longer see it.');
-    expect(await screen.findByRole('heading', { name: 'Assigned sets (1)' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Assignments (1)' })).toBeTruthy();
     expect(state.calls.find((c) => c.method === 'DELETE')?.path).toBe('/api/teacher/classes/c1/assignments/a1');
   });
 
