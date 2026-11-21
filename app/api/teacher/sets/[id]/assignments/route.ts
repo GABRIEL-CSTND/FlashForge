@@ -44,7 +44,11 @@ export async function POST(req: NextRequest, { params }: Context) {
       return NextResponse.json({ error: 'Learning materials do not have due dates.' }, { status: 400 });
     }
 
-    const result = await assignSet(user.id, id, classIds, due.dueAt, category);
+    const allowSourceMaterial = body?.allowSourceMaterial === undefined ? false : body.allowSourceMaterial;
+    if (typeof allowSourceMaterial !== 'boolean') {
+      return NextResponse.json({ error: 'Choose whether to share the source material.' }, { status: 400 });
+    }
+    const result = await assignSet(user.id, id, classIds, due.dueAt, category, allowSourceMaterial);
     if (!result.ok) return notFound(result.reason === 'set-not-found' ? 'Study set' : 'Class');
     return NextResponse.json(result, { status: result.assigned.length > 0 ? 201 : 200 });
   } catch (err) {

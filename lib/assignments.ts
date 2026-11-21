@@ -12,6 +12,7 @@ export interface ClassOption {
   className: string;
   assignmentId: string | null;
   category: ClassContentCategory | null;
+  allowSourceMaterial: boolean;
   dueAt: string | null;
 }
 
@@ -27,6 +28,7 @@ export interface ClassAssignment {
   setTitle: string;
   studyType: string;
   category: ClassContentCategory;
+  allowSourceMaterial: boolean;
   dueAt: string | null;
   createdAt: string;
 }
@@ -77,7 +79,7 @@ export async function getSetAssignments(
 
   const { data: assigned, error: assignedError } = await client
     .from('assignments')
-    .select('id, class_id, due_at, category')
+    .select('id, class_id, due_at, category, allow_source_material')
     .eq('set_id', setId)
     .in(
       'class_id',
@@ -94,6 +96,7 @@ export async function getSetAssignments(
       className: c.name,
       assignmentId: byClass.get(c.id)?.id ?? null,
       category: byClass.get(c.id)?.category ?? null,
+      allowSourceMaterial: byClass.get(c.id)?.allow_source_material ?? false,
       dueAt: byClass.get(c.id)?.due_at ?? null,
     })),
   };
@@ -111,6 +114,7 @@ export async function assignSet(
   classIds: string[],
   dueAt: string | null,
   category: ClassContentCategory,
+  allowSourceMaterial: boolean,
   client: SupabaseClient = supabaseAdmin
 ): Promise<AssignResult> {
   if (!(await ownsSet(teacherId, setId, client))) return { ok: false, reason: 'set-not-found' };
@@ -129,7 +133,7 @@ export async function assignSet(
   for (const classId of unique) {
     const { error: insertError } = await client
       .from('assignments')
-      .insert({ class_id: classId, set_id: setId, due_at: dueAt, category });
+      .insert({ class_id: classId, set_id: setId, due_at: dueAt, category, allow_source_material: allowSourceMaterial });
     if (!insertError) assigned.push(classId);
     else if (insertError.code === '23505') alreadyAssigned.push(classId);
     else throw insertError;
@@ -138,7 +142,7 @@ export async function assignSet(
 }
 
 async function withSetDetails(
-  rows: { id: string; class_id: string; set_id: string; category: ClassContentCategory; due_at: string | null; created_at: string }[],
+  rows: { id: string; class_id: string; set_id: string; category: ClassContentCategory; allow_source_material: boolean; due_at: string | null; created_at: string }[],
   client: SupabaseClient
 ): Promise<StudentAssignment[]> {
   if (rows.length === 0) return [];
@@ -151,12 +155,12 @@ async function withSetDetails(
   return rows.flatMap((r) => {
     const set = setById.get(r.set_id);
     return set
-      ? [{ id: r.id, classId: r.class_id, setId: r.set_id, setTitle: set.title, studyType: set.study_type, category: r.category ?? 'assignment', dueAt: r.due_at, createdAt: r.created_at }]
+      ? [{ id: r.id, classId: r.class_id, setId: r.set_id, setTitle: set.title, studyType: set.study_type, category: r.category ?? 'assignment', allowSourceMaterial: r.allow_source_material ?? false, dueAt: r.due_at, createdAt: r.created_at }]
       : [];
   });
 }
 
-const ASSIGNMENT_COLUMNS = 'id, class_id, set_id, category, due_at, created_at';
+const ASSIGNMENT_COLUMNS = 'id, class_id, set_id, category, allow_source_material, due_at, created_at';
 
 // A class's assignments, soonest due first. Null if the class isn't the teacher's.
 export async function listClassAssignments(
@@ -174,6 +178,7 @@ export async function listClassAssignments(
     setTitle: a.setTitle,
     studyType: a.studyType,
     category: a.category,
+    allowSourceMaterial: a.allowSourceMaterial,
     dueAt: a.dueAt,
     createdAt: a.createdAt,
   }));
@@ -216,6 +221,24 @@ export async function updateAssignmentCategory(
     .maybeSingle();
   if (error) throw error;
   return data ? { category: data.category, dueAt: data.due_at } : null;
+}
+
+export async function updateAssignmentSourceSharing(
+  teacherId: string,
+  classId: string,
+  assignmentId: string,
+  allowSourceMaterial: boolean,
+  client: SupabaseClient = supabaseAdmin
+): Promise<boolean> {
+  if (!(await ownsClass(teacherId, classId, client))) return false;
+  const { data, error } = await client
+    .from('assignments')
+    .update({ allow_source_material: allowSourceMaterial })
+    .eq('id', assignmentId)
+    .eq('class_id', classId)
+    .select('id');
+  if (error) throw error;
+  return (data ?? []).length > 0;
 }
 
 // Students immediately lose access to the set (RLS follows the assignment).

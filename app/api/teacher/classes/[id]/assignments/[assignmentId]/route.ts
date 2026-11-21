@@ -4,7 +4,7 @@ import { TEACHER_ROLES } from '@/lib/role-types';
 import { isUuid } from '@/lib/ids';
 import { parseDueAt } from '@/lib/due-dates';
 import { isClassContentCategory } from '@/lib/classes-shared';
-import { unassign, updateAssignmentCategory, updateAssignmentDue } from '@/lib/assignments';
+import { unassign, updateAssignmentCategory, updateAssignmentDue, updateAssignmentSourceSharing } from '@/lib/assignments';
 import { getAssignmentQuestions } from '@/lib/class-results';
 import { errorResponse, notFound, readJsonBody } from '@/lib/route-helpers';
 
@@ -29,13 +29,21 @@ export async function GET(req: NextRequest, { params }: Context) {
   }
 }
 
-// Change either the category or the due date. Moving to materials clears the due date.
+// Change a category, due date, or source sharing setting.
 export async function PATCH(req: NextRequest, { params }: Context) {
   try {
     const user = await requireRole(req, TEACHER_ROLES);
     const { id, assignmentId } = await params;
     if (!isUuid(id) || !isUuid(assignmentId)) return notFound('Assignment');
     const body = await readJsonBody(req);
+    if (body?.allowSourceMaterial !== undefined) {
+      const allow = body.allowSourceMaterial;
+      if (typeof allow !== 'boolean' || body.category !== undefined || body.dueAt !== undefined) {
+        return NextResponse.json({ error: 'Change source sharing on its own.' }, { status: 400 });
+      }
+      const updated = await updateAssignmentSourceSharing(user.id, id, assignmentId, allow);
+      return updated ? NextResponse.json({ allowSourceMaterial: allow }) : notFound('Assignment');
+    }
     if (body?.category !== undefined) {
       if (!isClassContentCategory(body.category) || body.dueAt !== undefined) {
         return NextResponse.json({ error: 'Choose a category without changing the due date.' }, { status: 400 });
