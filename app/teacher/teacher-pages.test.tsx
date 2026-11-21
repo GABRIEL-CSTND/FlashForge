@@ -18,7 +18,15 @@ vi.mock('next/navigation', () => ({
 }));
 vi.mock('@/components/ProfileProvider', () => ({ useProfile: () => state.profile }));
 // The real api-client module imports the browser Supabase client, which needs env vars.
-vi.mock('@/lib/supabase', () => ({ supabase: {} }));
+vi.mock('@/lib/supabase', () => {
+  const query = {
+    select: () => query,
+    eq: () => query,
+    order: () => query,
+    abortSignal: async () => ({ data: [], error: null }),
+  };
+  return { supabase: { from: () => query } };
+});
 vi.mock('@/lib/api-client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api-client')>();
   return {

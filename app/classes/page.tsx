@@ -5,6 +5,7 @@ import LibraryDeck, { DESK_TEXT_BUTTON } from '@/components/desk/LibraryDeck';
 import LibraryDesk, { DeskNote } from '@/components/desk/LibraryDesk';
 import type { TagTone } from '@/components/desk/PaperTag';
 import RoleGate from '@/components/RoleGate';
+import ClassFiles from '@/components/ClassFiles';
 import { apiFetch, errorMessage } from '@/lib/api-client';
 import { normalizeJoinCode } from '@/lib/classes-shared';
 import { shortDate } from '@/lib/library';
@@ -228,6 +229,7 @@ function MyClasses() {
                       </ul>
                     )}
                   </div>
+                  <ClassFiles classId={c.id} />
                 </li>
               ))}
             </ul>
