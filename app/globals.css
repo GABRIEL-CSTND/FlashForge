@@ -656,6 +656,13 @@ button.desk-spot:not(:disabled) {
   translate: 0 -7px;
   box-shadow: inset 0 0 0 2px var(--brass), 0 16px 26px -12px rgb(0 0 0 / 0.65);
 }
+/* A live game's pick (#26) while the answer is still a secret: lifted, with a
+   brass edge, and no mark yet. */
+.answer-slip.is-held {
+  translate: 0 -5px;
+  rotate: 0deg;
+  box-shadow: inset 0 0 0 2px var(--brass), 0 14px 24px -12px rgb(0 0 0 / 0.6);
+}
 .answer-slip.is-wrong .answer-slip-text {
   color: var(--pencil);
   text-decoration: line-through 2px var(--pencil);
@@ -842,5 +849,23 @@ button.desk-spot:not(:disabled) {
 @media (prefers-reduced-motion: reduce) {
   .kraft-folder {
     transition: none;
+  }
+}
+
+/* ---- Live games (#26) ---------------------------------------------------- */
+
+/* The last five seconds of a question: the timer turns red pencil and pulses. */
+@keyframes live-timer-pulse {
+  50% {
+    scale: 1.08;
+  }
+}
+.live-timer-low {
+  background-color: #e08a7e;
+  animation: live-timer-pulse 1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-timer-low {
+    animation: none;
   }
 }
