@@ -68,6 +68,7 @@ beforeEach(() => {
       profiles: { unique: [['id']] },
       generation_logs: { unique: [['id']] },
       guide_history: { unique: [['id']], defaults: { id: () => fakeUuid() } },
+      guide_source_files: { unique: [['history_id']] },
     },
     users: { sam: STUDENT },
     rpc: {
@@ -215,6 +216,36 @@ describe('/api/generate usage log (#62) and daily limits (#63)', () => {
 
 describe('/api/generate History', () => {
   const history = () => fake.current!.db.rows.guide_history;
+  const files = () => fake.current!.db.rows.guide_source_files;
+
+  it('keeps the uploaded file with its History entry', async () => {
+    const res = await generate(LONG_TEXT, asSam);
+    const { historyId } = await res.json();
+    expect(res.status).toBe(200);
+    expect(files()).toEqual([
+      expect.objectContaining({
+        history_id: historyId,
+        user_id: STUDENT.id,
+        name: 'notes.txt',
+        kind: 'txt',
+        content_base64: Buffer.from(LONG_TEXT).toString('base64'),
+      }),
+    ]);
+  });
+
+  it('keeps labeled extracted text when the browser sends PDF pages', async () => {
+    const res = await generate(null, asSam, { pages: JSON.stringify([LONG_TEXT]), fileName: 'lecture.pdf' });
+    const { historyId } = await res.json();
+    expect(res.status).toBe(200);
+    expect(files()).toEqual([
+      expect.objectContaining({
+        history_id: historyId,
+        name: 'lecture.pdf',
+        kind: 'pdf-text',
+        content_base64: Buffer.from(`Page 1\n\n${LONG_TEXT}`).toString('base64'),
+      }),
+    ]);
+  });
 
   it("keeps a signed-in user's guide in their History, and says which entry it is", async () => {
     const res = await generate(LONG_TEXT, asSam);
@@ -255,6 +286,7 @@ describe('/api/generate History', () => {
     const res = await generate(LONG_TEXT);
     expect((await res.json()).historyId).toBeNull();
     expect(history()).toEqual([]);
+    expect(files()).toEqual([]);
   });
 
   it('keeps nothing when the guide fails', async () => {

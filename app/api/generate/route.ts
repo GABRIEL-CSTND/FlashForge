@@ -141,6 +141,7 @@ async function generate(
     let text: string;
     let title: string;
     let sourceFilename: string | null;
+    let sourceFile: File | { name: string; pages: string[] } | undefined;
     // Photos (#72) go to the AI as they are, with no text taken out first.
     let attachment: Attachment | undefined;
     // Where a link's page or a topic's article came from, to credit it (#79).
@@ -209,8 +210,9 @@ async function generate(
       ({ text, units } = pageUnits(parsed.pages));
       title = name.replace(/\.[^/.]+$/, '') || name;
       sourceFilename = name;
+      sourceFile = { name, pages: parsed.pages };
     } else {
-      if (!file) {
+      if (!(file instanceof File)) {
         return done(NextResponse.json({ error: 'Missing file' }, { status: 400 }), { success: false, errorKind: 'no_file' });
       }
       // The upload page checks this too; this covers anything else that calls the API.
@@ -245,6 +247,7 @@ async function generate(
       }
       title = file.name.replace(/\.[^/.]+$/, '');
       sourceFilename = file.name;
+      sourceFile = file;
     }
     if (!attachment && (!text || text.trim().length < MIN_SOURCE_CHARS)) {
       return done(
@@ -284,7 +287,7 @@ async function generate(
 
     // A signed-in user keeps every guide they make in History, saved or not.
     const historyId = state.caller?.userId
-      ? await addToHistory(state.caller.userId, { title, studyType, sourceFilename, source, items })
+      ? await addToHistory(state.caller.userId, { title, studyType, sourceFilename, source, items, sourceFile })
       : null;
 
     return done(

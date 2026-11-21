@@ -14,11 +14,13 @@ import { useProfile } from '@/components/ProfileProvider';
 import { canUseTeacherTools } from '@/lib/role-types';
 import type { FlashcardMode, StudyMode, StudyType } from '@/lib/study-types';
 import { quoteSourceLabel } from '@/lib/sources';
+import SourceFileViewer from '@/components/SourceFileViewer';
 
 interface FlashcardSet {
   id: string;
   title: string;
   source_filename: string | null;
+  source_file?: { name: string } | null;
   study_type: StudyType;
   user_id: string | null;
 }
@@ -93,7 +95,7 @@ export default function SetPage() {
     const load = async () => {
       const { data: setData, error: setError } = await supabase
         .from('flashcard_sets')
-        .select('*')
+        .select('*, source_file:guide_source_files(name)')
         .eq('id', params.id)
         .single();
 
@@ -368,7 +370,12 @@ export default function SetPage() {
       cards={cards}
       onFinish={() => router.push('/')}
       onEdit={isOwner ? () => setEditingCards(true) : undefined}
-      saveSlot={deleteSlot}
+      saveSlot={isOwner && set.source_file ? (
+        <div className="space-y-2 text-center">
+          <SourceFileViewer key={set.id} source={{ name: set.source_file.name, setId: set.id }} />
+          {deleteSlot}
+        </div>
+      ) : deleteSlot}
       onComplete={recordAttempt}
       completionSlot={completionSlot}
       quoteLabel={quoteSourceLabel(set.source_filename)}
