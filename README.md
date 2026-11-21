@@ -144,6 +144,7 @@ components/
   study/parts.tsx       Exit, the line above the desk, and the verdicts for typed and picked answers
   CardEditor.tsx        Edit mode for a set: change, add, delete and reorder cards (of any kind in a mixed quiz)
   AssignPanel.tsx       "Assign to class" dialog on a set the teacher owns
+  ClassFiles.tsx        "Class files": the teacher posts and removes them, a class's students download them (#112)
   StudentResultsPanel.tsx  One student's attempts, opened from the results table
   ProfileProvider.tsx   Shares the signed-in user's profile (role) with every page
   RoleChooser.tsx       "Student or teacher?" screen for users who haven't chosen

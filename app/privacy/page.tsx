@@ -101,7 +101,7 @@ export default function PrivacyPage() {
           <div className="paper rounded-lg p-4 space-y-1.5 border border-ink/10">
             <h3 className="font-medium text-sm text-ink">Classes & Memberships</h3>
             <p className="text-xs text-muted leading-relaxed">
-              For teachers, we store the classes you create, rosters, and assigned decks. For students, we store the classes you join using teacher join codes.
+              For teachers, we store the classes you create, rosters, and assigned decks. For students, we store the classes you join using teacher join codes. Files a teacher posts to a class are kept with it (up to 50 MB for all of a teacher&apos;s classes): its students can download them, and they&apos;re deleted with the class.
             </p>
           </div>
 

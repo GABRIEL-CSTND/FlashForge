@@ -299,6 +299,7 @@ export default function GuidePage() {
               <li>Assign study decks to your classes with optional due dates.</li>
               <li>Open the <strong>Grade Book</strong> to see student attempts, class averages, and export CSV reports.</li>
               <li>Review <strong>Most-missed questions</strong> to pinpoint difficult concepts before tests.</li>
+              <li>Post files for your students under <strong>Class files</strong> on the class page: PDF, Word, PowerPoint, TXT or photos, up to 4 MB each and 50 MB for all your classes.</li>
             </ul>
           </div>
 
@@ -308,6 +309,7 @@ export default function GuidePage() {
               <li>Visit the <strong>My Classes</strong> tab and enter your teacher&apos;s join code on the paper card.</li>
               <li>View all class assignments in designated leather trays, tagged with due dates (<em>Due Fri</em>, <em>Overdue</em>, or <em>Done</em>).</li>
               <li>Take assigned quizzes and study sets; scores sync directly to your teacher&apos;s grade book.</li>
+              <li>Open <strong>Class files</strong> under a class to download the files your teacher posted.</li>
             </ul>
           </div>
         </div>

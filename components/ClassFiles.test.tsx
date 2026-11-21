@@ -44,6 +44,19 @@ describe('class files', () => {
     expect(fake.current!.db.rows.class_files).toEqual([]);
   });
 
+  it("says when the teacher's room for files is full, and posts nothing", async () => {
+    fake.current!.db.failNext('class_files', 'insert', { code: 'PT413', message: 'no room left', hint: 'teacher' });
+    render(<ClassFiles classId={CLASS} canPost />);
+    await screen.findByText('No class files yet.');
+    expect(screen.getByText(/Up to 4 MB per file, and 50 MB for all your classes/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Choose a class file'), { target: {
+      files: [new File(['hello'], FILE.name, { type: 'text/plain' })],
+    } });
+    fireEvent.click(screen.getByRole('button', { name: 'Post file' }));
+    expect((await screen.findByRole('alert')).textContent).toBe("Your classes' files are full (50 MB in all). Remove a file to post another.");
+    expect(fake.current!.db.rows.class_files).toEqual([]);
+  });
+
   it('lets a student download a file from the class without offering posting or removal', async () => {
     fake.current!.db.rows.class_files.push(FILE, { ...FILE, id: fakeUuid(), class_id: fakeUuid(), name: 'Other class.txt' });
     const createObjectURL = vi.fn<(blob: Blob) => string>(() => 'blob:class-file');

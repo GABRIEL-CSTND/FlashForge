@@ -41,4 +41,57 @@ create policy "Class teachers remove files"
     and exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.role in ('teacher', 'admin'))
   );
 
+-- The files are base64 text in Postgres, whose free plan turns read-only at
+-- 500 MB, so their room is limited: up to 50 MB of files a teacher (all their
+-- classes together) and 100 MB for everyone. Change them by replacing this function.
+create function private.class_file_room(out per_teacher bigint, out everyone bigint)
+language sql stable as $$
+  select 50::bigint * 1024 * 1024, 100::bigint * 1024 * 1024
+$$;
+
+revoke all on function private.class_file_room() from public, anon, authenticated;
+
+-- A file that doesn't fit is refused with PT413, which the API answers as 413
+-- Payload Too Large; the hint says whose room is full ('teacher' or 'everyone').
+create function private.check_class_file_room() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare
+  room record;
+  teacher uuid;
+  needed bigint;
+begin
+  -- Files too big to keep, and posts the policy turns away, are left to the
+  -- checks and the policy.
+  if octet_length(new.content_base64) > 5592408 then
+    return new;
+  end if;
+  needed := octet_length(decode(new.content_base64, 'base64'));
+  if needed > 4194304 then
+    return new;
+  end if;
+  if (select auth.uid()) is not null and not private.is_class_teacher(new.class_id) then
+    return new;
+  end if;
+  select c.teacher_id into teacher from public.classes c where c.id = new.class_id;
+  select * into room from private.class_file_room();
+  -- One file at a time per teacher, so two posts can't take the same room.
+  perform pg_advisory_xact_lock(hashtext('class_files:' || coalesce(teacher::text, '')));
+  if (select coalesce(sum(f.size_bytes), 0)
+      from public.class_files f join public.classes c on c.id = f.class_id
+      where c.teacher_id = teacher) + needed > room.per_teacher then
+    raise exception 'no room left for this teacher''s class files' using errcode = 'PT413', hint = 'teacher';
+  end if;
+  if (select coalesce(sum(f.size_bytes), 0) from public.class_files f) + needed > room.everyone then
+    raise exception 'no room left for class files' using errcode = 'PT413', hint = 'everyone';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function private.check_class_file_room() from public, anon, authenticated;
+
+create trigger check_class_file_room
+  before insert on public.class_files
+  for each row execute function private.check_class_file_room();
+
 commit;

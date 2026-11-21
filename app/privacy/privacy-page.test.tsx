@@ -85,6 +85,8 @@ describe('Privacy page (#88)', () => {
     // Live games (#26) show nicknames and points to the room and save nothing.
     expect(text).toMatch(/everyone in the room sees your nickname and your points/);
     expect(text).toMatch(/isn't saved: no scores, no nicknames/);
+    // Class files (#112): the class's students download them; they go with the class.
+    expect(text).toMatch(/its students can download them, and they.re deleted with the class/);
   });
 
   it('shows sign-in prompt in the deletion section when signed out', () => {

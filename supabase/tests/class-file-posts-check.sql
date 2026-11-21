@@ -2,14 +2,29 @@
 -- All changes are rolled back.
 begin;
 
+-- Small room for this check: 10 bytes more than the check's teacher (the first
+-- user) keeps, and 1000 more than everyone keeps. Lowered again below.
+create temporary table check_class_room_base on commit drop as
+  select
+    (select coalesce(sum(f.size_bytes), 0) from public.class_files f
+       join public.classes c on c.id = f.class_id
+       where c.teacher_id = (select id from auth.users order by id limit 1))::bigint as teacher_used,
+    (select coalesce(sum(size_bytes), 0) from public.class_files)::bigint as everyone_used;
+create or replace function private.class_file_room(out per_teacher bigint, out everyone bigint)
+language sql stable as $$
+  select teacher_used + 10, everyone_used + 1000 from pg_temp.check_class_room_base
+$$;
+
 do $$
 declare
   teacher uuid;
   student uuid;
   outsider uuid;
   classroom uuid;
+  other_class uuid;
   file_id uuid;
   deleted integer;
+  full_hint text;
 begin
   select id into teacher from auth.users order by id limit 1;
   select id into student from auth.users order by id offset 1 limit 1;
@@ -84,6 +99,33 @@ begin
   if deleted <> 1 then raise exception 'Class teacher cannot remove the file'; end if;
   insert into public.class_files (class_id, name, content_base64)
     values (classroom, 'Second file.txt', 'aGVsbG8=') returning id into file_id;
+
+  -- The teacher's room: 5 of 10 bytes are taken, so 6 more don't fit and 5 do.
+  begin
+    insert into public.class_files (class_id, name, content_base64) values (classroom, 'Six bytes.txt', 'c2l4c2l4');
+    raise exception 'A file past the teacher''s room was posted';
+  exception when sqlstate 'PT413' then
+    get stacked diagnostics full_hint = pg_exception_hint;
+    if full_hint is distinct from 'teacher' then raise exception 'The teacher''s full room said %', full_hint; end if;
+  end;
+  insert into public.class_files (class_id, name, content_base64) values (classroom, 'Five bytes.txt', 'aGVsbG8=');
+  reset role;
+
+  -- Everyone's room, lowered to 12 bytes more than before the check: this
+  -- teacher keeps 10, so another teacher's 5 don't fit.
+  create or replace function private.class_file_room(out per_teacher bigint, out everyone bigint)
+  language sql stable as $room$ select 1000000::bigint, everyone_used + 12 from pg_temp.check_class_room_base $room$;
+  insert into public.classes (teacher_id, name, join_code)
+    values (outsider, 'Class file room test', 'F4K6R8') returning id into other_class;
+  perform set_config('request.jwt.claims', json_build_object('sub', outsider)::text, true);
+  execute 'set local role authenticated';
+  begin
+    insert into public.class_files (class_id, name, content_base64) values (other_class, 'Five.txt', 'aGVsbG8=');
+    raise exception 'A file past everyone''s room was posted';
+  exception when sqlstate 'PT413' then
+    get stacked diagnostics full_hint = pg_exception_hint;
+    if full_hint is distinct from 'everyone' then raise exception 'Everyone''s full room said %', full_hint; end if;
+  end;
   reset role;
 
   delete from public.classes where id = classroom;

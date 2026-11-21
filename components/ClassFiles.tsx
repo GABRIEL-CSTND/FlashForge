@@ -12,6 +12,17 @@ interface ClassFile {
 
 const FILE_COLUMNS = 'id, name, size_bytes';
 const MAX_MB = MAX_UPLOAD_BYTES / 1024 / 1024;
+// The database's limit for all of a teacher's classes (private.class_file_room()).
+const ROOM_MB = 50;
+
+// Why a post was refused: PT413 means the room is full; its hint says whose.
+function postProblem(error: unknown) {
+  const { code, hint } = (error ?? {}) as { code?: string; hint?: string };
+  if (code !== 'PT413') return 'Could not post this file. Try again.';
+  return hint === 'everyone'
+    ? 'FlashForge has no room for more class files right now. Try again later.'
+    : `Your classes' files are full (${ROOM_MB} MB in all). Remove a file to post another.`;
+}
 
 function readBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -87,8 +98,8 @@ function FileList({ classId, canPost }: { classId: string; canPost: boolean }) {
       if (chooser.current) chooser.current.value = '';
       setSelected(null);
       setFeedback({ error: false, text: `${data.name} was posted.` });
-    } catch {
-      setFeedback({ error: true, text: 'Could not post this file. Try again.' });
+    } catch (error) {
+      setFeedback({ error: true, text: postProblem(error) });
     } finally {
       setBusy(null);
     }
@@ -132,7 +143,7 @@ function FileList({ classId, canPost }: { classId: string; canPost: boolean }) {
         <form onSubmit={post} className="flex flex-wrap items-end gap-3 border-b border-ink/15 pb-4">
           <div className="min-w-0 flex-1 basis-52 space-y-1">
             <label htmlFor={chooserId} className="block text-sm font-semibold">Choose a class file</label>
-            <p id={`${chooserId}-help`} className="text-xs text-muted">{FILE_TYPES_TEXT}. Up to {MAX_MB} MB per file.</p>
+            <p id={`${chooserId}-help`} className="text-xs text-muted">{FILE_TYPES_TEXT}. Up to {MAX_MB} MB per file, and {ROOM_MB} MB for all your classes.</p>
             <input ref={chooser} id={chooserId} type="file" accept={FILE_ACCEPT} aria-describedby={`${chooserId}-help`}
               disabled={busy !== null} onChange={(event) => setSelected(event.target.files?.[0] ?? null)}
               className="block min-h-11 w-full text-sm file:mr-2 file:min-h-11 file:rounded-md file:border file:border-ink/20 file:bg-transparent file:px-2 file:font-medium" />

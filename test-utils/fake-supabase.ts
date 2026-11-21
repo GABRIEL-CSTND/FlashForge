@@ -7,7 +7,8 @@
 
 type Row = Record<string, unknown>;
 type Filter = (row: Row) => boolean;
-type Result = { data: unknown; error: { code: string; message: string } | null; count?: number | null };
+type FakeError = { code: string; message: string; hint?: string };
+type Result = { data: unknown; error: FakeError | null; count?: number | null };
 
 export interface FakeTableConfig {
   // Each entry is a set of columns that must be unique together.
@@ -28,8 +29,9 @@ export interface FakeSupabaseOptions {
 
 export interface FakeDb {
   rows: Record<string, Row[]>;
-  // Make the next query on `table` (optionally only for `op`) fail.
-  failNext: (table: string, op?: 'select' | 'insert' | 'update' | 'delete') => void;
+  // Make the next query on `table` (optionally only for `op`) fail, with `error`
+  // if given (a code like PT413 and its hint), or a generic one.
+  failNext: (table: string, op?: 'select' | 'insert' | 'update' | 'delete', error?: FakeError) => void;
 }
 
 let idCounter = 0;
@@ -48,20 +50,20 @@ function pick(row: Row, columns: string): Row {
 export function createFakeSupabase(options: FakeSupabaseOptions = {}) {
   const configs = options.tables ?? {};
   const rows: Record<string, Row[]> = Object.fromEntries(Object.keys(configs).map((t) => [t, []]));
-  const failures: { table: string; op?: string }[] = [];
+  const failures: { table: string; op?: string; error?: FakeError }[] = [];
 
   const table = (name: string) => (rows[name] ??= []);
 
   const db: FakeDb = {
     rows,
-    failNext: (t, op) => failures.push({ table: t, op }),
+    failNext: (t, op, error) => failures.push({ table: t, op, error }),
   };
 
   function takeFailure(t: string, op: string) {
     const i = failures.findIndex((f) => f.table === t && (!f.op || f.op === op));
     if (i === -1) return null;
-    failures.splice(i, 1);
-    return { code: 'XX000', message: `simulated ${op} failure on ${t}` };
+    const [failure] = failures.splice(i, 1);
+    return failure.error ?? { code: 'XX000', message: `simulated ${op} failure on ${t}` };
   }
 
   function violatesUnique(t: string, candidate: Row, ignore?: Row) {

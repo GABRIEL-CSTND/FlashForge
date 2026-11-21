@@ -34,6 +34,11 @@ with the next release of `dev` to `main`.
   - The home page's request code is now also in `lib/guide-request.ts`, which the lobby
     uses; the home page moves onto it once its redesign (#108) has settled.
   - Answer slips can keep a pick secret: lifted with a brass edge until the answer is known.
+- **Class files (#112):** teachers post files to a class under *Class files* on its page (PDF,
+  Word, PowerPoint, TXT or photos, up to 4 MB each), and the class's students download them
+  from *My classes*. A teacher's classes keep up to 50 MB of files in all (100 MB for
+  everyone); a file that doesn't fit is refused with a message. Files go with their class.
+  Migration `20261121000400_class_file_posts.sql`.
 
 ## 2026-11-16: the desk redesign
 

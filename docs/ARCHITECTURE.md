@@ -812,6 +812,24 @@ live database's keys were checked on 2026-11-14: they match the migrations.
 - **Leaving** (`DELETE /api/student/classes/[id]`) removes only the caller's own
   membership. Rejoining needs the class's current code.
 
+### Class files (#112)
+
+- **Posting:** the class page has **Class files** (`components/ClassFiles.tsx`), where the
+  teacher posts a PDF, Word, PowerPoint, TXT or image file of up to 4 MB, or removes one.
+  The browser writes the row itself (`class_files`, the file as base64 text): RLS lets the
+  class's teacher (with the teacher or admin role) insert and delete, and checks on the
+  table refuse other file types, odd names and sizes.
+- **Downloading:** under each class on **My classes**, *Class files* opens to the list;
+  members and the teacher can read the rows (RLS), and a download fetches that one row's
+  bytes. Leaving the class, or being removed, ends access. Files go with their class.
+- **Room:** the files are in Postgres, and the free plan's database turns read-only at
+  500 MB, so a trigger limits them: 50 MB for all of a teacher's classes, 100 MB for
+  everyone (`private.class_file_room()`). A file that doesn't fit is refused with `PT413`
+  (HTTP 413), whose hint says whose room is full, and the page says which. Moving the
+  files to Supabase Storage would lift the limits.
+- **Checked by** `supabase/tests/class-file-posts-check.sql`: types, names and sizes, who
+  can post, read and remove, former members, both limits, and deleting the class.
+
 ### Assigning sets to classes (#56)
 
 - On a set they own, teachers (and admins) get **Assign to class**
@@ -1177,6 +1195,7 @@ runs the game**, and the browsers talk through Supabase Realtime.
 | `profiles` | `id` → `auth.users` (cascade), `display_name`, `role`, `role_chosen_at`, `created_at` | `role_chosen_at` is for the sign-up role choice (#52) |
 | `classes` | `id`, `teacher_id` → `auth.users` (cascade), `name` (1–80 chars), `join_code` (unique), `created_at` | Indexed on `teacher_id` |
 | `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
+| `class_files` | `id`, `class_id` → `classes` (cascade), `name` (1–200 chars, a supported file type), `content_base64`, `size_bytes` (generated, 1 byte to 4 MB), `created_at` | Files a teacher posts to a class (#112). The class's teacher posts and removes them; its members and the teacher read them. Up to 50 MB a teacher and 100 MB in all (`private.class_file_room()`). Indexed on (`class_id`, `created_at`, `id`) |
 | `class_join_failures` | `id`, `user_id` → `auth.users` (cascade), `attempted_at` | Wrong join codes for the rate limit; indexed on (`user_id`, `attempted_at`); old rows are deleted as new ones arrive |
 | `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `due_at` (nullable), `created_at` | Unique (`class_id`, `set_id`); indexed on `set_id` |
 | `generation_logs` | `id`, `user_id` → `auth.users` (set null), `role`, `ip_hash` (signed out only), `model`, `study_type`, `duration_ms`, `success` (null while running), `error_kind` (incl. `limit`), `requests` (jsonb), `created_at` | One row per `/api/generate` request (#62, #63). Indexed on `created_at`, (`user_id`, `created_at`) and (`ip_hash`, `created_at`) |
