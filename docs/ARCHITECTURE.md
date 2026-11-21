@@ -15,6 +15,7 @@ flowchart LR
     AP["Admin pages<br/>/admin, /admin/users,<br/>/admin/sets, /admin/usage"]
     T["Teacher pages<br/>/teacher, /teacher/classes/[id],<br/>/teacher/classes/[id]/results"]
     MC["My classes<br/>/classes"]
+    PL["Play live<br/>/play, /play/[code]"]
   end
   subgraph "Next.js server (Vercel)"
     G["/api/generate"] --> AI[lib/gemini.ts]
@@ -36,6 +37,7 @@ flowchart LR
   subgraph Supabase
     DB[(Postgres + RLS)]
     AUTH[Google sign-in]
+    RT[Realtime broadcast]
   end
   U -->|PDF/TXT| G
   G -.->|"usage log, after the response"| DB
@@ -59,6 +61,9 @@ flowchart LR
   CR -->|service-role key, own class and current students| DB
   MC --> SC
   SCL -->|service-role key, scoped to the student| DB
+  PL <-->|"live games: the room, the host's inbox"| RT
+  PL -->|"a new deck"| G
+  PL -->|"My Sets, History: anon key + user session"| DB
 ```
 
 Every server route that changes data checks the caller first (`lib/roles.ts`) and then
@@ -112,7 +117,8 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
 
 - **Card box** (`components/desk/CardBox.tsx`), at the top left, holds the navigation that
   used to be the upload page's header links. Its front is the brass **FlashForge** button
-  (to `/`, a new study guide), and a paper divider tab sticks up for each section the user
+  (to `/`, a new study guide) and **Play live** (`/play`, #26, for everyone; on the front
+  because a sixth tab wouldn't fit a phone), and a paper divider tab sticks up for each section the user
   can open (`cardBoxTabs()`): *My Sets* and *History* when signed in, then *My Classes*
   (`/classes`) for students, *Classes* (`/teacher`) for teachers and admins, and *Admin*
   for admins, then *Guide* (`/guide`, #25) for everyone. The role's tabs appear once the
@@ -1100,6 +1106,68 @@ live database's keys were checked on 2026-11-14: they match the migrations.
 
 The plan for teacher and admin features is tracked in #50.
 
+### Live games (#26)
+
+A room of friends plays one deck at the same time, in the style of jklm.fun's PopSauce:
+the same question for everyone at once, a countdown, and more points for faster right
+answers. Pages: `/play` (a nickname, then *Open a room* or a code to join) and
+`/play/[code]` (the room). There's no API route, table or migration: **the host's browser
+runs the game**, and the browsers talk through Supabase Realtime.
+
+- **The rules** (`lib/live-game.ts`, no React): a room is in the lobby, a question, its
+  answer (the *reveal*) or the end. The host's `HostState` holds the deck with its
+  answers, the players and every answer; `roomView()` turns it into the `RoomView` that
+  every browser gets, which never has an answer before the reveal, or anyone's pick.
+  - **Points:** 50 for a right answer plus up to 50 for the time left (`pointsFor`).
+    Choice questions (multiple choice, true or false) take one pick, kept secret until the
+    reveal. Typed ones (flashcards, a mixed quiz's Part III) can be guessed until right, up
+    to 20 guesses, with `checkTypedAnswer` (*close*, one typo, counts). `toLiveCards()`
+    decides which: a choice card whose answer isn't one of its slips is asked as a typed one.
+  - **The clock:** 10, 20 or 30 seconds a question (20 by default). The answer shows when
+    time is up or everyone still here has answered (typed: got it or ran out of guesses),
+    for 4 seconds, then the next question starts on its own.
+  - **Players:** up to 30 (`MAX_PLAYERS`); the next ones are turned away. Nicknames are
+    cleaned up and made unique ("Sam 2"). Late joiners start from 0. A player who leaves is
+    taken off the lobby, but stays greyed out in a game with their points. The host plays
+    too unless they switch *Play too* off. Standings share a place on the same score (1, 1, 3).
+  - **Room codes:** 4 characters from the class join-code alphabet (no look-alikes). Before
+    claiming one, a new host asks for that room and waits 1.5 s for a host to answer
+    (`roomTaken`).
+- **The messages** (`lib/live-room.ts`), on two public broadcast channels per room:
+
+  | Channel | Who sends | Who listens | What |
+  |---|---|---|---|
+  | `live:K7MQ` (the room) | The host only | Every browser in the room | `room`: the `RoomView` |
+  | `live:K7MQ:host` (the inbox) | Players, over Realtime's REST API (`POST /realtime/v1/api/broadcast/{topic}/events/{event}`, `apikey` header only), without joining | The host only | `hello` (send me the room), `join`, `answer`, `ping` (still here), `leave` |
+
+  Answers go to the host alone because Realtime counts a message once for every browser it
+  reaches, and the free plan allows about 100 a second per project: answers sent to the
+  whole room would use that up in a class-sized game, and anyone could read everyone's
+  answers. For the same reason the host sends the room at once when the phase changes, but
+  otherwise at most every 250 ms in a small room and every 1.5 s in a big one
+  (`sendInterval`, about 20 deliveries a second). Presence isn't used (its own limit is 20 a
+  second); players ping every 10 s instead, and the host counts a player quiet for 35 s as
+  gone. The host sends the room at least every 8 s, and players give up on a host they
+  haven't heard from for 25 s. A page with no room after 8 s says there's no game with that
+  code. Incoming messages are checked (`readToHost`, `readRoom`), since anyone can send to a
+  public channel. A player's answer the room doesn't show after 3 s is sent again; the rules
+  make that harmless.
+- **The decks:** a new one made in the lobby (`components/live/DeckPicker.tsx`, with the
+  home page's notes sheet and Make card, through `lib/guide-request.ts` and `/api/generate`,
+  so it counts toward the host's daily limit and lands in their History), or one from My
+  Sets or History (read with the user's session, so RLS decides), or the set whose page said
+  *Play live with friends* (`/play?set=<id>`). Players see where it came from: *a new deck,
+  nobody has seen the cards, the host included*, or *from the host's saved decks: the host
+  may know the answers*. The host's own screen draws from the same `RoomView` as the
+  players', so it shows no more of a new deck than theirs do.
+- **In the browser:** `components/live/useHostGame.ts` runs the game, keeps it in the tab's
+  sessionStorage (`lib/live-session.ts`), so reloading the host's page doesn't end it, and
+  closes the room for everyone on *Close the room*. `usePlayerGame.ts` keeps a player's id
+  and nickname for the tab, so a reload rejoins with the same score. `LiveScreen.tsx` is the
+  same screen for both, with the host's controls in slots.
+- **Nothing is saved:** no attempts, no History scores, nothing for a teacher's grade book.
+  Only a deck made in the lobby is kept, in History, like any other guide.
+
 ## 3. Data model
 
 | Table | Columns | Notes |
@@ -1183,6 +1251,13 @@ the `title` column only (anon has no update or delete).
 `supabase/tests/*.sql` re-checks these rules by simulating users inside a rolled-back
 transaction. Run them after every database change.
 
+**Live games (#26) trust the players' browsers**, since nothing about them is stored or
+counts toward a score. Their channels are public, so anyone who knows a room's code can
+listen to it, and messages aren't signed, so a player who knows how could answer as someone
+else. The host's browser holds the deck's answers (an honour system, also for a new deck).
+Incoming messages are checked for shape and size, and the server's daily limits still apply
+to making a deck.
+
 ## 5. Testing
 
 - `npm test`: Vitest.
@@ -1196,6 +1271,14 @@ transaction. Run them after every database change.
     in and out), `PageTurn` (the sheet, and the rise after Back and Forward), `PaperCard`, the desk layout at four widths, the
     set page, My Sets (its decks, best scores, delete), the History pages (saving from a deck too), the User Guide, saving a guide made while signed out across the Google sign-in (`app/upload-sign-in-save.test.tsx`, #89) and the teacher and student pages, in jsdom with React Testing Library.
     Component tests start with `// @vitest-environment jsdom`.
+- Live games (#26): `lib/live-game.test.ts` (the rules: points, one pick, typed guesses,
+  late answers, ties, joining, leaving, the full room, ending early), `lib/live-room.test.ts`
+  (message checks, the Realtime wrapper with a stand-in channel, the REST sends, the
+  in-memory room) and `components/live/live-games.test.tsx`: whole games in jsdom, a host
+  and two players through the in-memory room with the clock under the test's control (each
+  kind of question, a new deck made in the lobby whose cards the host never sees, a deck
+  from My Sets, the host only watching, a late player, closing the room, no game with that
+  code). `lib/guide-request.test.ts` covers the deck request.
 - `supabase/tests/*-rls-check.sql`: database security checks for sets, profiles and
   classes. Each prints expected vs. actual (10, 10 and 21 cases).
 - `supabase/tests/assignments-rls-check.sql` (16 cases): an assigned student can open the
@@ -1252,6 +1335,15 @@ transaction. Run them after every database change.
 
 - **Free-tier AI quota:** about 20 requests a day on `gemini-3.5-flash`, shared by
   everyone. The backups help, but a paid tier is being discussed in #45.
+- **Live games (#26) end when the host's page closes** (players see *We lost the host*
+  after 25 s), and they're an honour system: the host's browser has the answers, and
+  messages aren't signed. Realtime's free plan allows about 100 messages a second per
+  project, counted for every browser they reach, so several full rooms at once could get
+  the project's connections dropped for a moment (supabase-js reconnects on its own). A
+  deck made in the lobby uses the AI quota like any other. The game runs on the host's
+  page, which browsers slow down in a background tab and phones pause, so a host who
+  switches away holds up the game: players see *We lost the host* after 25 s, and the
+  game picks up when the host comes back.
 - **The daily limits (#63) count signed-out visitors per IP**, so someone switching
   networks or using many IPs gets more, and so does someone with many Google accounts.
   Failed guides that asked the AI have their own cap (#41). `/admin/usage`

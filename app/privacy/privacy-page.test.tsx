@@ -82,6 +82,9 @@ describe('Privacy page (#88)', () => {
     expect(text).toMatch(/their students' scores on those decks are deleted/);
     // Guests' generations are logged with a hashed address for the daily limit.
     expect(text).toMatch(/scrambled \(hashed\) form of your internet address/);
+    // Live games (#26) show nicknames and points to the room and save nothing.
+    expect(text).toMatch(/everyone in the room sees your nickname and your points/);
+    expect(text).toMatch(/isn't saved: no scores, no nicknames/);
   });
 
   it('shows sign-in prompt in the deletion section when signed out', () => {

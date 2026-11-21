@@ -133,6 +133,15 @@ export default function PrivacyPage() {
             <strong className="text-ink">Google&apos;s Gemini AI:</strong> What you put on the notes sheet (a file&apos;s text, a photo, your notes, or the page a link or topic leads to) is sent to Google&apos;s Gemini API to write your cards. FlashForge uses the API&apos;s free tier, and under Google&apos;s terms for it, Google may use what&apos;s sent, and the cards it writes, to improve its products, and people at Google may read them. So don&apos;t put anything private or sensitive on the sheet.
           </p>
           <p>
+            <strong className="text-ink">Live Games:</strong> In a{' '}
+            <Link href="/play" className="text-brass-ink hover:underline">
+              Play live
+            </Link>{' '}
+            game, everyone in the room sees your nickname and your points. The game travels through Supabase&apos;s live messaging and isn&apos;t saved: no
+            scores, no nicknames, and nothing in a teacher&apos;s grade book. A deck made for a game is made like any other: what&apos;s on the sheet goes to
+            Gemini, and when you&apos;re signed in, the deck is kept in your History.
+          </p>
+          <p>
             <strong className="text-ink">No Ads or Tracking:</strong> FlashForge doesn&apos;t sell your data, show ads, or track you across other sites.
           </p>
         </div>

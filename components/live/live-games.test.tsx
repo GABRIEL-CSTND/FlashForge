@@ -259,8 +259,9 @@ describe('a live game', () => {
     expect(host.getByRole('region', { name: 'Players' }).textContent).not.toContain('Gabe');
     fireEvent.click(host.getByRole('button', { name: 'Start the game' }));
     await flush();
-    // Watching: the slips are there to read, but can't be picked.
+    // Watching: the slips are there to read, but can't be picked. Amy can pick.
     expect((host.getByRole('button', { name: 'Mitochondria' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((amy.getByRole('button', { name: 'Mitochondria' }) as HTMLButtonElement).disabled).toBe(false);
 
     const ben = screenOf(<PlayerRoom code="K7MQ" initialSeat={{ id: BEN, nickname: 'Ben' }} transport={hub} />);
     await flush(500);
