@@ -127,7 +127,7 @@ export default function PrivacyPage() {
             Only you can open its source file through FlashForge.
           </p>
           <p>
-            <strong className="text-ink">Class Assignments:</strong> When you join a class, the teacher of that class can see your name, email, and your scores on sets assigned specifically to that class (in their Grade Book). Teachers <em>cannot</em> view your private, unassigned sets or unrelated history.
+            <strong className="text-ink">Class Assignments:</strong> When you join a class, the teacher of that class can see your name, email, and your scores on that class&apos;s assignments and quizzes (in their Grade Book). Practicing its learning materials isn&apos;t scored for the teacher. Teachers <em>cannot</em> view your private, unassigned sets or unrelated history.
           </p>
           <p>
             <strong className="text-ink">Administrators:</strong> Admins can see every account&apos;s email, name and role, and change roles. They can open or delete any saved deck, and they see its owner&apos;s email. They can also see how many study guides each person has made with the AI. They can&apos;t see your History.

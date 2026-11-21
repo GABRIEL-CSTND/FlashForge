@@ -10,7 +10,7 @@ import { STUDY_TYPE_LABELS, toStudyType } from '@/lib/study-types';
 import { useParams, useRouter } from 'next/navigation';
 import TeacherOnly from '@/components/TeacherOnly';
 import { apiFetch, errorMessage } from '@/lib/api-client';
-import { CLASS_NAME_MAX_LENGTH, formatJoinCode, studentLabel } from '@/lib/classes-shared';
+import { CLASS_CONTENT, CLASS_NAME_MAX_LENGTH, formatJoinCode, groupClassContent, isClassContentCategory, studentLabel, type ClassContentCategory } from '@/lib/classes-shared';
 import { formatDueDate, fromLocalInputValue, isOverdue, parseDueAt, toLocalInputValue } from '@/lib/due-dates';
 
 interface Student {
@@ -25,6 +25,7 @@ interface Assignment {
   setId: string;
   setTitle: string;
   studyType: string;
+  category?: ClassContentCategory;
   dueAt: string | null;
   createdAt: string;
 }
@@ -203,6 +204,30 @@ function ClassView({ id }: { id: string }) {
     if (data) update({ assignments: cls.assignments.filter((a) => a.id !== assignment.id) });
   };
 
+  const changeCategory = async (assignment: Assignment, category: ClassContentCategory) => {
+    // A learning material isn't scored, so its scores leave the Grade Book (until it's
+    // made an assignment or quiz again), and it can't have a due date.
+    if (
+      category === 'material' &&
+      (assignment.category ?? 'assignment') !== 'material' &&
+      !window.confirm(
+        `Make "${assignment.setTitle}" a learning material? Students' scores on it will be hidden from the Grade Book until you change it back, and its due date will be removed.`
+      )
+    ) {
+      return;
+    }
+    const data = await run(() =>
+      apiFetch(`/api/teacher/classes/${id}/assignments/${assignment.id}`, { method: 'PATCH', body: { category } })
+    );
+    if (!data) return;
+    update({
+      assignments: cls.assignments.map((item) =>
+        item.id === assignment.id ? { ...item, category, dueAt: data.dueAt as string | null } : item
+      ),
+    });
+    setEditingDueId(null);
+  };
+
   const deleteClass = async () => {
     const count = cls.students.length;
     const who = count === 0 ? '' : ` Its ${count} student${count === 1 ? '' : 's'} will be removed from it.`;
@@ -308,83 +333,94 @@ function ClassView({ id }: { id: string }) {
         </p>
       )}
 
-      <section aria-labelledby="assigned-heading" className="mt-10">
-        <h2 id="assigned-heading" className="font-sans text-[11px] font-semibold uppercase tracking-[0.16em] text-on-desk/85">
-          Assigned sets ({cls.assignments.length})
-        </h2>
-        {cls.assignments.length === 0 ? (
-          <div className="mt-4">
-            <DeskNote>
-              Nothing assigned yet. To assign a set, open it from{' '}
-              <Link href="/my-sets" className="font-semibold text-link hover:underline">
-                My Sets
-              </Link>{' '}
-              and choose <span className="font-medium">Assign to class</span>.
-            </DeskNote>
-          </div>
-        ) : (
-          <ul className="mt-5 grid gap-x-10 gap-y-12 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
-            {cls.assignments.map((a, i) => (
-              <LibraryDeck
-                key={a.id}
-                index={i}
-                href={`/sets/${a.setId}`}
-                morph={`deck-${a.setId}`}
-                kind={STUDY_TYPE_LABELS[toStudyType(a.studyType)]}
-                title={a.setTitle}
-                meta={`Assigned ${shortDate(a.createdAt)}`}
-                tag={assignmentTag(a)}
-                actions={
-                  <div className="flex flex-col items-start">
-                    <div className="flex gap-4">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingDueId(a.id);
-                          setDueDraft(a.dueAt ? toLocalInputValue(a.dueAt) : '');
-                        }}
-                        disabled={busy}
-                        aria-label={`Change due date for ${a.setTitle}`}
-                        className={DESK_TEXT_BUTTON}
-                      >
-                        Due date
-                      </button>
-                      <button type="button" onClick={() => unassign(a)} disabled={busy} aria-label={`Unassign ${a.setTitle}`} className={DESK_TEXT_BUTTON}>
-                        Unassign
-                      </button>
-                    </div>
-                    {editingDueId === a.id && (
-                      <div className="paper paper-shadow mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-3 py-2 text-sm text-ink">
-                        <label htmlFor={`due-${a.id}`} className="sr-only">
-                          New due date for {a.setTitle}
-                        </label>
-                        <input
-                          id={`due-${a.id}`}
-                          type="datetime-local"
-                          value={dueDraft}
-                          onChange={(e) => setDueDraft(e.target.value)}
-                          disabled={busy}
-                          className="min-h-11 rounded border bg-transparent px-2"
-                        />
-                        <button type="button" onClick={() => saveDue(a, fromLocalInputValue(dueDraft))} disabled={busy || !dueDraft} className="min-h-11 font-semibold text-link hover:underline disabled:opacity-40">
-                          Save
-                        </button>
-                        {a.dueAt && (
-                          <button type="button" onClick={() => saveDue(a, null)} disabled={busy} className="min-h-11 text-muted hover:underline disabled:opacity-40">
-                            Remove due date
+      <section aria-labelledby="content-heading" className="mt-10 space-y-8">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h2 id="content-heading" className="font-serif text-[25px] text-on-desk">Class content</h2>
+          <Link href="/my-sets" className="text-sm font-semibold text-on-desk/85 underline hover:text-on-desk">
+            Add from My Sets
+          </Link>
+        </div>
+        {groupClassContent(cls.assignments).map((group) => (
+          <section key={group.category} aria-labelledby={`content-${group.category}`} className="border-t border-on-desk/20 pt-4">
+            <h3 id={`content-${group.category}`} className="font-sans text-xs font-semibold uppercase tracking-widest text-on-desk/85">
+              {group.heading} ({group.items.length})
+            </h3>
+            {group.items.length === 0 ? <p className="mt-2 text-sm text-on-desk/75">{group.empty}</p> : (
+              <ul className="mt-5 grid gap-x-10 gap-y-12 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
+                {group.items.map((a, i) => (
+                  <LibraryDeck
+                    key={a.id}
+                    index={i}
+                    href={`/sets/${a.setId}`}
+                    morph={`deck-${a.setId}`}
+                    kind={STUDY_TYPE_LABELS[toStudyType(a.studyType)]}
+                    title={a.setTitle}
+                    meta={`${group.category === 'material' ? 'Shared' : 'Assigned'} ${shortDate(a.createdAt)}`}
+                    tag={group.category === 'material' ? undefined : assignmentTag(a)}
+                    actions={
+                      <div className="flex flex-col items-start">
+                        <div className="flex flex-wrap items-center gap-x-4">
+                          <select
+                            aria-label={`Category for ${a.setTitle}`}
+                            value={group.category}
+                            disabled={busy}
+                            onChange={(event) => {
+                              if (isClassContentCategory(event.target.value)) changeCategory(a, event.target.value);
+                            }}
+                            className="paper min-h-11 rounded px-2 text-sm text-ink"
+                          >
+                            {CLASS_CONTENT.map((item) => <option key={item.category} value={item.category}>{item.label}</option>)}
+                          </select>
+                          {group.category !== 'material' && <button
+                            type="button"
+                            onClick={() => {
+                              setEditingDueId(a.id);
+                              setDueDraft(a.dueAt ? toLocalInputValue(a.dueAt) : '');
+                            }}
+                            disabled={busy}
+                            aria-label={`Change due date for ${a.setTitle}`}
+                            className={DESK_TEXT_BUTTON}
+                          >
+                            Due date
+                          </button>}
+                          <button type="button" onClick={() => unassign(a)} disabled={busy} aria-label={`Unassign ${a.setTitle}`} className={DESK_TEXT_BUTTON}>
+                            Unassign
                           </button>
+                        </div>
+                        {editingDueId === a.id && (
+                          <div className="paper paper-shadow mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-3 py-2 text-sm text-ink">
+                            <label htmlFor={`due-${a.id}`} className="sr-only">
+                              New due date for {a.setTitle}
+                            </label>
+                            <input
+                              id={`due-${a.id}`}
+                              type="datetime-local"
+                              value={dueDraft}
+                              onChange={(e) => setDueDraft(e.target.value)}
+                              disabled={busy}
+                              className="min-h-11 rounded border bg-transparent px-2"
+                            />
+                            <button type="button" onClick={() => saveDue(a, fromLocalInputValue(dueDraft))} disabled={busy || !dueDraft} className="min-h-11 font-semibold text-link hover:underline disabled:opacity-40">
+                              Save
+                            </button>
+                            {a.dueAt && (
+                              <button type="button" onClick={() => saveDue(a, null)} disabled={busy} className="min-h-11 text-muted hover:underline disabled:opacity-40">
+                                Remove due date
+                              </button>
+                            )}
+                            <button type="button" onClick={() => setEditingDueId(null)} disabled={busy} className="min-h-11 text-muted hover:underline disabled:opacity-40">
+                              Cancel
+                            </button>
+                          </div>
                         )}
-                        <button type="button" onClick={() => setEditingDueId(null)} disabled={busy} className="min-h-11 text-muted hover:underline disabled:opacity-40">
-                          Cancel
-                        </button>
                       </div>
-                    )}
-                  </div>
-                }
-              />
-            ))}
-          </ul>
-        )}
+                    }
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
+        ))}
       </section>
 
       <section aria-labelledby="students-heading" className="sheet paper-shadow mt-12 max-w-3xl rotate-[-0.3deg] rounded-md px-6 pb-4 pt-5 text-ink">

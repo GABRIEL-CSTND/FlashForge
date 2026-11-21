@@ -53,6 +53,16 @@ with the next release of `dev` to `main`.
     uses; the home page moves onto it once its redesign (#108) has settled.
   - Answer slips can keep a pick secret: lifted with a brass edge until the answer is known.
 
+### Changed
+
+- **Assignments, quizzes and learning materials (#115):** a teacher shares a set with a class
+  as an assignment, a quiz or a learning material, and can change it later on the class
+  page; the class page and *My classes* list the three apart. Assignments and quizzes have
+  due dates and Grade Book scores as before. Learning materials are for practice: no due
+  date, and studying them isn't scored for the teacher. Making a graded set a learning
+  material asks first, since its scores leave the Grade Book until it's changed back.
+  Sets shared before are assignments. Migration `20261121000200_class_content_categories.sql`.
+
 ## 2026-11-16: the desk redesign
 
 Released to the live site on 2026-11-16 (PR #99, `main` = `bde2106`), together with the next

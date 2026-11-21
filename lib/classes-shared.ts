@@ -4,6 +4,25 @@
 
 export const CLASS_NAME_MAX_LENGTH = 80;
 
+export const CLASS_CONTENT = [
+  { category: 'assignment', label: 'Assignment', heading: 'Assignments', empty: 'No assignments yet.' },
+  { category: 'quiz', label: 'Quiz', heading: 'Quizzes', empty: 'No quizzes yet.' },
+  { category: 'material', label: 'Learning material', heading: 'Learning materials', empty: 'No learning materials yet.' },
+] as const;
+
+export type ClassContentCategory = (typeof CLASS_CONTENT)[number]['category'];
+
+export function isClassContentCategory(value: unknown): value is ClassContentCategory {
+  return CLASS_CONTENT.some(({ category }) => category === value);
+}
+
+export function groupClassContent<T extends { category?: ClassContentCategory }>(items: T[]) {
+  return CLASS_CONTENT.map((group) => ({
+    ...group,
+    items: items.filter((item) => (item.category ?? 'assignment') === group.category),
+  }));
+}
+
 // No look-alikes (0/O, 1/I/L) so codes are easy to read aloud and type.
 export const JOIN_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 export const JOIN_CODE_LENGTH = 6;
