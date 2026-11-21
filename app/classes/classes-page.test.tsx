@@ -141,7 +141,7 @@ describe('my classes page', () => {
     const quiz = within(await screen.findByRole('list', { name: 'Quizzes' })).getByRole('link');
     const material = within(screen.getByRole('list', { name: 'Learning materials' })).getByRole('link');
     expect(quiz.getAttribute('href')).toBe('/sets/set-1?assignment=q1');
-    expect(material.getAttribute('href')).toBe('/sets/set-2');
+    expect(material.getAttribute('href')).toBe('/sets/set-2?material=m1');
     expect(material.textContent).not.toContain('No due date');
   });
 

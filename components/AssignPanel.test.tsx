@@ -81,7 +81,7 @@ describe('AssignPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Assign' }));
 
     expect((await screen.findByRole('status')).textContent).toBe('Assigned to Bio 101 and Bio 102.');
-    expect(state.calls.find((c) => c.method === 'POST')?.body).toEqual({ classIds: ['c1', 'c2'], category: 'assignment', dueAt: new Date(due).toISOString() });
+    expect(state.calls.find((c) => c.method === 'POST')?.body).toEqual({ classIds: ['c1', 'c2'], category: 'assignment', dueAt: new Date(due).toISOString(), allowSourceMaterial: false });
     await waitFor(() => expect(checkbox('Bio 101').disabled).toBe(true));
   });
 
@@ -90,7 +90,7 @@ describe('AssignPanel', () => {
     fireEvent.click(await screen.findByRole('checkbox', { name: /Bio 101/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Assign' }));
     await screen.findByRole('status');
-    expect(state.calls.find((c) => c.method === 'POST')?.body).toEqual({ classIds: ['c1'], category: 'assignment', dueAt: null });
+    expect(state.calls.find((c) => c.method === 'POST')?.body).toEqual({ classIds: ['c1'], category: 'assignment', dueAt: null, allowSourceMaterial: false });
   });
 
   it('omits the due date when sharing a learning material', async () => {
@@ -98,10 +98,11 @@ describe('AssignPanel', () => {
     fireEvent.click(await screen.findByRole('checkbox', { name: /Bio 101/ }));
     fireEvent.change(screen.getByLabelText('Due date (optional)'), { target: { value: nextWeekLocal() } });
     fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'material' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /Share source material with students/ }));
     expect(screen.queryByLabelText('Due date (optional)')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Assign' }));
     await screen.findByRole('status');
-    expect(state.calls.find((c) => c.method === 'POST')?.body).toEqual({ classIds: ['c1'], category: 'material', dueAt: null });
+    expect(state.calls.find((c) => c.method === 'POST')?.body).toEqual({ classIds: ['c1'], category: 'material', dueAt: null, allowSourceMaterial: true });
   });
 
   it('refuses a due date in the past without calling the server', async () => {

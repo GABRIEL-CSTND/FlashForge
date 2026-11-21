@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { FILE_TYPES, fileKind, isPhoto, MAX_SOURCE_CHARS, type FileKind } from '@/lib/sources';
 
-type SourceFile = File | { name: string; historyId: string } | { name: string; setId: string };
+type SourceFile = File | { name: string; historyId: string } | { name: string; setId: string; classItemId: string | null };
 type SourceKind = FileKind | 'pdf-text';
 type Preview = { kind: SourceKind; blob: Blob; text: string | null };
 type OpenPreview = Omit<Preview, 'blob'> & { url: string };
@@ -16,13 +16,13 @@ async function loadFile(source: SourceFile, signal: AbortSignal): Promise<Previe
     kind = fileKind(source.name, source.type);
     bytes = source;
   } else {
-    const byHistory = 'historyId' in source;
-    const { data, error } = await supabase
-      .from('guide_source_files')
-      .select('kind, content_base64')
-      .eq(byHistory ? 'history_id' : 'set_id', byHistory ? source.historyId : source.setId)
-      .abortSignal(signal)
-      .maybeSingle();
+    const { data, error } = 'historyId' in source
+      ? await supabase.from('guide_source_files').select('kind, content_base64').eq('history_id', source.historyId).abortSignal(signal).maybeSingle()
+      : await supabase.rpc('study_set_source', {
+        p_set_id: source.setId,
+        p_class_item_id: source.classItemId,
+        p_include_file: true,
+      }).abortSignal(signal);
     if (error || !data) throw new Error('Source file unavailable');
     kind = data.kind as SourceKind;
     bytes = Uint8Array.from(atob(data.content_base64), (character) => character.charCodeAt(0));

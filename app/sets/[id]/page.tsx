@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
 import StudyViewer, { type StudyResult } from '@/components/StudyViewer';
 import OpeningDeck from '@/components/desk/OpeningDeck';
-import { newId } from '@/lib/ids';
+import { isUuid, newId } from '@/lib/ids';
 import CardEditor, { type CardPayload, type SaveResult } from '@/components/CardEditor';
 import { apiFetch, errorMessage } from '@/lib/api-client';
 import AssignPanel from '@/components/AssignPanel';
@@ -21,7 +21,6 @@ interface FlashcardSet {
   id: string;
   title: string;
   source_filename: string | null;
-  source_file?: { name: string } | null;
   study_type: StudyType;
   user_id: string | null;
 }
@@ -62,22 +61,41 @@ interface Flashcard {
   position: number;
 }
 
-// A row of the flashcards table. The quote is stored as source_excerpt and
-// source_location, and the study screen reads it as source and sourceLocation.
-type FlashcardRow = Flashcard & { source_excerpt?: string | null; source_location?: string | null };
-const fromRow = (row: FlashcardRow): Flashcard => ({
-  ...row,
-  source: row.source_excerpt ?? null,
-  sourceLocation: row.source_location ?? null,
-});
+interface SetSource {
+  name: string | null;
+  quotes: { id: string; excerpt: string | null; location: string | null }[];
+}
 
 export default function SetPage() {
-  const params = useParams<{ id: string }>();
+  const { id } = useParams<{ id: string }>();
+  return (
+    <Suspense fallback={<OpeningDeck morph={`deck-${id}`} />}>
+      <SetLocation id={id} />
+    </Suspense>
+  );
+}
+
+function SetLocation({ id }: { id: string }) {
+  const search = useSearchParams();
+  const assignment = search.get('assignment');
+  const shared = assignment ?? search.get('material');
+  const classItemId = isUuid(shared) ? shared : null;
+  const { user, loading } = useUser();
+  if (loading) return <OpeningDeck morph={`deck-${id}`} />;
+  return (
+    <StudySet key={`${id}/${user?.id ?? ''}/${assignment ? 'assessment' : 'practice'}/${classItemId ?? ''}`}
+      id={id} userId={user?.id} assignmentId={isUuid(assignment) ? assignment : null} classItemId={classItemId} />
+  );
+}
+
+function StudySet({ id, userId, assignmentId, classItemId }: {
+  id: string; userId?: string; assignmentId: string | null; classItemId: string | null;
+}) {
   const router = useRouter();
-  const { user } = useUser();
   const { profile } = useProfile();
   const [set, setSet] = useState<FlashcardSet | null>(null);
   const [cards, setCards] = useState<Flashcard[]>([]);
+  const [sourceName, setSourceName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -93,31 +111,39 @@ export default function SetPage() {
   const [history, setHistory] = useState<AttemptSummary[]>([]);
 
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
       const { data: setData, error: setError } = await supabase
         .from('flashcard_sets')
-        .select('*, source_file:guide_source_files(name)')
-        .eq('id', params.id)
+        .select('id, title, source_filename, study_type, user_id')
+        .eq('id', id)
         .single();
 
+      if (cancelled) return;
       if (setError || !setData) {
         setNotFound(true);
         setLoading(false);
         return;
       }
+      const [{ data: cardData }, { data: sourceData }] = await Promise.all([
+        supabase.from('flashcards').select('id, question, answer, options, explanation, position')
+          .eq('set_id', id).order('position', { ascending: true }),
+        supabase.rpc('study_set_source', { p_set_id: id, p_class_item_id: classItemId }),
+      ]);
+      if (cancelled) return;
+      const source = sourceData as SetSource | null;
+      const quotes = new Map((source?.quotes ?? []).map((quote) => [quote.id, quote]));
       setSet(setData);
-
-      const { data: cardData } = await supabase
-        .from('flashcards')
-        .select('*')
-        .eq('set_id', params.id)
-        .order('position', { ascending: true });
-
-      setCards((cardData || []).map(fromRow));
+      setSourceName(source?.name ?? null);
+      setCards((cardData ?? []).map((card) => {
+        const quote = quotes.get(card.id);
+        return { ...card, source: quote?.excerpt ?? null, sourceLocation: quote?.location ?? null };
+      }));
       setLoading(false);
     };
     load();
-  }, [params.id]);
+    return () => { cancelled = true; };
+  }, [id, classItemId]);
 
   const handleDelete = async () => {
     if (!set) return;
@@ -214,13 +240,11 @@ export default function SetPage() {
   // finish, so a retried request can't create a second attempt.
   const recordAttempt = async (result: StudyResult) => {
     if (!set) return;
-    if (!user) {
+    if (!userId) {
       setSaveState({ status: 'signed-out' });
       return;
     }
     setSaveState({ status: 'saving' });
-    // Opened from My classes: /sets/[id]?assignment=<id>
-    const assignmentId = new URLSearchParams(window.location.search).get('assignment');
     try {
       const res = await apiFetch('/api/attempts', {
         method: 'POST',
@@ -240,13 +264,13 @@ export default function SetPage() {
   };
 
   // A deck picked up in My Sets or My Classes morphs into this while it loads.
-  if (loading) return <OpeningDeck morph={`deck-${params.id}`} />;
+  if (loading) return <OpeningDeck morph={`deck-${id}`} />;
 
   if (notFound || !set) {
     return <main className="min-h-screen flex items-center justify-center">Set not found.</main>;
   }
 
-  const isOwner = user && set.user_id === user.id;
+  const isOwner = !!userId && set.user_id === userId;
 
   if (isOwner && editingCards) {
     return (
@@ -380,9 +404,7 @@ export default function SetPage() {
       onEdit={isOwner ? () => setEditingCards(true) : undefined}
       saveSlot={
         <div className="space-y-2 text-center">
-          {isOwner && set.source_file && (
-            <SourceFileViewer key={set.id} source={{ name: set.source_file.name, setId: set.id }} />
-          )}
+          {sourceName && <SourceFileViewer source={{ name: sourceName, setId: set.id, classItemId }} />}
           <div>{playLive}</div>
           {deleteSlot}
         </div>

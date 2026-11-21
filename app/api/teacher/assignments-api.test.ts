@@ -118,6 +118,18 @@ describe('assigning a set from its page', () => {
     expect(await resolveAssignment(USERS.stu.id, SETS.bio, quiz.id)).toBeNull();
   });
 
+  it('lets only the class teacher change source sharing for a posted quiz', async () => {
+    const created = await assign('t1', SETS.bio, { classIds: [CLASSES.a], category: 'quiz', allowSourceMaterial: true });
+    expect(created.status).toBe(201);
+    expect(rows()[0].allow_source_material).toBe(true);
+    const path = ctx({ id: CLASSES.a, assignmentId: rows()[0].id as string });
+    expect((await classAssignment.PATCH(req('PATCH', 't2', { allowSourceMaterial: false }), path)).status).toBe(404);
+    expect((await classAssignment.PATCH(req('PATCH', 't1', { allowSourceMaterial: 'false' }), path)).status).toBe(400);
+    expect(await json(await classAssignment.PATCH(req('PATCH', 't1', { allowSourceMaterial: false }), path)))
+      .toEqual({ status: 200, body: { allowSourceMaterial: false } });
+    expect(rows()[0].allow_source_material).toBe(false);
+  });
+
   it('leaves a class that already has the set as it is', async () => {
     await assign('t1', SETS.bio, { classIds: [CLASSES.a], dueAt: inDays(2) });
     const res = await assign('t1', SETS.bio, { classIds: [CLASSES.a, CLASSES.b], dueAt: null });
