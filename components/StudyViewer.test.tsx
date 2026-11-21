@@ -350,16 +350,37 @@ describe('type the answer (#66)', () => {
     expect(within(piles()).getByRole('button', { name: 'Missed it pile, 1 card' })).toBeTruthy();
   });
 
-  it('starts over when switching how to study', () => {
+  it('preserves card index and progress when switching study modes (#103)', () => {
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
     sortTo('Got it');
     expect(screen.getByText('Card 2 of 3')).toBeTruthy();
     click('Type');
-    expect(screen.getByText('Card 1 of 3')).toBeTruthy();
+    // Mode changes swap UI without losing session state or resetting index back to 0 (#103)
+    expect(screen.getByText('Card 2 of 3')).toBeTruthy();
     expect(screen.getByRole('textbox', { name: 'Your answer' })).toBeTruthy();
-    expect(within(piles()).getByRole('button', { name: 'Got it pile, 0 cards' })).toBeTruthy();
+    expect(within(piles()).getByRole('button', { name: 'Got it pile, 1 card' })).toBeTruthy();
     click('Flip');
+    expect(screen.getByText('Card 2 of 3')).toBeTruthy();
     expect(within(piles()).getByRole('button', { name: 'Got it' })).toBeTruthy();
+  });
+
+  it('only resets to card 0 on explicit restart or when selecting a new deck (#103)', () => {
+    const { rerender } = render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    sortTo('Got it');
+    sortTo('Got it');
+    expect(screen.getByText('Card 3 of 3')).toBeTruthy();
+
+    // Mode switch preserves index 2 (Card 3 of 3)
+    click('Type');
+    expect(screen.getByText('Card 3 of 3')).toBeTruthy();
+
+    // Selecting a new deck resets to Card 1 of 2
+    const OTHER_CARDS = [
+      { id: 'o1', question: 'Cell organelle', answer: 'Mitochondria' },
+      { id: 'o2', question: 'Protein factory', answer: 'Ribosome' },
+    ];
+    rerender(<StudyViewer title="Cell Biology" studyType="flashcard" cards={OTHER_CARDS} />);
+    expect(screen.getByText('Card 1 of 2')).toBeTruthy();
   });
 });
 

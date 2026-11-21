@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createFakeSupabase, type FakeDb } from '@/test-utils/fake-supabase';
 
+const nav = vi.hoisted(() => ({ replace: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: nav.replace }) }));
 const state = vi.hoisted(() => ({ user: null as null | { id: string } }));
 const fake = vi.hoisted(() => ({ current: null as null | ReturnType<typeof import('@/test-utils/fake-supabase').createFakeSupabase> }));
 vi.mock('@/lib/auth', () => ({ useUser: () => ({ user: state.user, loading: false }) }));
@@ -34,6 +36,7 @@ const attempt = (setId: string, score: number, total: number, userId = SAM) => (
 });
 
 beforeEach(() => {
+  nav.replace.mockReset();
   state.user = { id: SAM };
   fake.current = createFakeSupabase({ tables: { flashcard_sets: { unique: [['id']] }, attempts: { unique: [['id']] } } });
   db = fake.current.db;
@@ -47,10 +50,11 @@ afterEach(() => {
 const decks = async () => within(await screen.findByRole('list', { name: 'Your saved decks' })).getAllByRole('link');
 
 describe('My Sets page', () => {
-  it('asks a signed-out visitor to sign in', () => {
+  it('redirects a signed-out visitor to /sign-in', async () => {
     state.user = null;
     render(<MySetsPage />);
-    expect(screen.getByText('Sign in to view your saved sets.')).toBeTruthy();
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/sign-in'));
+    expect(screen.queryByText('Sign in to view your saved sets.')).toBeNull();
   });
 
   it("lays the user's sets out as decks, newest first, each with its best score", async () => {

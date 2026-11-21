@@ -6,8 +6,10 @@ import FlashcardDesk from './study/FlashcardDesk';
 import QuizDesk from './study/QuizDesk';
 import { ExitButton } from './study/parts';
 import type { StudyItem, StudyResult } from './study/logic';
+import { StudySessionProvider } from './study/StudySessionContext';
 
 export type { FlashcardMark, StudyAnswer, StudyItem, StudyResult } from './study/logic';
+export { useStudySession, StudySessionProvider } from './study/StudySessionContext';
 
 interface StudyViewerProps {
   title: string;
@@ -50,6 +52,14 @@ export default function StudyViewer(props: StudyViewerProps) {
       </main>
     );
   }
+  return (
+    <StudySessionProvider cards={props.cards} initialMode="flip" deckKey={props.title}>
+      <StudyViewerContent {...props} />
+    </StudySessionProvider>
+  );
+}
+
+function StudyViewerContent(props: StudyViewerProps) {
   // A set saved with an old study type (one legacy set says "identification")
   // has always been shown as flashcards.
   const isFlashcards = props.studyType === 'flashcard' || !isStudyType(props.studyType);

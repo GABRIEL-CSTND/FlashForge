@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
+const nav = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: nav.push }) }));
 const state = vi.hoisted(() => ({ user: null as unknown, loading: false, profile: null as unknown }));
-const auth = vi.hoisted(() => ({ signInWithGoogle: vi.fn(), signOut: vi.fn() }));
+const auth = vi.hoisted(() => ({ signInWithGoogle: vi.fn(), signOut: vi.fn(async () => {}) }));
 
 vi.mock('@/lib/supabase', () => ({ supabase: {} }));
 vi.mock('@/lib/auth', () => ({
@@ -30,7 +32,7 @@ describe('library card', () => {
     expect(auth.signInWithGoogle).toHaveBeenCalledOnce();
   });
 
-  it('shows the name and role, and signs out', () => {
+  it('shows the name and role, and signs out to the hero page', async () => {
     state.user = { id: 't', email: 't@example.com' };
     state.profile = { role: 'teacher', roleChosenAt: '2026-10-20', displayName: 'Daniel Alvarez' };
     render(<LibraryCard />);
@@ -38,7 +40,10 @@ describe('library card', () => {
     expect(screen.getByText('Teacher')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Sign in with Google' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-    expect(auth.signOut).toHaveBeenCalledOnce();
+    await waitFor(() => {
+      expect(auth.signOut).toHaveBeenCalledOnce();
+      expect(nav.push).toHaveBeenCalledWith('/');
+    });
   });
 
   it('falls back to the email when there is no display name', () => {
