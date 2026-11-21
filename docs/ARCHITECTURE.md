@@ -1301,6 +1301,10 @@ to making a deck.
 - `supabase/tests/admin-users-check.sql` (16 cases): browsers can't read `audit_log` or call
   the admin functions; a role change is logged; a non-admin is refused; the last admin
   can't step down (also after two admins demote each other in turn).
+- The assignments, generation-limits, generation-logs and admin-users checks make their
+  own accounts (sign-ups inside the transaction, rolled back with it) and set the roles
+  they need, so which live accounts are admins, and those accounts' rows, don't change
+  their results.
 - `supabase/tests/attempts-rls-check.sql` (22 cases): students read only their own
   attempts and can't write any; a teacher sees attempts from their class's assignment but
   not private study, and stops seeing them when the student leaves or the set is

@@ -1,14 +1,18 @@
 -- Run: npx supabase db query --linked --project-ref <ref> -f supabase/tests/generation-limits-check.sql
 -- Read-only in effect: everything is rolled back. Existing log rows are moved
--- out of today first, and the limits are set to known values.
+-- out of today first, and the limits are set to known values. Admin A and
+-- student B are new accounts made here, so live accounts' roles and rows
+-- don't matter.
 begin;
 create temp table results (n int, check_name text, expected text, actual text) on commit drop;
 do $$
 declare
-  a uuid; b uuid; r jsonb; ok boolean; code text; v bigint; t text; i int;
+  a uuid := gen_random_uuid(); b uuid := gen_random_uuid(); r jsonb; ok boolean; code text; v bigint; t text; i int;
 begin
-  select id into a from public.profiles where role = 'admin' order by created_at limit 1;
-  select id into b from auth.users where id <> a order by created_at limit 1;
+  -- Sign-ups get a student profile from the trigger (see profiles-rls-check.sql).
+  insert into auth.users (id, aud, role, email, created_at, updated_at)
+  select id, 'authenticated', 'authenticated', id || '@check.invalid', now(), now() from unnest(array[a, b]) as id;
+  update public.profiles set role = 'admin' where id = a;
   update public.generation_logs set created_at = now() - interval '200 days';
   update public.app_settings set value = '{"anonymous": 1, "student": 2, "teacher": 15, "admin": null}' where key = 'generation_limits';
 

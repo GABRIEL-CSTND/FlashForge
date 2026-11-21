@@ -1,20 +1,22 @@
 -- Run: npx supabase db query --linked --project-ref <ref> -f supabase/tests/admin-users-check.sql
 -- Read-only in effect: everything is rolled back.
 --
--- Setup: A is an existing admin; B and C are two other existing accounts. To
--- test "last admin" whatever the live data is, every other admin is first made
--- a teacher inside this transaction, so A is the only admin.
+-- Setup: A, B and C are new accounts made here, so live accounts' roles and audit
+-- rows don't matter. A is an admin; B and C are students. To test "last admin"
+-- whatever the live data is, every other admin is first made a teacher inside
+-- this transaction, so A is the only admin.
 begin;
 create temp table results (n int, check_name text, expected text, actual text) on commit drop;
 do $$
 declare
-  a uuid; b uuid; c uuid; v bigint; old text; ok boolean; code text; msg text;
+  a uuid := gen_random_uuid(); b uuid := gen_random_uuid(); c uuid := gen_random_uuid();
+  v bigint; old text; ok boolean; code text; msg text;
 begin
-  select id into a from public.profiles where role = 'admin' order by created_at limit 1;
-  select id into b from auth.users where id <> a order by created_at limit 1;
-  select id into c from auth.users where id not in (a, b) order by created_at limit 1;
-  update public.profiles set role = 'teacher' where role = 'admin' and id <> a;
-  update public.profiles set role = 'student', role_chosen_at = null where id in (b, c);
+  -- Sign-ups get a student profile from the trigger (see profiles-rls-check.sql).
+  insert into auth.users (id, aud, role, email, created_at, updated_at)
+  select id, 'authenticated', 'authenticated', id || '@check.invalid', now(), now() from unnest(array[a, b, c]) as id;
+  update public.profiles set role = 'teacher' where role = 'admin';
+  update public.profiles set role = 'admin' where id = a;
 
   -- Browsers
   perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated')::text, true);

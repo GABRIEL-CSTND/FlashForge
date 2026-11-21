@@ -8,6 +8,15 @@ Notable changes to FlashForge, newest first. Issue and PR numbers refer to
 Changes merged into `dev` after the 2026-11-16 release go here, and reach the live site
 with the next release of `dev` to `main`.
 
+### Fixed
+
+- **Database checks no longer depend on who's an admin:** `assignments-rls-check.sql`,
+  `generation-limits-check.sql`, `generation-logs-check.sql` and `admin-users-check.sql`
+  took the oldest live accounts as their students and non-admins. Once those accounts
+  became admins, 8 rows failed: admins can read every set and change the limits, and
+  one account's real role change was counted with the check's own. Each check now makes
+  its own accounts inside the transaction and gives them the roles it needs.
+
 ### Added
 
 - **Play live (#26): quiz friends at the same time**, in the style of jklm.fun's PopSauce.

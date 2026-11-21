@@ -1,6 +1,8 @@
 -- Run: npx supabase db query --linked --project-ref <ref> -f supabase/tests/generation-logs-check.sql
 -- Read-only in effect: everything is rolled back. Existing log rows are moved
 -- out of the window first, so the numbers below only count this file's rows.
+-- Admin A and student B are new accounts made here, so live accounts' roles
+-- don't matter.
 --
 -- Days follow Pacific time (when the Gemini quota resets). Rows are placed at
 -- 00:30 and 23:30 Pacific time "today", and 23:30 the day before, to check
@@ -9,10 +11,12 @@ begin;
 create temp table results (n int, check_name text, expected text, actual text) on commit drop;
 do $$
 declare
-  a uuid; b uuid; ok boolean; v bigint; t text; today date; midnight timestamptz;
+  a uuid := gen_random_uuid(); b uuid := gen_random_uuid(); ok boolean; v bigint; t text; today date; midnight timestamptz;
 begin
-  select id into a from public.profiles where role = 'admin' order by created_at limit 1;
-  select id into b from auth.users where id <> a order by created_at limit 1;
+  -- Sign-ups get a student profile from the trigger (see profiles-rls-check.sql).
+  insert into auth.users (id, aud, role, email, created_at, updated_at)
+  select id, 'authenticated', 'authenticated', id || '@check.invalid', now(), now() from unnest(array[a, b]) as id;
+  update public.profiles set role = 'admin' where id = a;
   update public.generation_logs set created_at = now() - interval '200 days';
   today := (now() at time zone 'America/Los_Angeles')::date;
   midnight := today::timestamp at time zone 'America/Los_Angeles';
