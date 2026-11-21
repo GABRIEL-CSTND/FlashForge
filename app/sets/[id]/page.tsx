@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
@@ -361,6 +362,13 @@ export default function SetPage() {
       </div>
     );
 
+  // Anyone who can open the set can host a live game with it (#26).
+  const playLive = (
+    <Link href={`/play?set=${set.id}`} className="text-sm font-semibold text-brass-ink hover:underline">
+      Play live with friends
+    </Link>
+  );
+
   return (
     <>
     <StudyViewer
@@ -370,12 +378,15 @@ export default function SetPage() {
       cards={cards}
       onFinish={() => router.push('/')}
       onEdit={isOwner ? () => setEditingCards(true) : undefined}
-      saveSlot={isOwner && set.source_file ? (
+      saveSlot={
         <div className="space-y-2 text-center">
-          <SourceFileViewer key={set.id} source={{ name: set.source_file.name, setId: set.id }} />
+          {isOwner && set.source_file && (
+            <SourceFileViewer key={set.id} source={{ name: set.source_file.name, setId: set.id }} />
+          )}
+          <div>{playLive}</div>
           {deleteSlot}
         </div>
-      ) : deleteSlot}
+      }
       onComplete={recordAttempt}
       completionSlot={completionSlot}
       quoteLabel={quoteSourceLabel(set.source_filename)}
