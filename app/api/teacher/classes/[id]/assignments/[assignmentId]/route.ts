@@ -3,7 +3,8 @@ import { requireRole } from '@/lib/roles';
 import { TEACHER_ROLES } from '@/lib/role-types';
 import { isUuid } from '@/lib/ids';
 import { parseDueAt } from '@/lib/due-dates';
-import { unassign, updateAssignmentDue } from '@/lib/assignments';
+import { isClassContentCategory } from '@/lib/classes-shared';
+import { unassign, updateAssignmentCategory, updateAssignmentDue } from '@/lib/assignments';
 import { getAssignmentQuestions } from '@/lib/class-results';
 import { errorResponse, notFound, readJsonBody } from '@/lib/route-helpers';
 
@@ -28,16 +29,24 @@ export async function GET(req: NextRequest, { params }: Context) {
   }
 }
 
-// Change the due date: { dueAt: string | null } (#56).
+// Change either the category or the due date. Moving to materials clears the due date.
 export async function PATCH(req: NextRequest, { params }: Context) {
   try {
     const user = await requireRole(req, TEACHER_ROLES);
     const { id, assignmentId } = await params;
-    const due = parseDueAt((await readJsonBody(req))?.dueAt);
+    if (!isUuid(id) || !isUuid(assignmentId)) return notFound('Assignment');
+    const body = await readJsonBody(req);
+    if (body?.category !== undefined) {
+      if (!isClassContentCategory(body.category) || body.dueAt !== undefined) {
+        return NextResponse.json({ error: 'Choose a category without changing the due date.' }, { status: 400 });
+      }
+      const updated = await updateAssignmentCategory(user.id, id, assignmentId, body.category);
+      return updated ? NextResponse.json(updated) : notFound('Assignment');
+    }
+    const due = parseDueAt(body?.dueAt);
     if (!due.ok) return NextResponse.json({ error: due.error }, { status: 400 });
 
-    const updated =
-      isUuid(id) && isUuid(assignmentId) && (await updateAssignmentDue(user.id, id, assignmentId, due.dueAt));
+    const updated = await updateAssignmentDue(user.id, id, assignmentId, due.dueAt);
     return updated ? NextResponse.json({ dueAt: due.dueAt }) : notFound('Assignment');
   } catch (err) {
     return errorResponse(err, 'teacher/classes/[id]/assignments/[assignmentId] PATCH');

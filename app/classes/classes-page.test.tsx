@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ClassContentCategory } from '@/lib/classes-shared';
 
 const state = vi.hoisted(() => ({
   profile: null as unknown,
   calls: [] as { method: string; path: string; body?: unknown }[],
   // What the fake /api/student/classes knows about.
-  mine: [] as { id: string; name: string; teacherName: string | null; joinedAt: string; assignments: { id: string; setId: string; setTitle: string; studyType: string; dueAt: string | null; createdAt: string; myProgress: null | { attempts: number; bestScore: number; bestTotal: number; lastCompletedAt: string } }[] }[],
+  mine: [] as { id: string; name: string; teacherName: string | null; joinedAt: string; assignments: { id: string; setId: string; setTitle: string; studyType: string; category?: ClassContentCategory; dueAt: string | null; createdAt: string; myProgress: null | { attempts: number; bestScore: number; bestTotal: number; lastCompletedAt: string } }[] }[],
   codes: {} as Record<string, { id: string; name: string; teacherName: string | null }>,
   failNext: null as null | { status: number; error?: string; offline?: boolean },
 }));
@@ -93,7 +94,7 @@ describe('my classes page', () => {
       { id: 'a3', setId: 'set-3', setTitle: 'Extra reading', studyType: 'flashcard', dueAt: null, createdAt: '2026-10-18', myProgress: null },
     ];
     render(<MyClassesPage />);
-    const list = await screen.findByRole('list', { name: 'Assigned in Biology 101' });
+    const list = await screen.findByRole('list', { name: 'Assignments' });
     const links = within(list).getAllByRole('link');
     // The assignment id travels with the link so the result is attributed to it (#57).
     expect(links.map((a) => a.getAttribute('href'))).toEqual(['/sets/set-1?assignment=a1', '/sets/set-2?assignment=a2', '/sets/set-3?assignment=a3']);
@@ -110,7 +111,7 @@ describe('my classes page', () => {
       { id: 'a2', setId: 'set-2', setTitle: 'Cell parts', studyType: 'multiple_choice', dueAt: '2020-01-01T00:00:00Z', createdAt: '2026-10-19', myProgress: { attempts: 2, bestScore: 8, bestTotal: 10, lastCompletedAt: '2026-10-21T10:00:00Z' } },
     ];
     render(<MyClassesPage />);
-    const link = within(await screen.findByRole('list', { name: 'Assigned in Biology 101' })).getByRole('link');
+    const link = within(await screen.findByRole('list', { name: 'Assignments' })).getByRole('link');
     expect(link.textContent).toContain('Done · best 8/10');
     expect(link.textContent).not.toContain('Overdue');
   });
@@ -128,7 +129,20 @@ describe('my classes page', () => {
 
   it('tells students what their teacher will see before they join', async () => {
     render(<MyClassesPage />);
-    expect(await screen.findByText("Your teacher will see your name, email, and your scores on this class's assignments.")).toBeTruthy();
+    expect(await screen.findByText("Your teacher will see your name, email, and your scores on this class's assignments and quizzes.")).toBeTruthy();
+  });
+
+  it('opens quizzes for class credit and learning materials for private practice', async () => {
+    state.mine[0].assignments = [
+      { id: 'q1', setId: 'set-1', setTitle: 'Cells quiz', studyType: 'multiple_choice', category: 'quiz', dueAt: null, createdAt: '2026-10-20', myProgress: null },
+      { id: 'm1', setId: 'set-2', setTitle: 'Cell diagrams', studyType: 'flashcard', category: 'material', dueAt: null, createdAt: '2026-10-19', myProgress: null },
+    ];
+    render(<MyClassesPage />);
+    const quiz = within(await screen.findByRole('list', { name: 'Quizzes' })).getByRole('link');
+    const material = within(screen.getByRole('list', { name: 'Learning materials' })).getByRole('link');
+    expect(quiz.getAttribute('href')).toBe('/sets/set-1?assignment=q1');
+    expect(material.getAttribute('href')).toBe('/sets/set-2');
+    expect(material.textContent).not.toContain('No due date');
   });
 
   it('joins with a normalized code, confirms it, and refreshes the list', async () => {

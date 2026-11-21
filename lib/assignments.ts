@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sortByDue } from '@/lib/due-dates';
+import type { ClassContentCategory } from '@/lib/classes-shared';
 
 // SERVER-ONLY (service-role client, which bypasses RLS). Assigning study sets
 // to classes (#56). A teacher can only assign sets they own to classes they
@@ -10,6 +11,7 @@ export interface ClassOption {
   classId: string;
   className: string;
   assignmentId: string | null;
+  category: ClassContentCategory | null;
   dueAt: string | null;
 }
 
@@ -24,6 +26,7 @@ export interface ClassAssignment {
   setId: string;
   setTitle: string;
   studyType: string;
+  category: ClassContentCategory;
   dueAt: string | null;
   createdAt: string;
 }
@@ -74,7 +77,7 @@ export async function getSetAssignments(
 
   const { data: assigned, error: assignedError } = await client
     .from('assignments')
-    .select('id, class_id, due_at')
+    .select('id, class_id, due_at, category')
     .eq('set_id', setId)
     .in(
       'class_id',
@@ -90,6 +93,7 @@ export async function getSetAssignments(
       classId: c.id,
       className: c.name,
       assignmentId: byClass.get(c.id)?.id ?? null,
+      category: byClass.get(c.id)?.category ?? null,
       dueAt: byClass.get(c.id)?.due_at ?? null,
     })),
   };
@@ -106,6 +110,7 @@ export async function assignSet(
   setId: string,
   classIds: string[],
   dueAt: string | null,
+  category: ClassContentCategory,
   client: SupabaseClient = supabaseAdmin
 ): Promise<AssignResult> {
   if (!(await ownsSet(teacherId, setId, client))) return { ok: false, reason: 'set-not-found' };
@@ -124,7 +129,7 @@ export async function assignSet(
   for (const classId of unique) {
     const { error: insertError } = await client
       .from('assignments')
-      .insert({ class_id: classId, set_id: setId, due_at: dueAt });
+      .insert({ class_id: classId, set_id: setId, due_at: dueAt, category });
     if (!insertError) assigned.push(classId);
     else if (insertError.code === '23505') alreadyAssigned.push(classId);
     else throw insertError;
@@ -133,7 +138,7 @@ export async function assignSet(
 }
 
 async function withSetDetails(
-  rows: { id: string; class_id: string; set_id: string; due_at: string | null; created_at: string }[],
+  rows: { id: string; class_id: string; set_id: string; category: ClassContentCategory; due_at: string | null; created_at: string }[],
   client: SupabaseClient
 ): Promise<StudentAssignment[]> {
   if (rows.length === 0) return [];
@@ -146,12 +151,12 @@ async function withSetDetails(
   return rows.flatMap((r) => {
     const set = setById.get(r.set_id);
     return set
-      ? [{ id: r.id, classId: r.class_id, setId: r.set_id, setTitle: set.title, studyType: set.study_type, dueAt: r.due_at, createdAt: r.created_at }]
+      ? [{ id: r.id, classId: r.class_id, setId: r.set_id, setTitle: set.title, studyType: set.study_type, category: r.category ?? 'assignment', dueAt: r.due_at, createdAt: r.created_at }]
       : [];
   });
 }
 
-const ASSIGNMENT_COLUMNS = 'id, class_id, set_id, due_at, created_at';
+const ASSIGNMENT_COLUMNS = 'id, class_id, set_id, category, due_at, created_at';
 
 // A class's assignments, soonest due first. Null if the class isn't the teacher's.
 export async function listClassAssignments(
@@ -168,6 +173,7 @@ export async function listClassAssignments(
     setId: a.setId,
     setTitle: a.setTitle,
     studyType: a.studyType,
+    category: a.category,
     dueAt: a.dueAt,
     createdAt: a.createdAt,
   }));
@@ -182,14 +188,34 @@ export async function updateAssignmentDue(
   client: SupabaseClient = supabaseAdmin
 ): Promise<boolean> {
   if (!(await ownsClass(teacherId, classId, client))) return false;
-  const { data, error } = await client
+  const update = client
     .from('assignments')
     .update({ due_at: dueAt })
     .eq('id', assignmentId)
-    .eq('class_id', classId)
-    .select('id');
+    .eq('class_id', classId);
+  if (dueAt !== null) update.neq('category', 'material');
+  const { data, error } = await update.select('id');
   if (error) throw error;
   return (data ?? []).length > 0;
+}
+
+export async function updateAssignmentCategory(
+  teacherId: string,
+  classId: string,
+  assignmentId: string,
+  category: ClassContentCategory,
+  client: SupabaseClient = supabaseAdmin
+): Promise<{ category: ClassContentCategory; dueAt: string | null } | null> {
+  if (!(await ownsClass(teacherId, classId, client))) return null;
+  const { data, error } = await client
+    .from('assignments')
+    .update(category === 'material' ? { category, due_at: null } : { category })
+    .eq('id', assignmentId)
+    .eq('class_id', classId)
+    .select('category, due_at')
+    .maybeSingle();
+  if (error) throw error;
+  return data ? { category: data.category, dueAt: data.due_at } : null;
 }
 
 // Students immediately lose access to the set (RLS follows the assignment).

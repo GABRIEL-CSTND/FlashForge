@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { apiFetch, errorMessage } from '@/lib/api-client';
+import { CLASS_CONTENT, isClassContentCategory, type ClassContentCategory } from '@/lib/classes-shared';
 import { formatDueDate, fromLocalInputValue, parseDueAt } from '@/lib/due-dates';
 
 interface ClassOption {
   classId: string;
   className: string;
   assignmentId: string | null;
+  category?: ClassContentCategory | null;
   dueAt: string | null;
 }
 
@@ -39,6 +41,7 @@ const listNames = (names: string[]) =>
 export default function AssignPanel({ setId, setTitle, onClose }: { setId: string; setTitle: string; onClose: () => void }) {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [selected, setSelected] = useState<string[]>([]);
+  const [category, setCategory] = useState<ClassContentCategory>('assignment');
   const [dueLocal, setDueLocal] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
@@ -58,7 +61,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
 
   const handleAssign = async () => {
     if (state.status !== 'ready' || selected.length === 0) return;
-    const dueAt = fromLocalInputValue(dueLocal);
+    const dueAt = category === 'material' ? null : fromLocalInputValue(dueLocal);
     const checked = parseDueAt(dueAt);
     if (!checked.ok) {
       setMessage({ kind: 'error', text: checked.error });
@@ -69,7 +72,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
     try {
       const res = await apiFetch(`/api/teacher/sets/${setId}/assignments`, {
         method: 'POST',
-        body: { classIds: selected, dueAt: checked.dueAt },
+        body: { classIds: selected, category, dueAt: checked.dueAt },
       });
       if (!res.ok) {
         setMessage({ kind: 'error', text: errorMessage(res.data) });
@@ -107,7 +110,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
       }}
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-6"
     >
-      <div className="w-full max-w-md space-y-4 sheet paper-shadow rounded-lg p-6 shadow-xl">
+      <div className="max-h-[calc(100dvh-3rem)] w-full max-w-md space-y-4 overflow-y-auto sheet paper-shadow rounded-lg p-6 shadow-xl">
         <div className="space-y-1">
           <h2 id="assign-title" className="text-lg font-semibold">
             Assign to class
@@ -135,10 +138,24 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
 
         {state.status === 'ready' && state.classes.length > 0 && (
           <>
+            <label className="block space-y-1 text-sm">
+              <span className="block text-xs uppercase tracking-wide text-muted">Category</span>
+              <select
+                value={category}
+                onChange={(event) => {
+                  if (isClassContentCategory(event.target.value)) setCategory(event.target.value);
+                }}
+                disabled={saving}
+                className="w-full rounded-lg border bg-transparent px-3 py-2"
+              >
+                {CLASS_CONTENT.map((item) => <option key={item.category} value={item.category}>{item.label}</option>)}
+              </select>
+            </label>
             <fieldset className="space-y-2" disabled={saving}>
               <legend className="text-xs uppercase tracking-wide text-muted">Classes</legend>
               {state.classes.map((c) => {
                 const assigned = c.assignmentId !== null;
+                const sharedAs = CLASS_CONTENT.find((item) => item.category === c.category) ?? CLASS_CONTENT[0];
                 return (
                   <label
                     key={c.classId}
@@ -157,7 +174,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
                       <span className="block truncate font-medium">{c.className}</span>
                       {assigned && (
                         <span className="block text-xs text-muted">
-                          Assigned · {c.dueAt ? `due ${formatDueDate(c.dueAt)}` : 'no due date'}
+                          {sharedAs.label}{sharedAs.category !== 'material' && ` · ${c.dueAt ? `due ${formatDueDate(c.dueAt)}` : 'no due date'}`}
                         </span>
                       )}
                     </span>
@@ -166,7 +183,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
               })}
             </fieldset>
 
-            <div className="space-y-1">
+            {category !== 'material' && <div className="space-y-1">
               <label htmlFor="assign-due" className="text-xs uppercase tracking-wide text-muted">
                 Due date (optional)
               </label>
@@ -179,7 +196,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
                 className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
               />
               <p className="text-xs text-muted">Students see it in their own time zone.</p>
-            </div>
+            </div>}
           </>
         )}
 

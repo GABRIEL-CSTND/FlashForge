@@ -6,7 +6,7 @@ import LibraryDesk, { DeskNote } from '@/components/desk/LibraryDesk';
 import type { TagTone } from '@/components/desk/PaperTag';
 import RoleGate from '@/components/RoleGate';
 import { apiFetch, errorMessage } from '@/lib/api-client';
-import { normalizeJoinCode } from '@/lib/classes-shared';
+import { groupClassContent, normalizeJoinCode, type ClassContentCategory } from '@/lib/classes-shared';
 import { shortDate } from '@/lib/library';
 import { STUDENT_ROLES } from '@/lib/role-types';
 import { formatDueDate, isOverdue } from '@/lib/due-dates';
@@ -17,6 +17,7 @@ interface AssignedSet {
   setId: string;
   setTitle: string;
   studyType: string;
+  category?: ClassContentCategory;
   dueAt: string | null;
   createdAt: string;
   // The student's own results on this assignment, or null if not done (#57).
@@ -43,7 +44,7 @@ const OFFLINE_MESSAGE = 'Could not reach the server. Check your connection and t
 const BAD_CODE_MESSAGE = "That doesn't look like a class code. Codes have 6 letters and numbers, like K7M-2QX.";
 // Shown before joining (#54). Teachers see names and emails on the roster
 // (#53) and will see assignment scores (#58).
-const JOIN_NOTICE = "Your teacher will see your name, email, and your scores on this class's assignments.";
+const JOIN_NOTICE = "Your teacher will see your name, email, and your scores on this class's assignments and quizzes.";
 const TIP = 'Sets your teachers assign show up in each class, with their due dates.';
 
 async function fetchMyClasses(): Promise<LoadState> {
@@ -207,26 +208,32 @@ function MyClasses() {
                   <div className="desk-tray rounded-[18px] px-6 pb-10 pt-11">
                     {c.assignments.length === 0 ? (
                       <p className="text-sm text-on-desk/85">No assigned sets yet.</p>
-                    ) : (
-                      <ul aria-label={`Assigned in ${c.name}`} className="grid gap-x-8 gap-y-12 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]">
-                        {c.assignments.map((a, i) => {
-                          const morph = morphed.has(a.setId) ? undefined : `deck-${a.setId}`;
-                          morphed.add(a.setId);
-                          return (
-                            <LibraryDeck
-                              key={a.id}
-                              index={i + k}
-                              href={`/sets/${a.setId}?assignment=${a.id}`}
-                              morph={morph}
-                              kind={STUDY_TYPE_LABELS[toStudyType(a.studyType)]}
-                              title={a.setTitle}
-                              meta={`Assigned ${shortDate(a.createdAt)}`}
-                              tag={assignmentTag(a)}
-                            />
-                          );
-                        })}
-                      </ul>
-                    )}
+                    ) : groupClassContent(c.assignments).filter((group) => group.items.length > 0).map((group) => (
+                      <section key={group.category} aria-labelledby={`${c.id}-${group.category}`} className="mt-8 first:mt-0">
+                        <h4 id={`${c.id}-${group.category}`} className="mb-5 text-xs font-semibold uppercase tracking-widest text-on-desk/85">
+                          {group.heading}
+                        </h4>
+                        <ul aria-labelledby={`${c.id}-${group.category}`} className="grid gap-x-8 gap-y-12 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]">
+                          {group.items.map((a, i) => {
+                            const morph = morphed.has(a.setId) ? undefined : `deck-${a.setId}`;
+                            morphed.add(a.setId);
+                            const isMaterial = group.category === 'material';
+                            return (
+                              <LibraryDeck
+                                key={a.id}
+                                index={i + k}
+                                href={isMaterial ? `/sets/${a.setId}` : `/sets/${a.setId}?assignment=${a.id}`}
+                                morph={morph}
+                                kind={STUDY_TYPE_LABELS[toStudyType(a.studyType)]}
+                                title={a.setTitle}
+                                meta={`${isMaterial ? 'Shared' : 'Assigned'} ${shortDate(a.createdAt)}`}
+                                tag={isMaterial ? undefined : assignmentTag(a)}
+                              />
+                            );
+                          })}
+                        </ul>
+                      </section>
+                    ))}
                   </div>
                 </li>
               ))}
