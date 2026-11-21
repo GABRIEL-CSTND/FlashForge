@@ -40,6 +40,8 @@ soon as it's applied.
 | `20261031000100_limit_failed_guides.sql` | #41 | 2026-10-31 |
 | `20261112000100_server_only_card_writes.sql` | PR #84 | 2026-11-12 |
 | `20261112000200_tighten_set_grants.sql` | PR #84 review | 2026-11-12 |
+| `20261121000100_guide_source_files.sql` | #111 (PR #121) | Found applied on 2026-11-21, before the PR was merged |
+| `20261121000200_class_content_categories.sql` | #115 (PR #122) | Found applied on 2026-11-21, before the PR was merged |
 
 Add a row here whenever you apply a new migration.
 

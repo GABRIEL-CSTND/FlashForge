@@ -88,7 +88,8 @@ export default function PrivacyPage() {
             <h3 className="font-medium text-sm text-ink">Guide History</h3>
             <p className="text-xs text-muted leading-relaxed">
               Study guides generated while signed in are kept in your private <strong>History</strong> log, allowing you to review past materials or save them to your library later.
-              If you use a file, we keep a private copy with the guide. For larger PDFs, we keep the extracted text.
+              If you use a file, we keep a private copy with the guide, and the deck you save from it uses the same copy. For a PDF over about 4 MB, we keep the text read from it instead.
+              We keep up to 25 MB of your files: when a new one doesn&apos;t fit, the files of your oldest unsaved guides are removed to make room.
             </p>
           </div>
 

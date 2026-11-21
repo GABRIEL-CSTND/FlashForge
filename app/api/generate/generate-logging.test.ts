@@ -95,11 +95,14 @@ beforeEach(() => {
   vi.mocked(generateStudyItems).mockClear();
 });
 
-function generate(text: string | null, headers: Record<string, string> = {}, fields: Record<string, string> = {}) {
+function generate(text: string | null, headers: Record<string, string> = {}, fields: Record<string, string | File> = {}) {
   const form = new FormData();
   if (text !== null) form.append('file', new File([text], 'notes.txt', { type: 'text/plain' }));
   form.append('studyType', 'multiple_choice');
-  for (const [k, v] of Object.entries(fields)) form.set(k, v);
+  for (const [k, v] of Object.entries(fields)) {
+    if (typeof v === 'string') form.set(k, v);
+    else form.set(k, v);
+  }
   return POST(new NextRequest('http://localhost/api/generate', { method: 'POST', body: form, headers }));
 }
 const asSam = { authorization: 'Bearer sam' };
@@ -245,6 +248,27 @@ describe('/api/generate History', () => {
         content_base64: Buffer.from(`Page 1\n\n${LONG_TEXT}`).toString('base64'),
       }),
     ]);
+  });
+
+  it('keeps the original PDF when the browser sends it with the pages, and the AI reads the pages', async () => {
+    const original = new File(['%PDF-1.7 the original'], 'lecture.pdf', { type: 'application/pdf' });
+    const res = await generate(null, asSam, { pages: JSON.stringify([LONG_TEXT]), fileName: 'lecture.pdf', file: original });
+    const { historyId } = await res.json();
+    expect(res.status).toBe(200);
+    expect(files()).toEqual([
+      expect.objectContaining({
+        history_id: historyId,
+        name: 'lecture.pdf',
+        kind: 'pdf',
+        content_base64: Buffer.from('%PDF-1.7 the original').toString('base64'),
+      }),
+    ]);
+  });
+
+  it('keeps only the pages when what came with them is not a PDF', async () => {
+    const other = new File(['not the lecture'], 'notes.txt', { type: 'text/plain' });
+    await generate(null, asSam, { pages: JSON.stringify([LONG_TEXT]), fileName: 'lecture.pdf', file: other });
+    expect(files()).toEqual([expect.objectContaining({ name: 'lecture.pdf', kind: 'pdf-text' })]);
   });
 
   it("keeps a signed-in user's guide in their History, and says which entry it is", async () => {

@@ -143,6 +143,7 @@ components/
   study/SourceNote.tsx  Where a card came from: its quote and page
   study/parts.tsx       Exit, the line above the desk, and the verdicts for typed and picked answers
   CardEditor.tsx        Edit mode for a set: change, add, delete and reorder cards (of any kind in a mixed quiz)
+  SourceFileViewer.tsx  "View source file": the file a guide was made from, shown in the page or downloaded (#111)
   AssignPanel.tsx       "Assign to class" dialog on a set the teacher owns
   StudentResultsPanel.tsx  One student's attempts, opened from the results table
   ProfileProvider.tsx   Shares the signed-in user's profile (role) with every page
@@ -202,7 +203,7 @@ lib/
   live-session.ts       What a tab keeps of a live game (sessionStorage), so a reload doesn't end it (browser-only)
   guide-request.ts      Making a guide with /api/generate from the browser: checks, the request, the progress stream
   sets.ts               Study sets scoped to their owner; saving edited cards (server-only)
-  history.ts            History: adding each generated guide, marking one saved (server-only)
+  history.ts            History: adding each generated guide with its file (#111), marking one saved (server-only)
   library.ts            The library's tags: each deck's best score, short dates ("Today", "Oct 29")
   ids.ts                isUuid() and newId(), shared by server and client
   classes.ts            Class logic, always scoped to the acting teacher (server-only)

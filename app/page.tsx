@@ -201,8 +201,10 @@ export default function UploadPage() {
 
     const formData = new FormData();
     if (source === 'file' && file && fileKind(file.name, file.type) === 'pdf') {
-      // Read PDFs here first (#44). Keep the original for signed-in students when
-      // it fits, and send extracted text for guests and larger PDFs.
+      // A PDF is read here, in the browser, and only its text is sent (#44): a big
+      // lecture file can't fail the request-size limit or take long to upload.
+      // Signed in, the original goes too when both fit in one request, only to be
+      // kept with the guide in History (#111); the server doesn't read it again.
       // Opening a big PDF takes a moment before the first page is counted.
       setPdfRead({ done: 0, total: 0 });
       const plan = await planPdfUpload(file, (done, total) => setPdfRead({ done, total }));
@@ -211,11 +213,13 @@ export default function UploadPage() {
         fail(plan.message);
         return;
       }
-      if (plan.kind === 'pages' && (!user || file.size > MAX_UPLOAD_BYTES)) {
-        formData.append('pages', JSON.stringify(plan.pages));
+      if (plan.kind === 'pages') {
+        const pages = JSON.stringify(plan.pages);
+        formData.append('pages', pages);
         formData.append('fileName', file.name);
+        if (user && file.size + new Blob([pages]).size <= MAX_UPLOAD_BYTES) formData.append('file', file);
       } else {
-        // Upload the original for History or for server-side reading.
+        // Scanned, or not readable here: the server reads the file itself.
         setPdfRead(null);
         formData.append('file', file);
       }
