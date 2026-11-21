@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
@@ -385,6 +386,13 @@ function StudySet({ id, userId, assignmentId, classItemId }: {
       </div>
     );
 
+  // Anyone who can open the set can host a live game with it (#26).
+  const playLive = (
+    <Link href={`/play?set=${set.id}`} className="text-sm font-semibold text-brass-ink hover:underline">
+      Play live with friends
+    </Link>
+  );
+
   return (
     <>
     <StudyViewer
@@ -394,12 +402,13 @@ function StudySet({ id, userId, assignmentId, classItemId }: {
       cards={cards}
       onFinish={() => router.push('/')}
       onEdit={isOwner ? () => setEditingCards(true) : undefined}
-      saveSlot={sourceName ? (
+      saveSlot={
         <div className="space-y-2 text-center">
-          <SourceFileViewer source={{ name: sourceName, setId: set.id, classItemId }} />
+          {sourceName && <SourceFileViewer source={{ name: sourceName, setId: set.id, classItemId }} />}
+          <div>{playLive}</div>
           {deleteSlot}
         </div>
-      ) : deleteSlot}
+      }
       onComplete={recordAttempt}
       completionSlot={completionSlot}
       quoteLabel={quoteSourceLabel(set.source_filename)}

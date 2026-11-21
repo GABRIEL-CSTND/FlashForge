@@ -4,7 +4,7 @@ import Link from 'next/link';
 export const metadata: Metadata = {
   title: 'User Guide',
   description:
-    'How to use FlashForge: making decks from files, notes, web links and topics, study modes on the desk, saving sets, and teacher tools.',
+    'How to use FlashForge: making decks from files, notes, web links and topics, study modes on the desk, saving sets, teacher tools, and live games with friends.',
 };
 
 // A static page with no state or handlers, so it's a server component (no 'use client').
@@ -58,6 +58,10 @@ export default function GuidePage() {
           <span>·</span>
           <a href="#teachers" className="text-brass-ink hover:underline">
             Teachers & Classes
+          </a>
+          <span>·</span>
+          <a href="#play-live" className="text-brass-ink hover:underline">
+            Play Live
           </a>
           <span>·</span>
           <a href="#faq" className="text-brass-ink hover:underline">
@@ -266,10 +270,13 @@ export default function GuidePage() {
               <strong className="text-ink">Card Box Tabs:</strong> Sticking up from the wooden box are divider tabs for quick navigation: <em>My Sets</em>, <em>History</em>, <em>My Classes</em> (or <em>Classes</em> for teachers), <em>Admin</em> for admins, and <em>Guide</em>, which everyone sees, signed in or not.
             </li>
             <li>
+              <strong className="text-ink">Front of the Box:</strong> <em>FlashForge</em> starts a new deck, and <em>Play live</em> opens a live game with friends (see section 7).
+            </li>
+            <li>
               <strong className="text-ink">My Sets:</strong> Each saved set is displayed as a real deck on the green leather desk, tagged with your best score (e.g. <em>Best 9 of 10</em>) or <em>Not studied yet</em>. Picking up a deck morphs smoothly into your study session.
             </li>
             <li>
-              <strong className="text-ink">History:</strong> Every study guide you generate while signed in is automatically archived in History, tagged by date and marked as <em>saved</em> or <em>not saved</em>. You can study any past guide or save it to My Sets anytime.
+              <strong className="text-ink">History:</strong> Every study guide you generate while signed in is automatically archived in History, tagged by date and marked as <em>saved</em> or <em>not saved</em>. You can study any past guide or save it to My Sets anytime. If you made it from a file, <strong>View source file</strong> opens the file (for a PDF over about 4 MB, the text read from it). FlashForge keeps up to 25 MB of your files; when a new one doesn&apos;t fit, your oldest unsaved guides give theirs up.
             </li>
             <li>
               <strong className="text-ink">Library Card:</strong> Shows your account name, role, and Sign out button. Sign in with Google to sync all your decks, progress, and class memberships across devices.
@@ -306,10 +313,56 @@ export default function GuidePage() {
         </div>
       </section>
 
-      {/* Section 7: Tips & FAQ */}
+      {/* Section 7: Play live (#26) */}
+      <section id="play-live" className="space-y-4">
+        <h2 className="font-serif text-xl sm:text-2xl font-normal text-ink border-b border-ink/10 pb-2">
+          7. Play Live with Friends
+        </h2>
+        <p className="text-xs text-muted leading-relaxed">
+          Quiz a group at the same time: everyone gets the same question at once, and right answers score more the faster they come. Click{' '}
+          <strong className="text-ink">Play live</strong> on the front of the card box. Nobody needs an account to play.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div className="paper rounded-lg p-4 space-y-2 border border-ink/10">
+            <h3 className="font-medium text-sm text-ink">Hosting a game</h3>
+            <ul className="list-disc pl-5 space-y-1.5 text-xs text-muted leading-relaxed">
+              <li>Click <strong>Open a room</strong> and share its 4-character code (like &ldquo;K7MQ&rdquo;) or its link.</li>
+              <li>
+                While friends join, pick the deck. Make a new one right there, from notes, a file, a link or a topic: nobody sees its cards until they come up,
+                you included, so you can play too. Or, signed in, pick one from My Sets or History, and players are told you may know the answers.
+              </li>
+              <li>On a set&apos;s page, <strong>Play live with friends</strong> opens a room with that deck.</li>
+              <li>
+                Pick 10, 20 or 30 seconds for each question. Switch off <strong>Play too</strong> to only run the game, on a projector for example.
+              </li>
+            </ul>
+          </div>
+
+          <div className="paper rounded-lg p-4 space-y-2 border border-ink/10">
+            <h3 className="font-medium text-sm text-ink">Playing</h3>
+            <ul className="list-disc pl-5 space-y-1.5 text-xs text-muted leading-relaxed">
+              <li>Type the code and a nickname. Everyone in the room sees your nickname and points.</li>
+              <li>Multiple choice and true or false: one pick, locked in. Whether it&apos;s right shows when time is up.</li>
+              <li>Flashcards and a mixed quiz&apos;s Part III: type the answer, and guess again until it&apos;s right. One small typo still counts.</li>
+              <li>
+                A right answer earns 50 points, plus up to 50 more the faster it comes, and wrong guesses cost nothing. Once everyone has answered, or time runs
+                out, the answer shows, and the next question comes on its own.
+              </li>
+              <li>At the end, a podium shows the top three, and the host can play again.</li>
+            </ul>
+          </div>
+        </div>
+        <p className="text-xs text-muted leading-relaxed">
+          Live games aren&apos;t saved: they don&apos;t count toward your scores or a teacher&apos;s grade book. A room holds 30 players, and it closes when
+          the host closes their page. If you host, keep the room&apos;s page open and on screen: browsers slow down a page in the background, and phones
+          pause it, which holds up the game.
+        </p>
+      </section>
+
+      {/* Section 8: Tips & FAQ */}
       <section id="faq" className="space-y-4">
         <h2 className="font-serif text-xl sm:text-2xl font-normal text-ink border-b border-ink/10 pb-2">
-          7. Tips & Frequently Asked Questions
+          8. Tips & Frequently Asked Questions
         </h2>
         <div className="space-y-3 text-sm">
           <div className="paper rounded-lg p-3.5 space-y-1 border border-ink/10">

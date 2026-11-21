@@ -5,8 +5,44 @@ Notable changes to FlashForge, newest first. Issue and PR numbers refer to
 
 ## Unreleased (on `dev`, not on the live site yet)
 
-Nothing yet. Changes merged into `dev` after the 2026-11-16 release go here, and reach the
-live site with the next release of `dev` to `main`.
+Changes merged into `dev` after the 2026-11-16 release go here, and reach the live site
+with the next release of `dev` to `main`.
+
+### Added
+
+- **View source file (#111):** a guide made from a file keeps the file, so its owner can open
+  it again from History or the saved set: PDFs and photos show in the page, TXT, Word and
+  PowerPoint files as text, and any can be downloaded. The new deck has it too, right after
+  it's made, signed in or not. Signed in, the browser sends a PDF's original along with its
+  text (#44) when both fit in one request; for a bigger PDF the text is kept. Saving a guide
+  gives the set the same copy, and each user keeps up to 25 MB of files (150 MB for
+  everyone), the oldest unsaved guides' files making room first. Only the owner can open
+  them. Migrations `20261121000100_guide_source_files.sql` and
+  `20261121000110_guide_source_files_room.sql`. See ARCHITECTURE, "Source files".
+- **Play live (#26): quiz friends at the same time**, in the style of jklm.fun's PopSauce.
+  *Play live* on the front of the card box opens `/play`: pick a nickname, then open a room
+  or join one with its 4-character code (or link, `/play/K7MQ`). No account is needed.
+  - **The lobby:** players arrive while the host picks the deck. The host can make a new one
+    right there, exactly as on the home page; its cards are never shown, only how many have
+    been written, so the host can play fairly. Signed in, the host can also pick a deck from
+    My Sets or History, and players are told the host may know the answers. A set's page
+    has *Play live with friends*, which opens a room with that deck. The host picks 10, 20
+    or 30 seconds a question and whether to play too (off: just run it, on a projector).
+  - **The game:** everyone gets the same question at once, with a countdown. Multiple
+    choice and true or false take one pick, kept secret until time is up; flashcards and a
+    mixed quiz's Part III are typed, and can be guessed until right, with one typo allowed
+    (`checkTypedAnswer`). A right answer earns 50 points plus up to 50 for speed. The answer
+    shows when time is up or everyone has answered, for 4 seconds, then the next question
+    comes. Then a podium, the standings and *Play again*.
+  - **How it works:** the host's browser runs the game (`lib/live-game.ts`), and the other
+    browsers talk to it through two public Supabase Realtime broadcast channels per room
+    (`lib/live-room.ts`): the room, which only the host sends on, and the host's inbox,
+    which players send to over Realtime's REST API without joining it. No database tables,
+    migration or API routes. Nothing about a game is saved, and it doesn't count toward
+    scores or grade books. Rooms hold 30 players. See ARCHITECTURE, "Live games".
+  - The home page's request code is now also in `lib/guide-request.ts`, which the lobby
+    uses; the home page moves onto it once its redesign (#108) has settled.
+  - Answer slips can keep a pick secret: lifted with a brass edge until the answer is known.
 
 ## 2026-11-16: the desk redesign
 

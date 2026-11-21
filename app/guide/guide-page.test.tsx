@@ -66,6 +66,9 @@ describe('user guide page (#25)', () => {
     expect(screen.getByText(/Card Box Tabs:/)).toBeTruthy();
     expect(screen.getByText(/My Sets:/)).toBeTruthy();
     expect(screen.getByText(/History:/)).toBeTruthy();
+    // A guide's file (#111): kept up to 25 MB a user, oldest unsaved first to go.
+    expect(document.body.textContent).toMatch(/View source file opens the file/);
+    expect(document.body.textContent).toMatch(/keeps up to 25 MB of your files/);
     expect(screen.getByText(/Library Card:/)).toBeTruthy();
   });
 
@@ -96,5 +99,22 @@ describe('user guide page (#25)', () => {
     render(<GuidePage />);
     const cta = screen.getByRole('link', { name: 'Make a study deck →' });
     expect(cta.getAttribute('href')).toBe('/');
+  });
+
+  // Live games (#26): check these against lib/live-game.ts before changing them.
+  it('explains Play live as the game plays it', () => {
+    render(<GuidePage />);
+    expect(screen.getByRole('heading', { name: '7. Play Live with Friends' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Table of contents' }).textContent).toContain('Play Live');
+    const text = document.getElementById('play-live')?.textContent ?? '';
+    // BASE_POINTS and SPEED_POINTS.
+    expect(text).toMatch(/A right answer earns 50 points, plus up to 50 more the faster it comes/);
+    // Typed answers use checkTypedAnswer, where "close" (one typo) counts.
+    expect(text).toMatch(/One small typo still counts/);
+    // SECONDS_CHOICES and MAX_PLAYERS.
+    expect(text).toMatch(/10, 20 or 30 seconds/);
+    expect(text).toMatch(/A room holds 30 players/);
+    // Nothing about a game is written to the database.
+    expect(text).toMatch(/Live games aren.t saved/);
   });
 });

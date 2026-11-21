@@ -6,6 +6,7 @@ import {
   fileKind,
   fileProblem,
   isPhoto,
+  MAX_UPLOAD_BYTES,
   MIN_SOURCE_CHARS,
   pastedTextProblem,
   SCANNED_PDF_TEXT_CHARS,
@@ -210,7 +211,12 @@ async function generate(
       ({ text, units } = pageUnits(parsed.pages));
       title = name.replace(/\.[^/.]+$/, '') || name;
       sourceFilename = name;
-      sourceFile = { name, pages: parsed.pages };
+      // Signed in, the browser also sends the original PDF when it fits (#111),
+      // only to keep with the guide in History; the AI reads the pages.
+      sourceFile =
+        file instanceof File && fileKind(file.name, file.type) === 'pdf' && file.size <= MAX_UPLOAD_BYTES
+          ? file
+          : { name, pages: parsed.pages };
     } else {
       if (!(file instanceof File)) {
         return done(NextResponse.json({ error: 'Missing file' }, { status: 400 }), { success: false, errorKind: 'no_file' });

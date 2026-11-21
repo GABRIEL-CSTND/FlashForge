@@ -88,7 +88,8 @@ export default function PrivacyPage() {
             <h3 className="font-medium text-sm text-ink">Guide History</h3>
             <p className="text-xs text-muted leading-relaxed">
               Study guides generated while signed in are kept in your private <strong>History</strong> log, allowing you to review past materials or save them to your library later.
-              If you use a file, we keep a private copy with the guide. For larger PDFs, we keep the extracted text.
+              If you use a file, we keep a private copy with the guide, and the deck you save from it uses the same copy. For a PDF over about 4 MB, we keep the text read from it instead.
+              We keep up to 25 MB of your files: when a new one doesn&apos;t fit, the files of your oldest unsaved guides are removed to make room.
             </p>
           </div>
 
@@ -133,6 +134,15 @@ export default function PrivacyPage() {
           </p>
           <p>
             <strong className="text-ink">Google&apos;s Gemini AI:</strong> What you put on the notes sheet (a file&apos;s text, a photo, your notes, or the page a link or topic leads to) is sent to Google&apos;s Gemini API to write your cards. FlashForge uses the API&apos;s free tier, and under Google&apos;s terms for it, Google may use what&apos;s sent, and the cards it writes, to improve its products, and people at Google may read them. So don&apos;t put anything private or sensitive on the sheet.
+          </p>
+          <p>
+            <strong className="text-ink">Live Games:</strong> In a{' '}
+            <Link href="/play" className="text-brass-ink hover:underline">
+              Play live
+            </Link>{' '}
+            game, everyone in the room sees your nickname and your points. The game travels through Supabase&apos;s live messaging and isn&apos;t saved: no
+            scores, no nicknames, and nothing in a teacher&apos;s grade book. A deck made for a game is made like any other: what&apos;s on the sheet goes to
+            Gemini, and when you&apos;re signed in, the deck is kept in your History.
           </p>
           <p>
             <strong className="text-ink">No Ads or Tracking:</strong> FlashForge doesn&apos;t sell your data, show ads, or track you across other sites.

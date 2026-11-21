@@ -78,10 +78,16 @@ describe('Privacy page (#88)', () => {
     expect(text).toMatch(/free tier/);
     expect(text).toMatch(/Google may use what's sent, and the cards it writes, to improve its products/);
     expect(text).not.toMatch(/solely/);
+    // A guide's file is kept once, up to 25 MB a user (#111, guide_source_files).
+    expect(text).toMatch(/the deck you save from it uses the same copy/);
+    expect(text).toMatch(/We keep up to 25 MB of your files/);
     // A teacher's sets take every student's attempts on them along (attempts.set_id cascades).
     expect(text).toMatch(/their students' scores on those decks are deleted/);
     // Guests' generations are logged with a hashed address for the daily limit.
     expect(text).toMatch(/scrambled \(hashed\) form of your internet address/);
+    // Live games (#26) show nicknames and points to the room and save nothing.
+    expect(text).toMatch(/everyone in the room sees your nickname and your points/);
+    expect(text).toMatch(/isn't saved: no scores, no nicknames/);
   });
 
   it('shows sign-in prompt in the deletion section when signed out', () => {
