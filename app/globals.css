@@ -276,6 +276,50 @@ button.desk-spot:not(:disabled) {
   box-shadow: inset 0 0 0 2px var(--pencil), 0 1px 2px rgb(0 0 0 / 0.2), 0 8px 16px -8px rgb(0 0 0 / 0.6);
 }
 
+/* Match pairs before they are checked (#119): both slips of a pair share a
+   tint, an edge in the pair's colour and a faint wash over the paper. The
+   colours are soft enough for the cream paper and the green desk. */
+.pair-blue { --pair: #4f7fc4; }
+.pair-purple { --pair: #8a64c0; }
+.pair-teal { --pair: #2f948c; }
+.pair-amber { --pair: #c98a1e; }
+.pair-pink { --pair: #c9578f; }
+.slip.slip-paired[class*="pair-"] {
+  box-shadow:
+    inset 0 0 0 2.5px var(--pair),
+    inset 0 0 0 999px color-mix(in srgb, var(--pair) 13%, transparent),
+    0 1px 2px rgb(0 0 0 / 0.2),
+    0 8px 16px -8px rgb(0 0 0 / 0.6);
+}
+/* The pair's number, in its colour, so pairs never rely on colour alone. */
+.pair-tag {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  background: var(--pair);
+  color: #fff;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+/* Checked: a right pair goes green, a wrong one red pencil (.slip-wrong). */
+.slip.slip-right {
+  box-shadow:
+    inset 0 0 0 2.5px #3f8a4c,
+    inset 0 0 0 999px rgb(63 138 76 / 0.1),
+    0 1px 2px rgb(0 0 0 / 0.2),
+    0 8px 16px -8px rgb(0 0 0 / 0.6);
+}
+.slip.slip-right:disabled,
+.slip.slip-wrong:disabled {
+  cursor: default;
+}
+
 /* A term already matched leaves an outline where it lay. */
 .slip.slip-used {
   background: none;

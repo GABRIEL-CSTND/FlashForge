@@ -999,12 +999,17 @@ live database's keys were checked on 2026-11-14: they match the migrations.
   (`matchRounds()` in `lib/study-types.ts`): 12 cards are 4 + 4 + 4, never 5 + 5 + 2.
 - Each round lays its clues out as paper slips with its terms beside them (shuffled, and
   never in the clues' order); on a phone the terms sit in two columns above the clues
-  (`components/study/MatchBoard.tsx`). The student picks a clue and then its term, or a
-  term and then its clue. A right pair stays together with a brass edge, and the clue
-  shows its term and, if it has one, its quote. A wrong pick flashes red pencil and the
-  student tries again, but that clue counts as missed. **Next round** (or **See
-  results**) appears once every clue is matched, and the round's cards go to the piles.
-- Each card's answer is the **first** term picked for its clue (`chosen`). It counts if it reads
+  (`components/study/MatchBoard.tsx`). The student picks a clue and then a term, or a
+  term and then a clue, to pair them. Nothing is checked yet (#119): each pair takes its
+  own tint (soft blue, purple, teal, amber or pink) and a numbered tag, shared by both
+  slips. Picking a paired slip takes it out of its pair so it can be paired again, and
+  pairing a slip with one from another pair moves it there. **Submit Answers** turns on
+  once every clue has a term and checks the whole round at once: right pairs turn green
+  with a check, wrong ones red pencil with the right term written under the clue, and
+  each clue shows its quote if it has one. **Next round** (or **See results**) then
+  sends the round's cards to the piles.
+- Each card's answer is the term it was paired with when the round was submitted
+  (`chosen`). It counts if it reads
   the same as the card's own answer (`normalizeChoice`), so two cards with the same
   answer can't be "wrong" for swapping. `POST /api/attempts` gets `mode: "match"` and the
   server scores it the same way. Teachers see *Matched* on these attempts, and wrong
