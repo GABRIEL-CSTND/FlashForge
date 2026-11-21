@@ -296,7 +296,7 @@ export default function GuidePage() {
             <ul className="list-disc pl-5 space-y-1.5 text-xs text-muted leading-relaxed">
               <li>Manage your classes using kraft folders with brass join-code plates.</li>
               <li>Share each class&apos;s join code (e.g. &ldquo;K7M-2QX&rdquo;) with students.</li>
-              <li>Assign study decks to your classes with optional due dates.</li>
+              <li>Share decks with your classes as an <strong>Assignment</strong> or a <strong>Quiz</strong> (scored, with an optional due date), or as a <strong>Learning material</strong> to practice with (no due date, not scored).</li>
               <li>Open the <strong>Grade Book</strong> to see student attempts, class averages, and export CSV reports.</li>
               <li>Review <strong>Most-missed questions</strong> to pinpoint difficult concepts before tests.</li>
             </ul>
@@ -306,7 +306,7 @@ export default function GuidePage() {
             <h3 className="font-medium text-sm text-ink">For Students</h3>
             <ul className="list-disc pl-5 space-y-1.5 text-xs text-muted leading-relaxed">
               <li>Visit the <strong>My Classes</strong> tab and enter your teacher&apos;s join code on the paper card.</li>
-              <li>View all class assignments in designated leather trays, tagged with due dates (<em>Due Fri</em>, <em>Overdue</em>, or <em>Done</em>).</li>
+              <li>Each class&apos;s tray lists its assignments, quizzes and learning materials; assignments and quizzes are tagged with due dates (<em>Due Fri</em>, <em>Overdue</em>, or <em>Done</em>).</li>
               <li>Take assigned quizzes and study sets; scores sync directly to your teacher&apos;s grade book.</li>
             </ul>
           </div>

@@ -272,6 +272,17 @@ describe('class page', () => {
     expect(within(materials).getByRole('link', { name: /^Pick up Photosynthesis/ })).toBeTruthy();
     expect(within(materials).queryByRole('button', { name: /Change due date/ })).toBeNull();
     expect(state.calls.find((c) => c.method === 'PATCH')?.body).toEqual({ category: 'material' });
+    expect(confirmMock).toHaveBeenCalledWith(expect.stringMatching(/scores on it will be hidden from the Grade Book until you change it back/));
+  });
+
+  it('leaves an assignment where it was when the teacher cancels making it a learning material', async () => {
+    confirmMock.mockReturnValueOnce(false);
+    render(<TeacherClassPage />);
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Category for Photosynthesis' }), { target: { value: 'material' } });
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect(state.calls.some((c) => c.method === 'PATCH')).toBe(false);
+    expect(screen.getByRole('heading', { name: 'Learning materials (0)' })).toBeTruthy();
+    expect((screen.getByRole('combobox', { name: 'Category for Photosynthesis' }) as HTMLSelectElement).value).toBe('assignment');
   });
 
   it('unassigns a set after confirming', async () => {

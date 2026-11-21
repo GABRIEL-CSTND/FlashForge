@@ -207,7 +207,7 @@ lib/
   library.ts            The library's tags: each deck's best score, short dates ("Today", "Oct 29")
   ids.ts                isUuid() and newId(), shared by server and client
   classes.ts            Class logic, always scoped to the acting teacher (server-only)
-  classes-shared.ts     Class name, join-code and student-name rules shared by server and client
+  classes-shared.ts     Class name, join-code and student-name rules, and the class content categories (#115), shared by server and client
   student-classes.ts    Joining/leaving classes and the wrong-code rate limit (server-only)
   assignments.ts        Assigning sets to classes, scoped to the teacher/student (server-only)
   due-dates.ts          Due-date checks, local-time display, Overdue, sorting (shared)

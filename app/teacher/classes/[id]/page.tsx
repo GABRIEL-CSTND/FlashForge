@@ -206,6 +206,17 @@ function ClassView({ id }: { id: string }) {
   };
 
   const changeCategory = async (assignment: Assignment, category: ClassContentCategory) => {
+    // A learning material isn't scored, so its scores leave the Grade Book (until it's
+    // made an assignment or quiz again), and it can't have a due date.
+    if (
+      category === 'material' &&
+      (assignment.category ?? 'assignment') !== 'material' &&
+      !window.confirm(
+        `Make "${assignment.setTitle}" a learning material? Students' scores on it will be hidden from the Grade Book until you change it back, and its due date will be removed.`
+      )
+    ) {
+      return;
+    }
     const data = await run(() =>
       apiFetch(`/api/teacher/classes/${id}/assignments/${assignment.id}`, { method: 'PATCH', body: { category } })
     );
