@@ -307,6 +307,6 @@ describe('class page', () => {
     fireEvent.click(button);
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Allow going back on Photosynthesis' })).toBeTruthy());
-    expect(state.calls.find((c) => c.method === 'PATCH' && (c.body as any)?.allowBack === false)).toBeTruthy();
+    expect(state.calls.find((c) => c.method === 'PATCH' && (c.body as { allowBack?: boolean })?.allowBack === false)).toBeTruthy();
   });
 });

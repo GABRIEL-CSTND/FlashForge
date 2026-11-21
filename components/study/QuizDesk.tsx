@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import Pencil from '@/components/desk/Pencil';
 import { deckSpot, MAX_LAYERS, middleSpot, pileSpot, spotTransform, useDeskLayout, type Slots, type Spot } from '@/components/desk/useDeskLayout';
 import { checkTypedAnswer } from '@/lib/answer-check';
@@ -286,7 +286,7 @@ export default function QuizDesk({
 
   const canGoBack = allowBack && passDone > 0 && !finished;
 
-  const goBack = () => {
+  const goBack = useCallback(() => {
     if (!canGoBack) return;
     movedOn.current = true;
     let targetPos = deck.pos - 1;
@@ -299,13 +299,13 @@ export default function QuizDesk({
     const targetSheet = sheets[targetSheetIndex];
     if (targetSheet.kind !== 'question') return;
 
-    setDeck({
-      ...deck,
+    setDeck((d) => ({
+      ...d,
       pos: targetPos,
-    });
+    }));
     setAnswer(answers[targetSheet.index] ?? null);
     setFlying(null);
-  };
+  }, [canGoBack, deck.order, deck.pos, sheets, answers]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -319,7 +319,7 @@ export default function QuizDesk({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [canGoBack, deck, answers]);
+  }, [canGoBack, goBack]);
 
   // The Wrong pile, dealt again: those questions go back into the deck and the
   // Right pile stays where it is.

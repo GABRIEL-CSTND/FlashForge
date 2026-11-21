@@ -351,7 +351,7 @@ function ClassView({ id }: { id: string }) {
               <LibraryDeck
                 key={a.id}
                 index={i}
-                href={`/sets/${a.setId}${a.allowBack === false ? '?allowBack=false' : ''}`}
+                href={`/sets/${a.setId}`}
                 morph={`deck-${a.setId}`}
                 kind={STUDY_TYPE_LABELS[toStudyType(a.studyType)]}
                 title={a.setTitle}

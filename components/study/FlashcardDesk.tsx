@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import PaperCard from '@/components/desk/PaperCard';
 import Pencil from '@/components/desk/Pencil';
 import { deckSpot, MAX_LAYERS, middleSpot, pileSpot, spotTransform, useDeskLayout, type Spot } from '@/components/desk/useDeskLayout';
@@ -157,10 +157,10 @@ export default function FlashcardDesk({
     if (checked) nextRef.current?.focus();
   }, [checked]);
 
-  const lift = () => {
+  const lift = useCallback(() => {
     setLifted(true);
     later(() => setLifted(false), 280);
-  };
+  }, []);
   const fly = (i: number) => {
     setFlying(i);
     later(() => setFlying((f) => (f === i ? null : f)), 700);
@@ -222,11 +222,12 @@ export default function FlashcardDesk({
 
   const canGoBack = allowBack && deck.pos > 0 && !finished && mode !== 'match';
 
-  const goBack = () => {
+  const goBack = useCallback(() => {
     if (!canGoBack) return;
     const prevPos = deck.pos - 1;
     const prevIndex = deck.order[prevPos];
-    const { [prevIndex]: _removedPile, ...nextPile } = deck.pile;
+    const nextPile = { ...deck.pile };
+    delete nextPile[prevIndex];
     const nextLanded = deck.landed.filter((i) => i !== prevIndex);
     setDeck({
       ...deck,
@@ -240,10 +241,11 @@ export default function FlashcardDesk({
     setFlying(null);
     lift();
     if (!deck.practice) {
-      const { [prevIndex]: _removedAnswer, ...nextAnswers } = answers;
+      const nextAnswers = { ...answers };
+      delete nextAnswers[prevIndex];
       setAnswers(nextAnswers);
     }
-  };
+  }, [canGoBack, deck, answers, lift]);
 
   // ← and → sort the card while the card or a pile has focus.
   // Backspace, ↑, or P steps back to the previous card.
@@ -272,7 +274,7 @@ export default function FlashcardDesk({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [canGoBack, deck, answers]);
+  }, [canGoBack, goBack]);
 
   const checkTyped = (typed: string | null) => {
     if (current === undefined || checked) return;

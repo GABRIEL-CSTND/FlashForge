@@ -1,10 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sortByDue } from '@/lib/due-dates';
-import { getAssignmentSetting, saveAssignmentSetting } from '@/lib/assignment-settings';
 
-const isSchemaError = (err: any) =>
-  Boolean(err && (err.code === '42703' || err.code === 'PGRST204' || String(err.message).includes('allow_back')));
+const isSchemaError = (err: unknown): boolean => {
+  if (!err || typeof err !== 'object') return false;
+  const code = 'code' in err ? String(err.code) : '';
+  const message = 'message' in err ? String(err.message) : '';
+  return code === '42703' || code === 'PGRST204' || message.includes('allow_back');
+};
 
 // SERVER-ONLY (service-role client, which bypasses RLS). Assigning study sets
 // to classes (#56). A teacher can only assign sets they own to classes they
@@ -128,7 +131,7 @@ export async function assignSet(
   const assigned: string[] = [];
   const alreadyAssigned: string[] = [];
   for (const classId of unique) {
-    let { data: inserted, error: insertError } = await client
+    let { error: insertError } = await client
       .from('assignments')
       .insert({ class_id: classId, set_id: setId, due_at: dueAt, allow_back: allowBack })
       .select('id');
@@ -138,14 +141,9 @@ export async function assignSet(
         .insert({ class_id: classId, set_id: setId, due_at: dueAt })
         .select('id');
       insertError = retry.error;
-      inserted = retry.data;
     }
-    if (!insertError) {
-      assigned.push(classId);
-      if (inserted?.[0]?.id) {
-        saveAssignmentSetting(inserted[0].id, { allowBack });
-      }
-    } else if (insertError.code === '23505') alreadyAssigned.push(classId);
+    if (!insertError) assigned.push(classId);
+    else if (insertError.code === '23505') alreadyAssigned.push(classId);
     else throw insertError;
   }
   return { ok: true, assigned, alreadyAssigned };
@@ -173,8 +171,7 @@ async function withSetDetails(
   const setById = new Map((sets ?? []).map((s) => [s.id, s]));
   return rows.flatMap((r) => {
     const set = setById.get(r.set_id);
-    const setting = getAssignmentSetting(r.id);
-    const allowBack = r.allow_back !== undefined ? r.allow_back : (setting.allowBack ?? true);
+    const allowBack = r.allow_back !== undefined ? r.allow_back : true;
     return set
       ? [
           {
@@ -195,16 +192,18 @@ async function withSetDetails(
 // Safely query assignments, falling back if allow_back column does not exist yet.
 async function selectAssignments(
   client: SupabaseClient,
-  filter: (query: any) => any
+  scope: { classId?: string; classIds?: string[] }
 ): Promise<AssignmentRow[]> {
-  const withAllowBack = await filter(client.from('assignments').select('id, class_id, set_id, due_at, created_at, allow_back'));
-  if (!withAllowBack.error) return (withAllowBack.data ?? []) as AssignmentRow[];
+  const q1 = client.from('assignments').select('id, class_id, set_id, due_at, created_at, allow_back');
+  const withAllowBack = await (scope.classId ? q1.eq('class_id', scope.classId) : q1.in('class_id', scope.classIds ?? []));
+  if (!withAllowBack.error) return (withAllowBack.data ?? []) as unknown as AssignmentRow[];
   if (isSchemaError(withAllowBack.error)) {
-    const fallback = await filter(client.from('assignments').select('id, class_id, set_id, due_at, created_at'));
+    const q2 = client.from('assignments').select('id, class_id, set_id, due_at, created_at');
+    const fallback = await (scope.classId ? q2.eq('class_id', scope.classId) : q2.in('class_id', scope.classIds ?? []));
     if (fallback.error) throw fallback.error;
-    return ((fallback.data ?? []) as AssignmentRow[]).map((r) => ({
+    return ((fallback.data ?? []) as unknown as AssignmentRow[]).map((r) => ({
       ...r,
-      allow_back: getAssignmentSetting(r.id).allowBack ?? true,
+      allow_back: true,
     }));
   }
   throw withAllowBack.error;
@@ -217,7 +216,7 @@ export async function listClassAssignments(
   client: SupabaseClient = supabaseAdmin
 ): Promise<ClassAssignment[] | null> {
   if (!(await ownsClass(teacherId, classId, client))) return null;
-  const data = await selectAssignments(client, (q) => q.eq('class_id', classId));
+  const data = await selectAssignments(client, { classId });
   const detailed = await withSetDetails(data, client);
   return sortByDue(detailed).map((a) => ({
     id: a.id,
@@ -239,23 +238,20 @@ export async function updateAssignment(
   client: SupabaseClient = supabaseAdmin
 ): Promise<{ dueAt?: string | null; allowBack?: boolean } | null> {
   if (!(await ownsClass(teacherId, classId, client))) return null;
-  if ('allowBack' in patch && patch.allowBack !== undefined) {
-    saveAssignmentSetting(assignmentId, { allowBack: patch.allowBack });
-  }
   const updates: Record<string, unknown> = {};
   if ('dueAt' in patch) updates.due_at = patch.dueAt;
   if ('allowBack' in patch) updates.allow_back = patch.allowBack;
   if (Object.keys(updates).length === 0) return {};
 
-  let data: any[] | null = null;
-  let error: any = null;
+  let data: Array<{ id: string; due_at?: string | null; allow_back?: boolean }> | null = null;
+  let error: unknown = null;
   const initial = await client
     .from('assignments')
     .update(updates)
     .eq('id', assignmentId)
     .eq('class_id', classId)
     .select('id, due_at, allow_back');
-  data = initial.data;
+  data = initial.data as Array<{ id: string; due_at?: string | null; allow_back?: boolean }> | null;
   error = initial.error;
 
   if (isSchemaError(error) && 'allow_back' in updates) {
@@ -267,16 +263,24 @@ export async function updateAssignment(
         .eq('id', assignmentId)
         .eq('class_id', classId)
         .select('id, due_at');
-      data = retry.data;
+      data = retry.data as Array<{ id: string; due_at?: string | null; allow_back?: boolean }> | null;
       error = retry.error;
     } else {
+      const exists = await client
+        .from('assignments')
+        .select('id')
+        .eq('id', assignmentId)
+        .eq('class_id', classId)
+        .maybeSingle();
+      if (exists.error) throw exists.error;
+      if (!exists.data) return null;
       return { allowBack: patch.allowBack };
     }
   }
 
   if (error) throw error;
   if (!data || data.length === 0) return null;
-  const row = data[0] as { id: string; due_at?: string | null; allow_back?: boolean };
+  const row = data[0];
   return {
     dueAt: 'due_at' in row ? row.due_at ?? null : patch.dueAt,
     allowBack: 'allow_back' in row && typeof row.allow_back === 'boolean' ? row.allow_back : (patch.allowBack ?? true),
@@ -325,11 +329,8 @@ export async function listStudentAssignments(
   if (error) throw error;
   if (!memberships || memberships.length === 0) return [];
 
-  const data = await selectAssignments(client, (q) =>
-    q.in(
-      'class_id',
-      memberships.map((m) => m.class_id)
-    )
-  );
+  const data = await selectAssignments(client, {
+    classIds: memberships.map((m) => m.class_id),
+  });
   return sortByDue(await withSetDetails(data, client));
 }

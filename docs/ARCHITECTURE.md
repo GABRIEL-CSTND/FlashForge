@@ -86,9 +86,9 @@ writes with the service-role key. Browsers read only what RLS allows (section 4)
 | `POST /api/student/classes` | Student | Join with a code: `{ code }` (any case, spaces or hyphen) → 201 joined, or 200 `alreadyMember` |
 | `DELETE /api/student/classes/[id]` | Student in that class | Leave the class |
 | `GET /api/teacher/sets/[id]/assignments` | The set's owner (teacher, admin) | The owner's classes, marking which already have this set (#56) |
-| `POST /api/teacher/sets/[id]/assignments` | The set's owner (teacher, admin) | Assign: `{ classIds, dueAt \| null }` → `{ assigned, alreadyAssigned }` |
+| `POST /api/teacher/sets/[id]/assignments` | The set's owner (teacher, admin) | Assign: `{ classIds, dueAt \| null, allowBack? }` → `{ assigned, alreadyAssigned }` |
 | `GET /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | The assignment's questions, hardest first: % of current students who got each wrong (latest attempt each) and the most-picked wrong choice (#59) |
-| `PATCH /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | Change the due date: `{ dueAt \| null }` |
+| `PATCH /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | Change the due date and/or back-navigation option: `{ dueAt \| null, allowBack? }` (#102) |
 | `DELETE /api/teacher/classes/[id]/assignments/[assignmentId]` | The class's teacher | Unassign; students lose access right away |
 | `POST /api/attempts` | Signed in, can open the set | Save a finished study session: `{ id, setId, assignmentId?, answers }` → 201 with the scored attempt, or 200 if that `id` was already saved (#57) |
 | `GET /api/attempts?setId=…` | Signed in | The caller's own 10 most recent attempts on that set, newest first |
@@ -1110,7 +1110,7 @@ The plan for teacher and admin features is tracked in #50.
 | `classes` | `id`, `teacher_id` → `auth.users` (cascade), `name` (1–80 chars), `join_code` (unique), `created_at` | Indexed on `teacher_id` |
 | `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
 | `class_join_failures` | `id`, `user_id` → `auth.users` (cascade), `attempted_at` | Wrong join codes for the rate limit; indexed on (`user_id`, `attempted_at`); old rows are deleted as new ones arrive |
-| `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `due_at` (nullable), `created_at` | Unique (`class_id`, `set_id`); indexed on `set_id` |
+| `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `due_at` (nullable), `created_at`, `allow_back` (boolean, default true) | Unique (`class_id`, `set_id`); indexed on `set_id` |
 | `generation_logs` | `id`, `user_id` → `auth.users` (set null), `role`, `ip_hash` (signed out only), `model`, `study_type`, `duration_ms`, `success` (null while running), `error_kind` (incl. `limit`), `requests` (jsonb), `created_at` | One row per `/api/generate` request (#62, #63). Indexed on `created_at`, (`user_id`, `created_at`) and (`ip_hash`, `created_at`) |
 | `guide_history` | `id`, `user_id` → `auth.users` (cascade), `title`, `study_type`, `source_filename`, `source_credit` (jsonb `{ name, url }` for a web page or Wikipedia article), `items` (jsonb: the cards as generated, quotes included), `item_count` (generated from `items`), `set_id` → `flashcard_sets` (set null), `created_at` | History: one row per guide a signed-in user generated. `items` must be a non-empty array. Indexed on (`user_id`, `created_at`) and `set_id` |
 | `app_settings` | `key` (primary key), `value` (jsonb), `updated_at`, `updated_by` → `auth.users` (set null) | App-wide settings changed by admins; today just `generation_limits` (#63) |

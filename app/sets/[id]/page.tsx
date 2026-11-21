@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useUser } from '@/lib/auth';
 import StudyViewer, { type StudyResult } from '@/components/StudyViewer';
 import OpeningDeck from '@/components/desk/OpeningDeck';
-import { newId } from '@/lib/ids';
+import { isUuid, newId } from '@/lib/ids';
 import CardEditor, { type CardPayload, type SaveResult } from '@/components/CardEditor';
 import { apiFetch, errorMessage } from '@/lib/api-client';
 import AssignPanel from '@/components/AssignPanel';
@@ -91,31 +91,21 @@ export default function SetPage() {
   const [allowBack, setAllowBack] = useState(true);
 
   useEffect(() => {
-    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-    const allowBackParam = searchParams?.get('allowBack');
-    if (allowBackParam === 'false') {
-      setAllowBack(false);
-    } else if (allowBackParam === 'true') {
-      setAllowBack(true);
-    } else {
-      const stored = typeof window !== 'undefined' ? window.localStorage.getItem(`allowBack-${params.id}`) : null;
-      if (stored === 'false') setAllowBack(false);
-    }
-
-    if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
-      const assignmentParam = searchParams?.get('assignment');
-      const query = assignmentParam ? `?assignment=${encodeURIComponent(assignmentParam)}` : '';
-      window.fetch(`/api/sets/${params.id}/settings${query}`)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && typeof data.allowBack === 'boolean') {
-            setAllowBack(data.allowBack);
-          }
-        })
-        .catch(() => {});
-    }
-
     const load = async () => {
+      const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+      const assignmentId = searchParams?.get('assignment');
+      if (assignmentId && isUuid(assignmentId)) {
+        const { data: assignmentData } = await supabase
+          .from('assignments')
+          .select('allow_back')
+          .eq('id', assignmentId)
+          .maybeSingle();
+
+        if (assignmentData && typeof assignmentData.allow_back === 'boolean') {
+          setAllowBack(assignmentData.allow_back);
+        }
+      }
+
       const { data: setData, error: setError } = await supabase
         .from('flashcard_sets')
         .select('*')
@@ -202,21 +192,6 @@ export default function SetPage() {
 
     setSet({ ...set, title: trimmed });
     setIsEditingTitle(false);
-  };
-
-  const toggleAllowBack = async () => {
-    if (!set) return;
-    const next = !allowBack;
-    setAllowBack(next);
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(`allowBack-${set.id}`, String(next));
-    }
-    try {
-      await apiFetch(`/api/sets/${set.id}/settings`, {
-        method: 'PATCH',
-        body: { allowBack: next },
-      });
-    } catch {}
   };
 
   const saveCards = async (payload: CardPayload[]): Promise<SaveResult> => {
@@ -338,12 +313,6 @@ export default function SetPage() {
             className="text-sm text-muted hover:underline"
           >
             Rename this set
-          </button>
-          <button
-            onClick={toggleAllowBack}
-            className="text-sm text-muted hover:underline"
-          >
-            {allowBack ? 'Disable back' : 'Allow back'}
           </button>
           {canUseTeacherTools(profile?.role) && (
             <button

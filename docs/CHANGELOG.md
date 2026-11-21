@@ -9,6 +9,16 @@ The new look, built in 7 phases on the `UI_changes` branch and merged into `dev`
 2026-11-11. It changes how the app looks, not how it works.
 
 ### Changed
+- **Option to disallow going back on cards for exams** (2026-11-21, #102): teachers can choose
+  whether students may return to previous cards on an assignment.
+  - In `components/AssignPanel.tsx`, an *Allow going back on cards* checkbox allows teachers to
+    disallow back navigation when assigning a set.
+  - In `app/teacher/classes/[id]/page.tsx`, a *No back* / *Allow back* toggle button lets teachers
+    switch the option dynamically on assigned sets.
+  - `public.assignments` records `allow_back boolean not null default true` (migration
+    `20261117000100_assignment_allow_back.sql`).
+  - When disabled, `StudyViewer` hides the *← Previous* button and ignores step-back keyboard
+    shortcuts (`ArrowUp`, `Backspace`, `p`).
 - **Friendly error and 404 pages** (2026-11-14, #91): a page that breaks shows *Something
   went wrong* on the desk sheet, with *Try again* and *Back to desk* (`app/error.tsx`), and an
   address that isn't a page shows a 404 on the desk with links to make a deck or open My Sets

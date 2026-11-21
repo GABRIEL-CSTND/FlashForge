@@ -3,7 +3,7 @@ import { requireRole } from '@/lib/roles';
 import { TEACHER_ROLES } from '@/lib/role-types';
 import { isUuid } from '@/lib/ids';
 import { parseDueAt } from '@/lib/due-dates';
-import { unassign, updateAssignment, updateAssignmentDue } from '@/lib/assignments';
+import { unassign, updateAssignment } from '@/lib/assignments';
 import { getAssignmentQuestions } from '@/lib/class-results';
 import { errorResponse, notFound, readJsonBody } from '@/lib/route-helpers';
 

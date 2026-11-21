@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   user: null as null | { id: string },
   set: null as null | Record<string, unknown>,
   cards: [] as Record<string, unknown>[],
+  assignment: null as null | Record<string, unknown>,
   apiCalls: [] as { path: string; init: unknown }[],
   apiResult: null as null | ApiResult,
   // For tests that make more than one call: answers each call by path.
@@ -38,7 +39,9 @@ vi.mock('@/lib/supabase', () => ({
         eq: () =>
           table === 'flashcard_sets'
             ? { single: async () => ({ data: state.set, error: state.set ? null : { message: 'not found' } }) }
-            : { order: async () => ({ data: state.cards, error: null }) },
+            : table === 'assignments'
+              ? { maybeSingle: async () => ({ data: state.assignment, error: null }) }
+              : { order: async () => ({ data: state.cards, error: null }) },
       }),
     }),
   },
@@ -57,6 +60,7 @@ beforeEach(() => {
   state.user = { id: OWNER };
   state.set = { id: SET_ID, title: 'Photosynthesis', source_filename: 'bio.pdf', study_type: 'flashcard', user_id: OWNER };
   state.cards = [{ id: CARD, question: 'Pigment that absorbs light', answer: 'Chlorophyll', options: null, position: 0 }];
+  state.assignment = { id: ASSIGNMENT, allow_back: true };
   state.apiCalls = [];
   state.apiResult = null;
   state.respond = null;
@@ -333,5 +337,13 @@ describe('where a saved card came from', () => {
     expect(await screen.findByText('Green pigment that absorbs light')).toBeTruthy();
     await flipCard();
     expect(screen.queryByText(/From the document/)).toBeNull();
+  });
+
+  it('disables back navigation when the assignment disallows going back (#102)', async () => {
+    state.assignment = { id: ASSIGNMENT, allow_back: false };
+    window.history.replaceState(null, '', `/sets/${SET_ID}?assignment=${ASSIGNMENT}`);
+    render(<SetPage />);
+    expect(await screen.findByText('Pigment that absorbs light')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Previous' })).toBeNull();
   });
 });
