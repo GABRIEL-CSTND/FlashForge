@@ -75,6 +75,8 @@ describe('user guide page (#25)', () => {
     expect(screen.getByRole('heading', { name: 'For Students' })).toBeTruthy();
     expect(screen.getByText(/Most-missed questions/)).toBeTruthy();
     expect(screen.getByText(/Grade Book/)).toBeTruthy();
+    // Class content categories (#115).
+    expect(document.body.textContent).toMatch(/as a Learning material to practice with \(no due date, not scored\)/);
   });
 
   // These were wrong in earlier versions of the guide (PR #83 and #93 reviews).

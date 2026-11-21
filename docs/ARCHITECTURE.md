@@ -834,6 +834,17 @@ live database's keys were checked on 2026-11-14: they match the migrations.
   a set while it's assigned to a class they're in (`private.is_assigned_to_me()`). Cards
   are now readable exactly when their set is. Unassigning, leaving the class, or the
   teacher deleting the set or class removes access immediately.
+- **Assignments, quizzes and learning materials (#115):** each class item has a
+  `category`. Teachers pick it in **Assign to class** and can change it on the class page,
+  which lists the three apart, as **My classes** does. Assignments and quizzes differ only
+  in name: due dates, scores in the Grade Book, a tag on the student's deck. A learning
+  material is for practice: it has no due date (cleared when an item becomes one, and
+  refused by a check), it opens without `?assignment=`, so attempts on it are private
+  practice (`resolveAssignment()` won't link one), and it's left out of the Grade Book,
+  the class averages and the most-missed questions. That includes scores from before it
+  became one: `private.teaches_student_in_assignment()` skips materials, so RLS hides them
+  too. Making a graded item a material asks first; making it an assignment or quiz again
+  brings its scores back.
 ### Study results (#57)
 
 - **Every finish on a saved set is saved** for signed-in users. `StudyViewer` reports what
@@ -1178,7 +1189,7 @@ runs the game**, and the browsers talk through Supabase Realtime.
 | `classes` | `id`, `teacher_id` → `auth.users` (cascade), `name` (1–80 chars), `join_code` (unique), `created_at` | Indexed on `teacher_id` |
 | `class_members` | `class_id` → `classes` (cascade), `student_id` → `auth.users` (cascade), `joined_at` | Primary key (`class_id`, `student_id`); indexed on `student_id` |
 | `class_join_failures` | `id`, `user_id` → `auth.users` (cascade), `attempted_at` | Wrong join codes for the rate limit; indexed on (`user_id`, `attempted_at`); old rows are deleted as new ones arrive |
-| `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `due_at` (nullable), `created_at` | Unique (`class_id`, `set_id`); indexed on `set_id` |
+| `assignments` | `id`, `class_id` → `classes` (cascade), `set_id` → `flashcard_sets` (cascade), `category` (`assignment`, `quiz` or `material`, default `assignment`, #115), `due_at` (nullable; always null for a material), `created_at` | Unique (`class_id`, `set_id`); indexed on `set_id` |
 | `generation_logs` | `id`, `user_id` → `auth.users` (set null), `role`, `ip_hash` (signed out only), `model`, `study_type`, `duration_ms`, `success` (null while running), `error_kind` (incl. `limit`), `requests` (jsonb), `created_at` | One row per `/api/generate` request (#62, #63). Indexed on `created_at`, (`user_id`, `created_at`) and (`ip_hash`, `created_at`) |
 | `guide_history` | `id`, `user_id` → `auth.users` (cascade), `title`, `study_type`, `source_filename`, `source_credit` (jsonb `{ name, url }` for a web page or Wikipedia article), `items` (jsonb: the cards as generated, quotes included), `item_count` (generated from `items`), `set_id` → `flashcard_sets` (set null), `created_at` | History: one row per guide a signed-in user generated. `items` must be a non-empty array. Indexed on (`user_id`, `created_at`) and `set_id` |
 | `app_settings` | `key` (primary key), `value` (jsonb), `updated_at`, `updated_by` → `auth.users` (set null) | App-wide settings changed by admins; today just `generation_limits` (#63) |
