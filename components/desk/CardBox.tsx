@@ -60,13 +60,23 @@ export default function CardBox() {
           })}
         </ul>
       )}
-      <div className="card-box-front relative rounded-xl px-4 py-2.5 sm:px-6 sm:py-3.5">
+      {/* Play live (#26) is on the box's front, for everyone: a sixth divider
+          tab wouldn't fit a phone. */}
+      <div className="card-box-front relative flex items-center justify-between gap-3 rounded-xl px-4 py-2.5 sm:px-6 sm:py-3.5">
         <Link
           href="/"
           title="Make a new study guide"
           className="brass inline-flex min-h-9 items-center rounded-md px-3 font-serif text-sm font-semibold tracking-wide sm:text-base"
         >
           FlashForge
+        </Link>
+        <Link
+          href="/play"
+          aria-current={isActive(pathname, '/play') ? 'page' : undefined}
+          title="Quiz your friends at the same time"
+          className={`${isActive(pathname, '/play') ? 'brass' : 'brass-ring'} inline-flex min-h-9 items-center whitespace-nowrap rounded-md px-3 text-sm font-semibold`}
+        >
+          Play live
         </Link>
       </div>
     </nav>

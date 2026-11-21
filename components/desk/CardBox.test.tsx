@@ -35,7 +35,7 @@ describe('card box', () => {
       'History -> /history',
       'My Classes -> /classes',
       'Guide -> /guide',
-      'FlashForge -> /',
+      'FlashForge -> /', 'Play live -> /play',
     ]);
   });
 
@@ -47,7 +47,7 @@ describe('card box', () => {
       'History -> /history',
       'Classes -> /teacher',
       'Guide -> /guide',
-      'FlashForge -> /',
+      'FlashForge -> /', 'Play live -> /play',
     ]);
   });
 
@@ -60,21 +60,21 @@ describe('card box', () => {
       'Classes -> /teacher',
       'Admin -> /admin',
       'Guide -> /guide',
-      'FlashForge -> /',
+      'FlashForge -> /', 'Play live -> /play',
     ]);
   });
 
   it('shows My Sets and History while the profile is still loading', () => {
     signIn(null);
     render(<CardBox />);
-    expect(links()).toEqual(['My Sets -> /my-sets', 'History -> /history', 'Guide -> /guide', 'FlashForge -> /']);
+    expect(links()).toEqual(['My Sets -> /my-sets', 'History -> /history', 'Guide -> /guide', 'FlashForge -> /', 'Play live -> /play']);
   });
 
   it('shows the Guide tab and FlashForge plate when signed out', () => {
     state.user = null;
     state.profile = null;
     render(<CardBox />);
-    expect(links()).toEqual(['Guide -> /guide', 'FlashForge -> /']);
+    expect(links()).toEqual(['Guide -> /guide', 'FlashForge -> /', 'Play live -> /play']);
   });
 
   it('marks the tab of the page you are on, including the pages below it', () => {
@@ -83,5 +83,11 @@ describe('card box', () => {
     render(<CardBox />);
     expect(screen.getByRole('link', { name: 'Classes' }).getAttribute('aria-current')).toBe('page');
     expect(screen.getByRole('link', { name: 'My Sets' }).getAttribute('aria-current')).toBeNull();
+  });
+
+  it('marks Play live, on the front of the box, while in a live game', () => {
+    state.pathname = '/play/K7MQ';
+    render(<CardBox />);
+    expect(screen.getByRole('link', { name: 'Play live' }).getAttribute('aria-current')).toBe('page');
   });
 });

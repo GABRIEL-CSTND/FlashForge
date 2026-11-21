@@ -24,38 +24,46 @@ const MARK_PROPS = {
 // they all stay put: the right one lifts with a brass edge and a check, a
 // wrong pick is struck through in red pencil, and the rest fade back. Each
 // slip's name is just its answer; the verdict on the card says which was right.
+// In a live game (#26) the answer is a secret until time is up: the pick just
+// stays lifted with a brass edge, and the slips are marked once it's known.
 export default function AnswerSlips({
   options,
   answer,
   picked,
   onPick,
   kind,
+  locked = false,
 }: {
   options: string[];
-  // The right answer.
-  answer: string;
+  // The right answer; null while it's still a secret.
+  answer: string | null;
   // The slip picked, once one is.
   picked: string | undefined;
   onPick: (option: string) => void;
   kind: DeskKind;
+  // No picking: a live game's time is up, or the host is only watching.
+  locked?: boolean;
 }) {
   const trueFalse = isTrueFalseOptions(options);
   const answered = picked !== undefined;
+  // Whether the right answer is shown: once a pick is made, or a live game's time is up.
+  const shown = answer !== null && (answered || locked);
   // Multiple choice is two by two on a laptop and one under another on a phone;
   // True and False always sit side by side.
   const columns = trueFalse || kind === 'laptop' ? 'grid-cols-2' : 'grid-cols-1';
   return (
     <div role="group" aria-label="Answers" className={`grid w-full gap-2.5 ${columns}`}>
       {options.map((option, k) => {
-        const right = answered && option === answer;
-        const wrong = answered && option === picked && !right;
-        const state = right ? 'is-right' : wrong ? 'is-wrong' : answered ? 'is-faded' : '';
+        const right = shown && option === answer;
+        const wrong = shown && option === picked && !right;
+        const held = !shown && option === picked;
+        const state = right ? 'is-right' : wrong ? 'is-wrong' : held ? 'is-held' : answered || shown ? 'is-faded' : '';
         return (
           <button
             key={k}
             type="button"
             onClick={() => onPick(option)}
-            disabled={answered}
+            disabled={answered || locked}
             className={`paper answer-slip flex items-center gap-3 rounded-md px-3.5 py-2.5 text-left text-ink ${trueFalse ? 'min-h-16' : 'min-h-14'} ${state}`}
             style={{ '--k': k, '--tilt': TILTS[k % TILTS.length] } as CSSProperties}
           >

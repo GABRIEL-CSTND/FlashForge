@@ -16,6 +16,9 @@ Signed in, every guide you make is also kept in **History**, saved or not, so yo
 or save it later.
 Signed in, every finished study session is saved with its score. Teachers can create classes, assign sets, and see each student's scores and
 the most-missed questions; students join with a code. Admins manage users' roles and can remove any study set.
+With **Play live**, a group plays a deck at the same time, as in a quiz show: everyone gets the same question at once,
+faster right answers score more, and a scoreboard updates as people answer. Friends join with a 4-character code, no
+account needed, and the host can make the deck right in the lobby, so nobody has seen it.
 
 Live site: https://flash-forge-one.vercel.app
 
@@ -26,6 +29,7 @@ Live site: https://flash-forge-one.vercel.app
 | Web app | [Next.js 16](https://nextjs.org) (App Router), React 19, Tailwind CSS 4, TypeScript |
 | AI | Google Gemini API: `gemini-3.5-flash`, then `gemini-3.5-flash-lite`, then `gemma-4-26b-a4b-it` as backups. All three read photos directly |
 | Database and sign-in | [Supabase](https://supabase.com) (Postgres with Row Level Security, Google OAuth) |
+| Live games | Supabase Realtime broadcast channels (no database tables) |
 | Text extraction | [unpdf](https://github.com/unjs/unpdf) for PDFs; [fflate](https://github.com/101arrowz/fflate) to unzip Word and PowerPoint files |
 | Hosting | Vercel (`main` deploys to production; other branches get preview deployments) |
 | Tests | [Vitest](https://vitest.dev) and React Testing Library (`npm test`), plus SQL security checks in `supabase/tests/` |
@@ -99,7 +103,9 @@ app/
   history/[id]/page.tsx One guide from History: study it again, or save it to My Sets
   guide/page.tsx        User Guide (#25): how to make, study and save decks, and the teacher tools (static)
   privacy/page.tsx      Privacy (#88): what's kept, who can see it, and deleting your account
-  sets/[id]/page.tsx    A saved set: study and save the score; the owner can edit cards, rename, delete
+  sets/[id]/page.tsx    A saved set: study and save the score, or play it live; the owner can edit cards, rename, delete
+  play/page.tsx         Play live (#26): pick a nickname, then open a room or join one with its code
+  play/[code]/page.tsx  A live game's room: the host's screen in the tab that opened it, a player's everywhere else
   teacher/page.tsx      Your classes (teachers): each class a kraft folder with its join code; make a new one
   teacher/classes/[id]/ One class on the desk: join-code plate, assigned decks, roster on paper, rename, delete
   teacher/classes/[id]/results/  The grade book: best scores, attempts, late / not started, averages, CSV
@@ -148,7 +154,7 @@ components/
   desk/PageTurn.tsx     The sheet; turns the page on every navigation (React ViewTransition) and eases it in on Back
   desk/view-transition.ts  React's ViewTransition, looked up, since the tests' React doesn't have it
   desk/DeskTurn.tsx     Turns one view of a page into another the same way (the home page's notes sheet, deck being made, new cards)
-  desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, and a tab for each section the role can open
+  desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, Play live, and a tab for each section the role can open
   desk/LibraryCard.tsx  Library card (top right): name, role and Sign out, or Sign in with Google
   desk/PaperCard.tsx    A card with two faces that turns over
   desk/Pencil.tsx       The pencil on the desk that opens the card editor
@@ -164,6 +170,14 @@ components/
   make/MakingDeck.tsx   While the AI works: a pencil writes a card, the deck is shuffled, over and over
   make/DeckSpread.tsx   A new deck spread out on the desk, card by card as they're written; Start studying gathers it
   desk/useDeskLayout.ts Where the deck, the card and the piles lie (laptop and phone), for the card motion
+  live/HostRoom.tsx     The host's screen of a live game: the lobby with the deck and settings, End game, Play again
+  live/PlayerRoom.tsx   A player's screen: the nickname, then the game; no game, full room, host gone, room closed
+  live/useHostGame.ts   Runs the game in the host's tab: players' messages, the clock, sending the room (throttled)
+  live/usePlayerGame.ts A player's side: hears the room, sends join, answers and "still here", resends what got lost
+  live/LiveScreen.tsx   One screen of a game for everyone: the lobby, a question and its answer, the podium
+  live/QuestionStage.tsx  A question with its countdown, slips or the guess line, and the answer once time is up
+  live/DeckPicker.tsx   The host's deck: make a new one (notes sheet and Make card, cards never shown), My Sets, History
+  live/parts.tsx        The countdown, room code, player slips, scoreboard, guess line and podium
 lib/
   gemini.ts             AI model chain, prompts, retries, output validation, streaming the first cards
   roles.ts              getAuthedUser / requireRole / chooseOwnRole (server-only)
@@ -183,6 +197,10 @@ lib/
   web-page.ts           Fetches a linked web page safely (no private addresses) and keeps its main text (server-only)
   topic.ts              Looks a typed topic up on Wikipedia and returns the best article's text (server-only)
   answer-check.ts       Checking typed answers (capitals, accents, one typo), shared by the study screen and server
+  live-game.ts          Live games (#26): the rules, run by the host's browser: rooms, players, scoring, standings
+  live-room.ts          A live game's messages over Supabase Realtime (room channel, host's inbox), plus an in-memory room for tests
+  live-session.ts       What a tab keeps of a live game (sessionStorage), so a reload doesn't end it (browser-only)
+  guide-request.ts      Making a guide with /api/generate from the browser: checks, the request, the progress stream
   sets.ts               Study sets scoped to their owner; saving edited cards (server-only)
   history.ts            History: adding each generated guide, marking one saved (server-only)
   library.ts            The library's tags: each deck's best score, short dates ("Today", "Oct 29")
