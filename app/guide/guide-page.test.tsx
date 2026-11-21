@@ -76,6 +76,8 @@ describe('user guide page (#25)', () => {
     render(<GuidePage />);
     expect(screen.getByRole('heading', { name: 'For Teachers' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'For Students' })).toBeTruthy();
+    // Class files (#112).
+    expect(document.body.textContent).toMatch(/up to 4 MB each and 50 MB for all your classes/);
     expect(screen.getByText(/Most-missed questions/)).toBeTruthy();
     expect(screen.getByText(/Grade Book/)).toBeTruthy();
     // Class content categories (#115).

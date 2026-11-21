@@ -1,18 +1,21 @@
 -- Run: npx supabase db query --linked --project-ref <ref> -f supabase/tests/assignments-rls-check.sql
--- Read-only in effect: the test class, sets, cards and assignments are rolled back.
+-- Read-only in effect: the test accounts, class, sets, cards and assignments are rolled back.
 --
--- Setup: users A, B, C are three existing accounts (roles don't matter for RLS).
+-- Setup: A, B, C are new accounts made here, so live accounts' roles don't matter
+-- (admins can read every set). A is a teacher; B and C are students.
 --   A owns sets S (2 cards) and S2, and teaches class X.
 --   B is in class X; C is not. S is assigned to X; S2 isn't.
 begin;
 create temp table results (n int, check_name text, expected text, actual text) on commit drop;
 do $$
 declare
-  a uuid; b uuid; c uuid; s uuid; s2 uuid; x uuid; asg uuid; v bigint; ok boolean; code text;
+  a uuid := gen_random_uuid(); b uuid := gen_random_uuid(); c uuid := gen_random_uuid();
+  s uuid; s2 uuid; x uuid; asg uuid; v bigint; ok boolean; code text;
 begin
-  select id into a from auth.users order by created_at limit 1;
-  select id into b from auth.users where id <> a order by created_at limit 1;
-  select id into c from auth.users where id not in (a, b) order by created_at limit 1;
+  -- Sign-ups get a student profile from the trigger (see profiles-rls-check.sql).
+  insert into auth.users (id, aud, role, email, created_at, updated_at)
+  select id, 'authenticated', 'authenticated', id || '@check.invalid', now(), now() from unnest(array[a, b, c]) as id;
+  update public.profiles set role = 'teacher' where id = a;
 
   insert into public.flashcard_sets (user_id, title, study_type) values (a, 'assign test S', 'flashcard') returning id into s;
   insert into public.flashcard_sets (user_id, title, study_type) values (a, 'assign test S2', 'flashcard') returning id into s2;

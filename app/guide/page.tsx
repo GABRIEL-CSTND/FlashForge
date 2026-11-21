@@ -300,6 +300,7 @@ export default function GuidePage() {
               <li>Tick <strong>Share source material with students</strong> when you post a set, or under it on the class page, to let them open the file it was made from and see where its cards came from while they study it. It&apos;s off unless you turn it on.</li>
               <li>Open the <strong>Grade Book</strong> to see student attempts, class averages, and export CSV reports.</li>
               <li>Review <strong>Most-missed questions</strong> to pinpoint difficult concepts before tests.</li>
+              <li>Post files for your students under <strong>Class files</strong> on the class page: PDF, Word, PowerPoint, TXT or photos, up to 4 MB each and 50 MB for all your classes.</li>
             </ul>
           </div>
 
@@ -310,6 +311,7 @@ export default function GuidePage() {
               <li>Each class&apos;s tray lists its assignments, quizzes and learning materials; assignments and quizzes are tagged with due dates (<em>Due Fri</em>, <em>Overdue</em>, or <em>Done</em>).</li>
               <li>If your teacher shares a set&apos;s source material, <strong>View source file</strong> opens the file it was made from while you study it.</li>
               <li>Take assigned quizzes and study sets; scores sync directly to your teacher&apos;s grade book.</li>
+              <li>Open <strong>Class files</strong> under a class to download the files your teacher posted.</li>
             </ul>
           </div>
         </div>

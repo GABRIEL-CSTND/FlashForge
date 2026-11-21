@@ -8,6 +8,15 @@ Notable changes to FlashForge, newest first. Issue and PR numbers refer to
 Changes merged into `dev` after the 2026-11-16 release go here, and reach the live site
 with the next release of `dev` to `main`.
 
+### Fixed
+
+- **Database checks no longer depend on who's an admin:** `assignments-rls-check.sql`,
+  `generation-limits-check.sql`, `generation-logs-check.sql` and `admin-users-check.sql`
+  took the oldest live accounts as their students and non-admins. Once those accounts
+  became admins, 8 rows failed: admins can read every set and change the limits, and
+  one account's real role change was counted with the check's own. Each check now makes
+  its own accounts inside the transaction and gives them the roles it needs.
+
 ### Added
 
 - **View source file (#111):** a guide made from a file keeps the file, so its owner can open
@@ -50,6 +59,11 @@ with the next release of `dev` to `main`.
   - The home page's request code is now also in `lib/guide-request.ts`, which the lobby
     uses; the home page moves onto it once its redesign (#108) has settled.
   - Answer slips can keep a pick secret: lifted with a brass edge until the answer is known.
+- **Class files (#112):** teachers post files to a class under *Class files* on its page (PDF,
+  Word, PowerPoint, TXT or photos, up to 4 MB each), and the class's students download them
+  from *My classes*. A teacher's classes keep up to 50 MB of files in all (100 MB for
+  everyone); a file that doesn't fit is refused with a message. Files go with their class.
+  Migration `20261121000400_class_file_posts.sql`.
 
 ### Changed
 

@@ -145,6 +145,7 @@ components/
   CardEditor.tsx        Edit mode for a set: change, add, delete and reorder cards (of any kind in a mixed quiz)
   SourceFileViewer.tsx  "View source file": the file a guide was made from, shown in the page or downloaded (#111)
   AssignPanel.tsx       "Assign to class" dialog on a set the teacher owns
+  ClassFiles.tsx        "Class files": the teacher posts and removes them, a class's students download them (#112)
   StudentResultsPanel.tsx  One student's attempts, opened from the results table
   ProfileProvider.tsx   Shares the signed-in user's profile (role) with every page
   RoleChooser.tsx       "Student or teacher?" screen for users who haven't chosen
