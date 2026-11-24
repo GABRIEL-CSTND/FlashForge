@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { signInWithGoogle, signOut, useUser } from '@/lib/auth';
 import { useProfile } from '@/components/ProfileProvider';
 import type { Role } from '@/lib/role-types';
@@ -14,6 +15,7 @@ const ROLE_LABELS: Record<Role, string> = {
 // The account, as a small library card at the top right of the desk: your name
 // (or email), your role and Sign out; signed out, the Sign in button.
 export default function LibraryCard() {
+  const router = useRouter();
   const { user, loading } = useUser();
   const { profile } = useProfile();
 
@@ -45,7 +47,10 @@ export default function LibraryCard() {
             <span className="text-xs text-muted">{profile ? ROLE_LABELS[profile.role] : ''}</span>
             <button
               type="button"
-              onClick={() => signOut()}
+              onClick={async () => {
+                await signOut();
+                router.push('/');
+              }}
               className="min-h-11 text-[13px] font-semibold text-brass-ink hover:underline"
             >
               Sign out

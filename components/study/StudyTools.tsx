@@ -61,7 +61,7 @@ function Tool({ label, icon, pressed, onClick }: { label: string; icon: ReactNod
   );
 }
 
-// Flip, Type and Match (changing one starts the deck over), then Read aloud
+// Flip, Type and Match (swapping modes preserves card progress #103), then Read aloud
 // and its Auto switch (#77) where the browser can speak. Quizzes have one way
 // to answer, so they leave out `mode` and get only Read aloud.
 export default function StudyTools({

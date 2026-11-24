@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import PaperCard from '@/components/desk/PaperCard';
 import Pencil from '@/components/desk/Pencil';
 import { deckSpot, MAX_LAYERS, middleSpot, pileSpot, spotTransform, useDeskLayout, type Spot } from '@/components/desk/useDeskLayout';
@@ -14,30 +14,7 @@ import StudyTools from './StudyTools';
 import TypedForm from './TypedForm';
 import { DeskHeader, TypedVerdictLine } from './parts';
 import { clueSize, termSize } from './sizes';
-
-type Pile = FlashcardMark;
-
-// The deck as it lies on the desk.
-interface DeckState {
-  // This time through, in study order (positions in `cards`).
-  order: number[];
-  // How many cards of `order` are done.
-  pos: number;
-  // The pile each finished card lies on.
-  pile: Record<number, Pile>;
-  // Finished cards in the order they landed, so each pile stacks up in order.
-  landed: number[];
-  // Going through the Missed it pile again: practice, so it isn't reported.
-  practice: boolean;
-}
-
-const freshDeck = (count: number): DeckState => ({
-  order: Array.from({ length: count }, (_, i) => i),
-  pos: 0,
-  pile: {},
-  landed: [],
-  practice: false,
-});
+import { StudySessionContext, StudySessionProvider, useStudySession, type Pile } from './StudySessionContext';
 
 export interface FlashcardDeskProps {
   title: string;
@@ -63,7 +40,19 @@ export interface FlashcardDeskProps {
 // Flip and sort the card by clicking a pile or with ← and →, type the term on
 // the card, or match a round of up to five. At the end, the Missed it pile
 // deals its cards again for practice.
-export default function FlashcardDesk({
+export default function FlashcardDesk(props: FlashcardDeskProps) {
+  const sessionCtx = useContext(StudySessionContext);
+  if (!sessionCtx) {
+    return (
+      <StudySessionProvider cards={props.cards} initialMode="flip" deckKey={props.title}>
+        <FlashcardDeskInner {...props} />
+      </StudySessionProvider>
+    );
+  }
+  return <FlashcardDeskInner {...props} />;
+}
+
+function FlashcardDeskInner({
   title,
   cards,
   onFinish,
@@ -77,18 +66,8 @@ export default function FlashcardDesk({
   expected,
 }: FlashcardDeskProps) {
   const count = cards.length;
-  const [mode, setMode] = useState<FlashcardMode>('flip');
-  const [deck, setDeck] = useState<DeckState>(() => freshDeck(count));
-  // Cards can arrive while the student is already studying (the AI is still writing
-  // the deck): each new one goes to the back of the deck, so the session just gets
-  // longer. Done during render, so the new card is never drawn without its place.
-  const [seen, setSeen] = useState(count);
-  if (count > seen) {
-    setSeen(count);
-    setDeck((d) => ({ ...d, order: [...d.order, ...Array.from({ length: count - seen }, (_, k) => seen + k)] }));
-  }
-  // The first time through: what was done with each card, for the score.
-  const [answers, setAnswers] = useState<Record<number, CardAnswer>>({});
+  const session = useStudySession();
+  const { deck, mode, answers, run } = session;
   const [flipped, setFlipped] = useState(false);
   // The back of the current card has been shown, so it keeps its words while
   // it turns back over.
@@ -98,9 +77,6 @@ export default function FlashcardDesk({
   const [checked, setChecked] = useState<CardAnswer | null>(null);
   // The card on its way to a pile keeps its words until it lands.
   const [flying, setFlying] = useState<number | null>(null);
-  // Bumped on every restart and every new pass, so typed cards and Match
-  // rounds start fresh.
-  const [run, setRun] = useState(0);
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
   const doneRef = useRef<HTMLElement>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
@@ -122,8 +98,17 @@ export default function FlashcardDesk({
   const studyMode: StudyMode | null = mode === 'flip' ? null : mode;
   const finished = deck.pos >= deck.order.length;
   const rounds = matchRounds(deck.order.length);
-  const roundIndex = mode === 'match' && !finished ? rounds.findIndex(([start]) => start === deck.pos) : -1;
-  const round = roundIndex >= 0 ? deck.order.slice(rounds[roundIndex][0], rounds[roundIndex][1]) : [];
+  const roundIndex =
+    mode === 'match' && !finished ? rounds.findIndex(([start, end]) => deck.pos >= start && deck.pos < end) : -1;
+  const fullRound = roundIndex >= 0 ? deck.order.slice(rounds[roundIndex][0], rounds[roundIndex][1]) : [];
+  const round = fullRound.filter((i) => deck.pile[i] === undefined);
+
+  useEffect(() => {
+    if (mode === 'match' && roundIndex >= 0 && round.length === 0 && !finished) {
+      session.setDeck((d) => ({ ...d, pos: rounds[roundIndex][1] }));
+    }
+  }, [mode, roundIndex, round.length, finished, rounds, session]);
+
   const current = !finished && mode !== 'match' ? deck.order[deck.pos] : undefined;
   const gotList = deck.landed.filter((i) => deck.pile[i] === 'got');
   const missedList = deck.landed.filter((i) => deck.pile[i] === 'missed');
@@ -174,19 +159,10 @@ export default function FlashcardDesk({
   // Puts cards on their piles and moves on. The first time through, what was
   // done with them counts, and the last card reports the run (#57).
   const land = (results: { index: number; pile: Pile; answer: CardAnswer }[], nextPos: number) => {
-    setDeck({
-      ...deck,
-      pos: nextPos,
-      pile: { ...deck.pile, ...Object.fromEntries(results.map((r) => [r.index, r.pile])) },
-      landed: [...deck.landed, ...results.map((r) => r.index)],
-    });
+    session.land(results, nextPos, report);
     setFlipped(false);
     setBackSeen(false);
     setChecked(null);
-    if (deck.practice) return;
-    const nextAnswers = { ...answers, ...Object.fromEntries(results.map((r) => [r.index, r.answer])) };
-    setAnswers(nextAnswers);
-    if (nextPos >= deck.order.length) report(nextAnswers);
   };
 
   const flip = () => {
@@ -200,11 +176,10 @@ export default function FlashcardDesk({
   // Got it pile stays where it is.
   const dealMissed = () => {
     if (!finished || missedList.length === 0) return;
-    setDeck({ order: missedList, pos: 0, pile: Object.fromEntries(gotList.map((i) => [i, 'got' as const])), landed: gotList, practice: true });
+    session.dealMissed(missedList, gotList);
     setFlipped(false);
     setBackSeen(false);
     setChecked(null);
-    setRun((r) => r + 1);
   };
 
   const sortTo = (pile: Pile) => {
@@ -254,17 +229,17 @@ export default function FlashcardDesk({
   };
 
   const restart = () => {
-    setDeck(freshDeck(count));
-    setAnswers({});
+    session.restart();
     setFlipped(false);
     setBackSeen(false);
     setChecked(null);
-    setRun((r) => r + 1);
   };
 
   const changeMode = (next: FlashcardMode) => {
-    setMode(next);
-    restart();
+    session.setMode(next);
+    setFlipped(false);
+    setBackSeen(false);
+    setChecked(null);
   };
 
   // Where each card lies: on a pile, in the middle, out on the desk as a Match
@@ -468,7 +443,7 @@ export default function FlashcardDesk({
   // turns the card over: it stays put from card to card, so focus is never lost.
   const center = finished ? (
     doneNote
-  ) : roundIndex >= 0 ? (
+  ) : roundIndex >= 0 && round.length > 0 ? (
     <MatchBoard
       key={`${run}-${roundIndex}-${round.length}`}
       cards={round.map((index) => ({ card: cards[index], index }))}

@@ -57,7 +57,7 @@ async function generateGuide() {
   render(<UploadPage />);
   const input = document.getElementById('file-input') as HTMLInputElement;
   fireEvent.change(input, { target: { files: [new File(['Photosynthesis notes'], 'notes.txt', { type: 'text/plain' })] } });
-  fireEvent.click(screen.getByRole('button', { name: 'Make my deck' }));
+  fireEvent.click(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i }));
   expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
 }
 
@@ -73,7 +73,7 @@ describe('a new guide and History', () => {
     await generateGuide();
     fireEvent.click(screen.getByRole('button', { name: '← Exit' }));
     expect(window.confirm).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Make my deck' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Generate Study Deck|Make my deck/i })).toBeTruthy();
   });
 
   it("still warns when the guide couldn't be kept in History", async () => {
@@ -83,5 +83,13 @@ describe('a new guide and History', () => {
     expect(window.confirm).toHaveBeenCalledWith("Leave this study guide? It hasn't been saved and will be lost.");
     // Cancelled, so the guide is still open.
     expect(screen.getByText('Fluid inside the chloroplast')).toBeTruthy();
+  });
+
+  it('hides landing hero and nav when signed in, showing only the deck maker on desk', () => {
+    render(<UploadPage />);
+    expect(screen.queryByRole('navigation', { name: 'Main navigation' })).toBeNull();
+    expect(screen.queryByText('AI-POWERED STUDY ENGINE')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Start Learning/i })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Upload Material to Build Study Deck' })).toBeTruthy();
   });
 });
