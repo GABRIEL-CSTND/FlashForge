@@ -11,6 +11,7 @@ interface ClassOption {
   className: string;
   assignmentId: string | null;
   category?: ClassContentCategory | null;
+  allowSourceMaterial?: boolean;
   dueAt: string | null;
 }
 
@@ -42,6 +43,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [selected, setSelected] = useState<string[]>([]);
   const [category, setCategory] = useState<ClassContentCategory>('assignment');
+  const [allowSourceMaterial, setAllowSourceMaterial] = useState(false);
   const [dueLocal, setDueLocal] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
@@ -72,7 +74,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
     try {
       const res = await apiFetch(`/api/teacher/sets/${setId}/assignments`, {
         method: 'POST',
-        body: { classIds: selected, category, dueAt: checked.dueAt },
+        body: { classIds: selected, category, dueAt: checked.dueAt, allowSourceMaterial },
       });
       if (!res.ok) {
         setMessage({ kind: 'error', text: errorMessage(res.data) });
@@ -92,6 +94,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
       });
       setSelected([]);
       setDueLocal('');
+      setAllowSourceMaterial(false);
       setState(await fetchOptions(setId));
     } catch {
       setMessage({ kind: 'error', text: OFFLINE_MESSAGE });
@@ -175,6 +178,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
                       {assigned && (
                         <span className="block text-xs text-muted">
                           {sharedAs.label}{sharedAs.category !== 'material' && ` · ${c.dueAt ? `due ${formatDueDate(c.dueAt)}` : 'no due date'}`}
+                          {' · '}{c.allowSourceMaterial ? 'Source shared' : 'Source hidden'}
                         </span>
                       )}
                     </span>
@@ -182,6 +186,14 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
                 );
               })}
             </fieldset>
+
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" checked={allowSourceMaterial} onChange={(event) => setAllowSourceMaterial(event.target.checked)} disabled={saving} className="mt-0.5 size-4 shrink-0" />
+              <span>
+                Share source material with students
+                <span className="block text-xs text-muted">Students can view available source files and excerpts while studying this set.</span>
+              </span>
+            </label>
 
             {category !== 'material' && <div className="space-y-1">
               <label htmlFor="assign-due" className="text-xs uppercase tracking-wide text-muted">

@@ -81,6 +81,8 @@ describe('Privacy page (#88)', () => {
     // A guide's file is kept once, up to 25 MB a user (#111, guide_source_files).
     expect(text).toMatch(/the deck you save from it uses the same copy/);
     expect(text).toMatch(/We keep up to 25 MB of your files/);
+    // A teacher can share a set's file and quotes with a class (#116).
+    expect(text).toMatch(/A teacher can share a saved set.s source material with students in that class/);
     // A teacher's sets take every student's attempts on them along (attempts.set_id cascades).
     expect(text).toMatch(/their students' scores on those decks are deleted/);
     // Guests' generations are logged with a hashed address for the daily limit.

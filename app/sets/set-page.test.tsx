@@ -14,6 +14,8 @@ const state = vi.hoisted(() => ({
   user: null as null | { id: string },
   set: null as null | Record<string, unknown>,
   cards: [] as Record<string, unknown>[],
+  sharedSource: false,
+  sourceCalls: [] as { p_set_id: string; p_class_item_id: string | null }[],
   apiCalls: [] as { path: string; init: unknown }[],
   apiResult: null as null | ApiResult,
   // For tests that make more than one call: answers each call by path.
@@ -23,6 +25,7 @@ const state = vi.hoisted(() => ({
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: '00000000-0000-4000-8000-0000000000aa' }),
+  useSearchParams: () => new URLSearchParams(window.location.search),
   useRouter: () => ({ push: vi.fn() }),
 }));
 vi.mock('@/lib/auth', () => ({ useUser: () => ({ user: state.user, loading: false }) }));
@@ -33,6 +36,17 @@ vi.mock('@/components/ProfileProvider', () => ({
 vi.mock('@/components/AssignPanel', () => ({ default: ({ setTitle }: { setTitle: string }) => <div role="dialog">Assign {setTitle}</div> }));
 vi.mock('@/lib/supabase', () => ({
   supabase: {
+    rpc: async (_name: string, params: { p_set_id: string; p_class_item_id: string | null }) => {
+      state.sourceCalls.push(params);
+      const owner = state.user?.id === state.set?.user_id;
+      const shared = state.sharedSource && params.p_class_item_id === ASSIGNMENT;
+      return { data: owner || shared ? {
+        name: shared ? 'bio.pdf' : null,
+        quotes: state.cards.filter((card) => card.source_excerpt).map((card) => ({
+          id: card.id, excerpt: card.source_excerpt, location: card.source_location,
+        })),
+      } : null };
+    },
     from: (table: string) => ({
       select: () => ({
         eq: () =>
@@ -57,6 +71,8 @@ beforeEach(() => {
   state.user = { id: OWNER };
   state.set = { id: SET_ID, title: 'Photosynthesis', source_filename: 'bio.pdf', study_type: 'flashcard', user_id: OWNER };
   state.cards = [{ id: CARD, question: 'Pigment that absorbs light', answer: 'Chlorophyll', options: null, position: 0 }];
+  state.sharedSource = false;
+  state.sourceCalls = [];
   state.apiCalls = [];
   state.apiResult = null;
   state.respond = null;
@@ -268,6 +284,18 @@ describe('saving study results (#57)', () => {
 describe('where a saved card came from', () => {
   const QUOTE = 'Chlorophyll is the pigment that absorbs light.';
   const flipCard = async () => fireEvent.click(await screen.findByRole('button', { name: /^Flip the card$/ }));
+
+  it.each([false, true])('shows source material only when a class share permits it (%s)', async (allowed) => {
+    state.user = { id: STUDENT };
+    state.sharedSource = allowed;
+    state.cards[0].source_excerpt = QUOTE;
+    window.history.replaceState(null, '', `/sets/${SET_ID}?assignment=${ASSIGNMENT}`);
+    render(<SetPage />);
+    await flipCard();
+    expect(state.sourceCalls).toEqual([{ p_set_id: SET_ID, p_class_item_id: ASSIGNMENT }]);
+    expect(!!screen.queryByRole('button', { name: 'View source file' })).toBe(allowed);
+    expect(!!screen.queryByText(/the pigment that absorbs light/)).toBe(allowed);
+  });
 
   it('shows the saved quote and its page once the card is flipped', async () => {
     state.cards = [

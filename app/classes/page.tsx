@@ -223,7 +223,7 @@ function MyClasses() {
                               <LibraryDeck
                                 key={a.id}
                                 index={i + k}
-                                href={isMaterial ? `/sets/${a.setId}` : `/sets/${a.setId}?assignment=${a.id}`}
+                                href={`/sets/${a.setId}?${isMaterial ? 'material' : 'assignment'}=${a.id}`}
                                 morph={morph}
                                 kind={STUDY_TYPE_LABELS[toStudyType(a.studyType)]}
                                 title={a.setTitle}

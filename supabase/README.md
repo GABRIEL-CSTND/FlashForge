@@ -48,6 +48,11 @@ soon as it's applied.
 
 Add a row here whenever you apply a new migration.
 
+**Not applied yet:** `20261121000310_private_card_quotes.sql` (#116, PR #123) moves the
+cards' quotes to `private.card_source_quotes`. Apply it with the release to `main`, not
+before: until then the live site reads the quotes from the cards and would show none.
+Then add its row above.
+
 ## Running SQL with the Supabase CLI
 
 No install, database password, or Docker needed. Log in once (opens a browser):
