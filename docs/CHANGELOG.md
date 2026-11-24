@@ -67,6 +67,12 @@ with the next release of `dev` to `main`.
   date, and studying them isn't scored for the teacher. Making a graded set a learning
   material asks first, since its scores leave the Grade Book until it's changed back.
   Sets shared before are assignments. Migration `20261121000200_class_content_categories.sql`.
+- **Match is checked when you submit (#119):** picking a clue and a term only pairs them. Each
+  pair takes its own colour (blue, purple, teal, orange or pink) and number, and any pair can
+  be taken apart or moved. **Submit Answers** checks the whole round at once: right pairs turn
+  green, wrong ones red pencil with the right term under the clue, and the quotes appear. A
+  card's answer is the term it was paired with when the round was submitted, not the first
+  one picked, so changing your mind before submitting no longer counts against you.
 
 ## 2026-11-16: the desk redesign
 

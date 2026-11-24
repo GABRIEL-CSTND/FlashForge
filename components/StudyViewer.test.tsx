@@ -464,7 +464,7 @@ describe('matching: pair first, check on submit (#119)', () => {
     });
     // Five pairs, five different colours from the palette.
     expect(new Set(colours).size).toBe(5);
-    expect(colours.every((c) => ['blue', 'purple', 'teal', 'amber', 'pink'].includes(c ?? ''))).toBe(true);
+    expect(colours.every((c) => ['blue', 'purple', 'teal', 'orange', 'pink'].includes(c ?? ''))).toBe(true);
     // Nothing is marked right or wrong before submitting.
     expect(document.querySelector('[data-verdict]')).toBeNull();
     expect(document.querySelector('.slip-wrong, .slip-right')).toBeNull();

@@ -1001,7 +1001,7 @@ live database's keys were checked on 2026-11-14: they match the migrations.
   never in the clues' order); on a phone the terms sit in two columns above the clues
   (`components/study/MatchBoard.tsx`). The student picks a clue and then a term, or a
   term and then a clue, to pair them. Nothing is checked yet (#119): each pair takes its
-  own tint (soft blue, purple, teal, amber or pink) and a numbered tag, shared by both
+  own tint (soft blue, purple, teal, orange or pink) and a numbered tag, shared by both
   slips. Picking a paired slip takes it out of its pair so it can be paired again, and
   pairing a slip with one from another pair moves it there. **Submit Answers** turns on
   once every clue has a term and checks the whole round at once: right pairs turn green
@@ -1330,7 +1330,8 @@ to making a deck.
     in-memory client with unique keys (23505) and cascading deletes.
   - Component tests for `RoleChooser`, `StudyViewer` (the flashcard desk: piles, ← / →,
     the Missed it pile dealt again, Type and Match; and the quiz desk: answer slips, the
-    Right / Wrong piles, the Wrong pile again, part cards and focus), `CardEditor`,
+    Right / Wrong piles, the Wrong pile again, part cards and focus), `MatchBoard` (pairing,
+    the five pair colours, same-answer grading, focus after Submit Answers), `CardEditor`,
     `AssignPanel`, the desk's card box and library card (the tabs each role gets, signing
     in and out), `PageTurn` (the sheet, and the rise after Back and Forward), `PaperCard`, the desk layout at four widths, the
     set page, My Sets (its decks, best scores, delete), the History pages (saving from a deck too), the User Guide, saving a guide made while signed out across the Google sign-in (`app/upload-sign-in-save.test.tsx`, #89) and the teacher and student pages, in jsdom with React Testing Library.

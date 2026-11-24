@@ -10,9 +10,10 @@ type Selection = { side: Side; at: number } | null;
 const SLIP = 'paper slip w-full rounded-md text-left text-ink transition-transform duration-200';
 
 // The tints a pair is drawn in (#119). One per clue, so a round of up to five
-// never repeats one. Soft blue, purple, teal, amber and pink: each reads on the
-// cream paper and sits quietly on the green desk (app/globals.css).
-export const PAIR_COLORS = ['blue', 'purple', 'teal', 'amber', 'pink'] as const;
+// never repeats one. Soft blue, purple, teal, orange and pink: each reads on the
+// cream paper, sits quietly on the green desk, and stays clear of the brass edge
+// of a picked-up slip (app/globals.css).
+export const PAIR_COLORS = ['blue', 'purple', 'teal', 'orange', 'pink'] as const;
 export type PairColor = (typeof PAIR_COLORS)[number];
 export const pairColor = (clue: number): PairColor => PAIR_COLORS[clue % PAIR_COLORS.length];
 

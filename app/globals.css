@@ -257,8 +257,9 @@ button.desk-spot:not(:disabled) {
   box-shadow: 0 8px 18px rgb(0 0 0 / 0.2), 0 44px 76px -18px rgb(0 0 0 / 0.68);
 }
 
-/* Match slips (components/study/MatchBoard.tsx): brass edge when picked or
-   matched, red pencil for a wrong pick. */
+/* Match slips (components/study/MatchBoard.tsx): a brass edge when picked up,
+   the pair's tint once paired (below), and once a round is checked, green for
+   a right pair and red pencil for a wrong one. */
 .slip {
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.2), 0 8px 16px -8px rgb(0 0 0 / 0.6);
 }
@@ -278,12 +279,15 @@ button.desk-spot:not(:disabled) {
 
 /* Match pairs before they are checked (#119): both slips of a pair share a
    tint, an edge in the pair's colour and a faint wash over the paper. The
-   colours are soft enough for the cream paper and the green desk. */
-.pair-blue { --pair: #4f7fc4; }
-.pair-purple { --pair: #8a64c0; }
-.pair-teal { --pair: #2f948c; }
-.pair-amber { --pair: #c98a1e; }
-.pair-pink { --pair: #c9578f; }
+   colours are soft enough for the cream paper and the green desk. Each edge
+   is at least 3:1 on the paper, and orange stays clear of the brass edge a
+   picked-up slip gets. --pair-tag is a darker shade for the numbered tag, so
+   its white number reads at 4.5:1 or more. */
+.pair-blue { --pair: #4f7fc4; --pair-tag: #4676ba; }
+.pair-purple { --pair: #8a64c0; --pair-tag: #8862be; }
+.pair-teal { --pair: #2f948c; --pair-tag: #15837b; }
+.pair-orange { --pair: #c66a2c; --pair-tag: #b75c1a; }
+.pair-pink { --pair: #c9578f; --pair-tag: #bd4c85; }
 .slip.slip-paired[class*="pair-"] {
   box-shadow:
     inset 0 0 0 2.5px var(--pair),
@@ -300,7 +304,7 @@ button.desk-spot:not(:disabled) {
   width: 20px;
   height: 20px;
   border-radius: 9999px;
-  background: var(--pair);
+  background: var(--pair-tag);
   color: #fff;
   font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
   font-size: 11.5px;
@@ -318,15 +322,6 @@ button.desk-spot:not(:disabled) {
 .slip.slip-right:disabled,
 .slip.slip-wrong:disabled {
   cursor: default;
-}
-
-/* A term already matched leaves an outline where it lay. */
-.slip.slip-used {
-  background: none;
-  box-shadow: none;
-  outline: 1.5px dashed rgb(237 230 214 / 0.28);
-  outline-offset: -1.5px;
-  color: rgb(237 230 214 / 0.5);
 }
 
 /* Reduced motion: cards go straight to their place and only fade. */

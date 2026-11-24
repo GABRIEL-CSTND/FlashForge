@@ -29,7 +29,7 @@ describe('pairing helpers (#119)', () => {
 
   it('gives each of five clues its own colour', () => {
     expect(new Set([0, 1, 2, 3, 4].map(pairColor)).size).toBe(5);
-    expect(PAIR_COLORS).toEqual(['blue', 'purple', 'teal', 'amber', 'pink']);
+    expect(PAIR_COLORS).toEqual(['blue', 'purple', 'teal', 'orange', 'pink']);
   });
 });
 
