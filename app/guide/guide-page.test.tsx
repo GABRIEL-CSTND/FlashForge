@@ -54,6 +54,8 @@ describe('user guide page (#25)', () => {
     expect(screen.getByRole('heading', { name: /Flip Cards/ })).toBeTruthy();
     expect(screen.getByRole('heading', { name: /Type the Answer/ })).toBeTruthy();
     expect(screen.getByRole('heading', { name: /Matching Mode/ })).toBeTruthy();
+    // Match pairs are checked on Submit Answers (#119).
+    expect(document.body.textContent).toMatch(/then press Submit Answers to check the round/);
     expect(screen.getByRole('heading', { name: /Read Aloud/ })).toBeTruthy();
     expect(screen.getByRole('heading', { name: /Pencil \(Edit Cards\)/ })).toBeTruthy();
     expect(screen.getByRole('heading', { name: /Missed-it Practice/ })).toBeTruthy();

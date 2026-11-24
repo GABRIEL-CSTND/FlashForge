@@ -133,7 +133,7 @@ app/
 components/
   StudyViewer.tsx       Study screen: flashcards and quizzes, each on its own desk; reports each finish
   study/FlashcardDesk.tsx  Flashcards on the desk: deck, card, Got it / Missed it piles, Flip / Type / Match, read aloud
-  study/MatchBoard.tsx  One Match round: clue and term slips, a brass edge when right, red pencil when wrong
+  study/MatchBoard.tsx  One Match round: clue and term slips paired in colours, checked on Submit Answers (green when right, red pencil when wrong)
   study/QuizDesk.tsx    Quizzes on the desk: question card, Right / Wrong piles, a card for each part, score by part
   study/AnswerSlips.tsx A quiz question's answers as paper slips (A–D, or True and False)
   study/TypedForm.tsx   The line to type an answer on (Type mode, and Part III of a mixed quiz)

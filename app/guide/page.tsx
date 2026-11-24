@@ -222,7 +222,7 @@ export default function GuidePage() {
           <div className="paper rounded-lg p-3.5 space-y-1 border border-ink/10">
             <h3 className="font-medium text-sm text-ink">🧩 Matching Mode</h3>
             <p className="text-xs text-muted leading-relaxed">
-              Interactive rounds of paper slips laid out across the desk. Pick a clue and then its matching term to clear pairs with brass outlines.
+              Interactive rounds of paper slips laid out across the desk. Pair each clue with a term (each pair gets its own colour and number) and change any pair you like, then press <strong>Submit Answers</strong> to check the round: right pairs turn green, and wrong ones show the right term.
             </p>
           </div>
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import StudyViewer, { type StudyResult } from '@/components/StudyViewer';
 
 afterEach(() => {
@@ -31,9 +31,11 @@ const flip = () => fireEvent.click(screen.getByRole('button', { name: /^Flip (th
 const piles = () => screen.getByRole('group', { name: 'Did you know it?' });
 const sortTo = (name: 'Got it' | 'Missed it') => fireEvent.click(within(piles()).getByRole('button', { name }));
 const pressKey = (button: string, key: 'ArrowLeft' | 'ArrowRight') => fireEvent.keyDown(screen.getByRole('button', { name: button }), { key });
-// Match: clue and term slips, found by their words.
-const clue = (text: string) => within(screen.getByRole('list', { name: 'Clues' })).getByRole('button', { name: new RegExp(`^${text}`) });
-const term = (text: string) => within(screen.getByRole('list', { name: 'Terms' })).getByRole('button', { name: text });
+// Match: clue and term slips, found by their words (a paired slip's name goes on
+// to say what it is paired with).
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const clue = (text: string) => within(screen.getByRole('list', { name: 'Clues' })).getByRole('button', { name: new RegExp(`^${escape(text)}`) });
+const term = (text: string) => within(screen.getByRole('list', { name: 'Terms' })).getByRole('button', { name: new RegExp(`^${escape(text)}(\\.|$)`) });
 const pair = (clueText: string, termText: string) => {
   fireEvent.click(clue(clueText));
   fireEvent.click(term(termText));
@@ -364,8 +366,7 @@ describe('type the answer (#66)', () => {
 });
 
 describe('matching (#67)', () => {
-  it('plays round by round, and reports the first term picked for each clue', () => {
-    vi.useFakeTimers();
+  it('plays round by round, checks each round on Submit Answers, and reports the term paired with each clue', () => {
     const results: StudyResult[] = [];
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={SIX} onComplete={(r) => results.push(r)} />);
     click('Match');
@@ -373,20 +374,19 @@ describe('matching (#67)', () => {
     expect(within(screen.getByRole('list', { name: 'Clues' })).getAllByRole('button')).toHaveLength(3);
 
     pair('Fluid inside the chloroplast', 'Stroma');
-    expect((clue('Fluid inside the chloroplast') as HTMLButtonElement).disabled).toBe(true);
-    expect((term('Stroma') as HTMLButtonElement).disabled).toBe(true);
-    // A wrong pick flashes, and that clue counts as missed even once it's matched.
+    // Two clues paired the wrong way round: nothing says so yet (#119).
     pair('Enzyme that fixes CO2', 'Chlorophyll');
-    expect(screen.getByText('Not that one. Try another term.')).toBeTruthy();
-    act(() => vi.advanceTimersByTime(800));
-    pair('Enzyme that fixes CO2', 'RuBisCO');
-    pair('Pigment that absorbs light', 'Chlorophyll');
+    pair('Pigment that absorbs light', 'RuBisCO');
+    expect(screen.queryByText(/Not that one/)).toBeNull();
+    click('Submit Answers');
+    expect(screen.getByText(/You got 1 of 3 right/)).toBeTruthy();
     click('Next round →');
 
     expect(screen.getByText('Round 2 of 2')).toBeTruthy();
     pair('Stage that makes glucose', 'Calvin cycle');
     pair('Gas given off', 'Oxygen');
     pair('Organelle where it happens', 'Chloroplast');
+    click('Submit Answers');
     click('See results →');
 
     expect(results).toEqual([
@@ -395,18 +395,18 @@ describe('matching (#67)', () => {
         answers: [
           { cardId: 'f1', chosen: 'Stroma' },
           { cardId: 'f2', chosen: 'Chlorophyll' },
-          { cardId: 'f3', chosen: 'Chlorophyll' },
+          { cardId: 'f3', chosen: 'RuBisCO' },
           { cardId: 'f4', chosen: 'Calvin cycle' },
           { cardId: 'f5', chosen: 'Oxygen' },
           { cardId: 'f6', chosen: 'Chloroplast' },
         ],
-        correct: 5,
+        correct: 4,
         total: 6,
       },
     ]);
-    expect(screen.getByText('5 / 6')).toBeTruthy();
-    expect(screen.getByText('83% correct')).toBeTruthy();
-    expect(within(piles()).getByRole('button', { name: 'Study the 1 missed card again' })).toBeTruthy();
+    expect(screen.getByText('4 / 6')).toBeTruthy();
+    expect(screen.getByText('67% correct')).toBeTruthy();
+    expect(within(piles()).getByRole('button', { name: 'Study the 2 missed cards again' })).toBeTruthy();
   });
 
   it('takes a term first, then its clue', () => {
@@ -415,8 +415,9 @@ describe('matching (#67)', () => {
     fireEvent.click(term('RuBisCO'));
     expect(term('RuBisCO').getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(clue('Enzyme that fixes CO2'));
-    expect((term('RuBisCO') as HTMLButtonElement).disabled).toBe(true);
+    expect(term('RuBisCO').getAttribute('aria-pressed')).toBe('false');
     expect(clue('Enzyme that fixes CO2').textContent).toContain('RuBisCO');
+    expect(clue('Enzyme that fixes CO2').getAttribute('aria-label')).toBe('Enzyme that fixes CO2. Paired with RuBisCO.');
   });
 
   it('never lists the terms in the same order as the clues', () => {
@@ -429,6 +430,138 @@ describe('matching (#67)', () => {
         .getAllByRole('button')
         .map((b) => b.textContent)
     ).toEqual(['RuBisCO', 'Chlorophyll', 'Stroma']);
+  });
+});
+
+describe('matching: pair first, check on submit (#119)', () => {
+  const FIVE = SIX.slice(0, 5);
+  const pairOf = (el: HTMLElement) => el.getAttribute('data-pair');
+  const submitButton = () => screen.getByRole('button', { name: 'Submit Answers' }) as HTMLButtonElement;
+
+  it('gives each pair its own colour, shared by the clue and the term', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FIVE} />);
+    click('Match');
+    expect(within(screen.getByRole('list', { name: 'Clues' })).getAllByRole('button')).toHaveLength(5);
+    expect(pairOf(clue('Fluid inside the chloroplast'))).toBeNull();
+
+    pair('Fluid inside the chloroplast', 'Stroma');
+    pair('Enzyme that fixes CO2', 'Chlorophyll');
+    pair('Pigment that absorbs light', 'RuBisCO');
+    pair('Stage that makes glucose', 'Oxygen');
+    pair('Gas given off', 'Calvin cycle');
+
+    const colours = [
+      ['Fluid inside the chloroplast', 'Stroma'],
+      ['Enzyme that fixes CO2', 'Chlorophyll'],
+      ['Pigment that absorbs light', 'RuBisCO'],
+      ['Stage that makes glucose', 'Oxygen'],
+      ['Gas given off', 'Calvin cycle'],
+    ].map(([c, t]) => {
+      expect(pairOf(clue(c))).toBe(pairOf(term(t)));
+      expect(clue(c).className).toContain('slip-paired');
+      expect(term(t).className).toContain(`pair-${pairOf(clue(c))}`);
+      return pairOf(clue(c));
+    });
+    // Five pairs, five different colours from the palette.
+    expect(new Set(colours).size).toBe(5);
+    expect(colours.every((c) => ['blue', 'purple', 'teal', 'orange', 'pink'].includes(c ?? ''))).toBe(true);
+    // Nothing is marked right or wrong before submitting.
+    expect(document.querySelector('[data-verdict]')).toBeNull();
+    expect(document.querySelector('.slip-wrong, .slip-right')).toBeNull();
+  });
+
+  it('lets a pair be taken apart or moved before submitting', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FIVE} />);
+    click('Match');
+
+    // Moving a term to another clue takes it away from the first.
+    pair('Fluid inside the chloroplast', 'RuBisCO');
+    expect(pairOf(term('RuBisCO'))).toBe(pairOf(clue('Fluid inside the chloroplast')));
+    pair('Enzyme that fixes CO2', 'RuBisCO');
+    expect(pairOf(clue('Fluid inside the chloroplast'))).toBeNull();
+    expect(clue('Fluid inside the chloroplast').textContent).not.toContain('RuBisCO');
+    expect(pairOf(term('RuBisCO'))).toBe(pairOf(clue('Enzyme that fixes CO2')));
+
+    // Giving a paired clue another term frees its old one.
+    pair('Fluid inside the chloroplast', 'Oxygen');
+    fireEvent.click(clue('Fluid inside the chloroplast'));
+    expect(pairOf(term('Oxygen'))).toBeNull();
+    fireEvent.click(term('Stroma'));
+    expect(clue('Fluid inside the chloroplast').textContent).toContain('Stroma');
+    expect(pairOf(term('Stroma'))).toBe(pairOf(clue('Fluid inside the chloroplast')));
+    expect(pairOf(term('Oxygen'))).toBeNull();
+
+    // Picking a paired term, then putting it down, leaves both slips unpaired.
+    fireEvent.click(term('Stroma'));
+    expect(term('Stroma').getAttribute('aria-pressed')).toBe('true');
+    expect(pairOf(clue('Fluid inside the chloroplast'))).toBeNull();
+    fireEvent.click(term('Stroma'));
+    expect(term('Stroma').getAttribute('aria-pressed')).toBe('false');
+    expect(pairOf(term('Stroma'))).toBeNull();
+    expect(screen.getByText('1 of 5 paired. Pick a paired card to change it.')).toBeTruthy();
+  });
+
+  it('keeps Submit Answers off until every clue has a term, then checks them all at once', () => {
+    const onComplete = vi.fn<(r: StudyResult) => void>();
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FIVE} onComplete={onComplete} />);
+    click('Match');
+    expect(submitButton().disabled).toBe(true);
+
+    pair('Fluid inside the chloroplast', 'Stroma');
+    pair('Enzyme that fixes CO2', 'RuBisCO');
+    pair('Pigment that absorbs light', 'Chlorophyll');
+    pair('Stage that makes glucose', 'Oxygen');
+    expect(submitButton().disabled).toBe(true);
+    click('Submit Answers');
+    expect(screen.queryByText(/You got/)).toBeNull();
+    pair('Gas given off', 'Calvin cycle');
+    expect(submitButton().disabled).toBe(false);
+    // Every slip is still on the desk and can still be changed.
+    expect(within(screen.getByRole('list', { name: 'Terms' })).getAllByRole('button').every((b) => !(b as HTMLButtonElement).disabled)).toBe(true);
+    expect(onComplete).not.toHaveBeenCalled();
+
+    click('Submit Answers');
+    expect(screen.getByText(/You got 3 of 5 right/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Submit Answers' })).toBeNull();
+
+    // Right pairs in green with a check.
+    for (const [c, t] of [
+      ['Fluid inside the chloroplast', 'Stroma'],
+      ['Enzyme that fixes CO2', 'RuBisCO'],
+      ['Pigment that absorbs light', 'Chlorophyll'],
+    ]) {
+      expect(clue(c).getAttribute('data-verdict')).toBe('right');
+      expect(clue(c).className).toContain('slip-right');
+      expect(clue(c).getAttribute('aria-label')).toBe(`${c}. Right: you matched ${t}.`);
+    }
+    // Wrong pairs in red pencil, with the right term written in.
+    const stage = clue('Stage that makes glucose');
+    expect(stage.getAttribute('data-verdict')).toBe('wrong');
+    expect(stage.className).toContain('slip-wrong');
+    expect(stage.textContent).toContain('Answer: Calvin cycle');
+    expect(stage.getAttribute('aria-label')).toBe('Stage that makes glucose. Wrong: you matched Oxygen. The answer is Calvin cycle.');
+    expect(clue('Gas given off').textContent).toContain('Answer: Oxygen');
+    expect(term('Oxygen').getAttribute('data-verdict')).toBe('wrong');
+    expect(term('Stroma').getAttribute('data-verdict')).toBe('right');
+    // Checked slips can't be changed any more.
+    expect((clue('Gas given off') as HTMLButtonElement).disabled).toBe(true);
+    expect((term('Stroma') as HTMLButtonElement).disabled).toBe(true);
+
+    click('See results →');
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledWith({
+      mode: 'match',
+      answers: [
+        { cardId: 'f1', chosen: 'Stroma' },
+        { cardId: 'f2', chosen: 'RuBisCO' },
+        { cardId: 'f3', chosen: 'Chlorophyll' },
+        { cardId: 'f4', chosen: 'Oxygen' },
+        { cardId: 'f5', chosen: 'Calvin cycle' },
+      ],
+      correct: 3,
+      total: 5,
+    });
+    expect(screen.getByText('3 / 5')).toBeTruthy();
   });
 });
 
@@ -726,15 +859,18 @@ describe('where a card came from', () => {
     expect(screen.getByText('From the document · Page 4')).toBeTruthy();
   });
 
-  it('shows the quote under each clue once it is matched', () => {
+  it('shows the quote under each clue once the round is checked', () => {
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={[...SOURCED_FLASH, ...SIX.slice(3)]} />);
     click('Match');
     expect(screen.queryByText(FROM)).toBeNull();
     pair('Fluid inside the chloroplast', 'Stroma');
-    expect(screen.getByText('From the document · Page 4')).toBeTruthy();
-    expect(screen.getByText(/The stroma is the fluid inside the chloroplast\./)).toBeTruthy();
     pair('Enzyme that fixes CO2', 'RuBisCO');
     pair('Pigment that absorbs light', 'Chlorophyll');
+    // Pairing alone gives nothing away (#119).
+    expect(screen.queryByText(FROM)).toBeNull();
+    click('Submit Answers');
+    expect(screen.getByText('From the document · Page 4')).toBeTruthy();
+    expect(screen.getByText(/The stroma is the fluid inside the chloroplast\./)).toBeTruthy();
     expect(screen.getByText(/Chlorophyll is the pigment that absorbs light\./)).toBeTruthy();
     // The clue with no quote adds nothing: two of the three have one.
     expect(screen.getAllByText(FROM)).toHaveLength(2);
