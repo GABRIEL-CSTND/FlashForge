@@ -393,7 +393,7 @@ new ones included, gets it without doing anything):
    (#70). The sheet says what it found, with a switch (*Use it as notes*) when that's
    wrong. Notes must be 20 to 30,000 characters (`pastedTextProblem()`), with a counter.
    The **"Make me 10 medium flashcards"** card (`components/make/MakeCard.tsx`) sets how
-   many (5, 10, 15, 20 or 30, #65), how hard and what kind (#68, #69): each word opens
+   many (5, 10, 15, 20 or 30 as presets, or any whole number from 5 to 30, #104), how hard and what kind (#68, #69): each word opens
    paper slips (`components/desk/SlipMenu.tsx`) with a line saying what each choice is.
    **Make my deck** sends it. Nothing is saved yet. While the AI works, the notes sheet
    turns into **the deck being made** (`components/make/MakingDeck.tsx`): a pencil writes
