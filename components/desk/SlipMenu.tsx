@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ComponentType } from 'react';
 
 export interface SlipOption<T extends string | number> {
   value: T;
@@ -22,7 +22,7 @@ export default function SlipMenu<T extends string | number>({
   options,
   value,
   onChange,
-  renderExtra,
+  extra: Extra,
   disabled = false,
 }: {
   // The question the slips answer, e.g. "How many".
@@ -32,7 +32,7 @@ export default function SlipMenu<T extends string | number>({
   options: SlipOption<T>[];
   value: T;
   onChange: (value: T) => void;
-  renderExtra?: (pick: (value: T) => void) => ReactNode;
+  extra?: ComponentType<{ value: T; onPick: (value: T) => void }>;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -149,7 +149,7 @@ export default function SlipMenu<T extends string | number>({
               )}
             </button>
           ))}
-          {renderExtra?.(pick)}
+          {Extra && <Extra value={value} onPick={pick} />}
         </span>
       )}
     </span>

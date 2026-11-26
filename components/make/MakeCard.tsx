@@ -28,7 +28,7 @@ const COUNT_OPTIONS = QUESTION_COUNTS.map((n) => ({ value: n as number, label: S
 const LEVEL_OPTIONS = DIFFICULTIES.map((d) => ({ value: d, label: DIFFICULTY_LABELS[d], hint: DIFFICULTY_HINTS[d] }));
 const TYPE_OPTIONS = STUDY_TYPES.map((t) => ({ value: t, label: STUDY_TYPE_LABELS[t], hint: STUDY_TYPE_HINTS[t] }));
 
-function CustomCount({ count, onPick }: { count: number; onPick: (count: number) => void }) {
+function CustomCount({ value: count, onPick }: { value: number; onPick: (count: number) => void }) {
   const inputId = useId();
   const [draft, setDraft] = useState(String(count));
   const value = Number(draft);
@@ -107,7 +107,7 @@ export default function MakeCard({
           options={COUNT_OPTIONS}
           value={count}
           onChange={onCount}
-          renderExtra={(pick) => <CustomCount count={count} onPick={pick} />}
+          extra={CustomCount}
           disabled={making}
         />{' '}
         <SlipMenu name="How hard" word={DIFFICULTY_LABELS[difficulty].toLowerCase()} options={LEVEL_OPTIONS} value={difficulty} onChange={onDifficulty} disabled={making} />{' '}
