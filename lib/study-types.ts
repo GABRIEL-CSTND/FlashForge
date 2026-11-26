@@ -106,12 +106,12 @@ export function parseDifficulty(value: unknown): Difficulty {
   return (DIFFICULTIES as readonly unknown[]).includes(value) ? (value as Difficulty) : DEFAULT_DIFFICULTY;
 }
 
-// How many questions to generate (#65). The upload page offers these; the API
-// accepts any whole number from MIN to MAX.
-export const QUESTION_COUNTS = [5, 10, 15, 20, 30] as const;
+// How many questions to generate (#65, #104). These presets sit alongside the
+// custom input, which accepts the same range as the API.
 export const DEFAULT_QUESTION_COUNT = 10;
 export const MIN_QUESTION_COUNT = 5;
-export const MAX_QUESTION_COUNT = 30;
+export const MAX_QUESTION_COUNT = 50;
+export const QUESTION_COUNTS = [MIN_QUESTION_COUNT, DEFAULT_QUESTION_COUNT, 15, 20, 30, 40, MAX_QUESTION_COUNT] as const;
 
 // A missing, non-numeric or out-of-range count falls back to the default.
 export function parseQuestionCount(value: unknown): number {

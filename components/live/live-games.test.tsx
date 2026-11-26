@@ -190,20 +190,20 @@ describe('a live game', () => {
     });
     fireEvent.click(host.getByRole('button', { name: 'How many: 10' }));
     const counts = within(host.getByRole('group', { name: 'How many' }));
-    fireEvent.change(counts.getByRole('spinbutton', { name: 'Custom count' }), { target: { value: '17' } });
+    fireEvent.change(counts.getByRole('spinbutton', { name: 'Custom count' }), { target: { value: '50' } });
     fireEvent.click(counts.getByRole('button', { name: 'Apply' }));
     fireEvent.click(host.getByRole('button', { name: 'Make my deck' }));
     await flush(300);
     expect(fetchMock).toHaveBeenCalledWith('/api/generate', expect.objectContaining({ method: 'POST' }));
     const form = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as FormData;
-    expect(Object.fromEntries(form.entries())).toMatchObject({ studyType: 'multiple_choice', count: '17', difficulty: 'medium' });
+    expect(Object.fromEntries(form.entries())).toMatchObject({ studyType: 'multiple_choice', count: '50', difficulty: 'medium' });
     expect(text(amy)).toContain('The host is making a new deck…');
 
     send({ type: 'step', step: 'writing' });
     send({ type: 'cards', title: 'Photosynthesis', sourceFilename: null, source: null, studyType: 'multiple_choice', items: items.slice(0, 2) });
     await flush(300);
-    expect(text(host)).toContain('2 of 17 questions written.');
-    expect(text(amy)).toContain('2 of 17 written');
+    expect(text(host)).toContain('2 of 50 questions written.');
+    expect(text(amy)).toContain('2 of 50 written');
 
     send({
       type: 'result',

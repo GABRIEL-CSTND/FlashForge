@@ -64,12 +64,12 @@ describe('question count (#65)', () => {
   });
 
   it('asks the AI for the chosen count plus spares, and returns no more than the count', async () => {
-    mockModel(() => reply(flashcards(24)));
-    const { items, model } = await generateStudyItems('Some notes about cells.', 'flashcard', { count: 20 });
+    mockModel(() => reply(flashcards(60)));
+    const { items, model } = await generateStudyItems('Some notes about cells.', 'flashcard', { count: 50 });
     expect(sent).toHaveLength(1);
-    expect(sent[0].prompt).toContain('Produce exactly 24 items.');
-    expect(items).toHaveLength(20);
-    expect(items[19]).toEqual({ question: 'Clue number 20', answer: 'Term 20' });
+    expect(sent[0].prompt).toContain('Produce exactly 60 items.');
+    expect(items).toHaveLength(50);
+    expect(items[49]).toEqual({ question: 'Clue number 50', answer: 'Term 50' });
     expect(model).toBe('gemini-3.5-flash');
   });
 

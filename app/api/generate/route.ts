@@ -113,7 +113,7 @@ async function generate(
     const studyTypeRaw = formData.get('studyType');
     const studyType = isStudyType(studyTypeRaw) ? studyTypeRaw : 'flashcard';
     log.studyType = studyType;
-    // How many questions (#65): 5 to 30, otherwise the default 10.
+    // Use the shared count range and default (#65, #104).
     const count = parseQuestionCount(formData.get('count'));
     // Easy, medium or hard (#79); anything else is medium.
     const difficulty = parseDifficulty(formData.get('difficulty'));
