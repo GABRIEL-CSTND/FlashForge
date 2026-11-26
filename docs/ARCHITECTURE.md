@@ -417,7 +417,7 @@ new ones included, gets it without doing anything):
      ignored.
    - The spread has Save and the source's credit; **Start studying** gathers the cards and
      the study screen takes over on the same URL.
-2. **`POST /api/generate`** (`app/api/generate/route.ts`, `maxDuration = 90`):
+2. **`POST /api/generate`** (`app/api/generate/route.ts`, `maxDuration = 150`):
    - Checks the caller's **daily limit** first (#63). Over it, the answer is 429 and the AI
      isn't called. See "Daily generation limits" below.
    - Checks the file again with the page's rules (`fileProblem()` in `lib/sources.ts`):
@@ -534,9 +534,9 @@ new ones included, gets it without doing anything):
 | 2 | `gemini-3.5-flash-lite` | 2 | 25s, +0.5s per question over 10 | Same request; separate quota |
 | 3 | `gemma-4-26b-a4b-it` | 1 | 40s, +1.5s per question over 10 | Last resort: slow (~26–33s for 10) and sometimes fails |
 
-- The whole generation is capped at **75 seconds**.
+- The base generation budget is **75 seconds**. Each question above 30 adds 2.5 seconds to the total budget and 1.5 seconds to each model timeout. A timeout on a deck above 30 sends the request to the next model.
 - **429 (quota used up)** skips straight to the next model.
-- **503/5xx, timeouts, network errors, and empty or invalid output** are retried with
+- **503/5xx, standard deck timeouts, network errors, and empty or invalid output** are retried with
   exponential backoff plus jitter.
 - **Other 4xx errors** (bad request, bad key) fail immediately.
 - Users only ever see "The AI is busy right now…" or a generic error message.

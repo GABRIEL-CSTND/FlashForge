@@ -112,6 +112,7 @@ export const DEFAULT_QUESTION_COUNT = 10;
 export const MIN_QUESTION_COUNT = 5;
 export const MAX_QUESTION_COUNT = 50;
 export const QUESTION_COUNTS = [MIN_QUESTION_COUNT, DEFAULT_QUESTION_COUNT, 15, 20, 30, 40, MAX_QUESTION_COUNT] as const;
+export const LONG_GENERATION_THRESHOLD = 30;
 
 // A missing, non-numeric or out-of-range count falls back to the default.
 export function parseQuestionCount(value: unknown): number {

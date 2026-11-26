@@ -79,6 +79,20 @@ describe('question count (#65)', () => {
     expect(items).toHaveLength(3);
   });
 
+  it('gives a 50-card request more time and tries another model after a timeout', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    mockModel(({ model }) => {
+      if (model === 'gemini-3.5-flash') throw new DOMException('Timed out', 'TimeoutError');
+      return reply(flashcards(60));
+    });
+
+    const { items } = await generateStudyItems('Some notes about cells.', 'flashcard', { count: 50 });
+
+    expect(items).toHaveLength(50);
+    expect(timeout).toHaveBeenNthCalledWith(1, 75_000);
+    expect(sent.map(({ model }) => model)).toEqual(['gemini-3.5-flash', 'gemini-3.5-flash-lite']);
+  });
+
   it('tries the next model when too few items are usable for the chosen count', async () => {
     // 11 usable items is fine for 10 questions but not for 20 (at least 12).
     mockModel((req) =>

@@ -36,8 +36,8 @@ import {
 import { addToHistory } from '@/lib/history';
 
 export const runtime = 'nodejs';
-// Model retries are capped at ~75s (see lib/gemini.ts); leave headroom for upload + PDF parsing.
-export const maxDuration = 90;
+// Model retries are capped at 125s for 50 cards. Leave room for upload and parsing.
+export const maxDuration = 150;
 
 // `units` says how the text splits into PDF pages or text lines, so a card can say
 // where its quote is (lib/source-quotes.ts). Word and PowerPoint files have no

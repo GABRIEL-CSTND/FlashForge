@@ -4,6 +4,7 @@ import { createSourceChecker, sampleText, type SourceUnits } from '@/lib/source-
 import {
   DEFAULT_DIFFICULTY,
   DEFAULT_QUESTION_COUNT,
+  LONG_GENERATION_THRESHOLD,
   MIXED_PARTS,
   mixedSplit,
   type Difficulty,
@@ -120,16 +121,18 @@ export class GeminiError extends Error {
   retryable: boolean;
   status?: number;
   unreadable: boolean;
+  timedOut: boolean;
 
   constructor(
     message: string,
-    opts: { retryable: boolean; status?: number; userMessage?: string; unreadable?: boolean }
+    opts: { retryable: boolean; status?: number; userMessage?: string; unreadable?: boolean; timedOut?: boolean }
   ) {
     super(message);
     this.name = 'GeminiError';
     this.retryable = opts.retryable;
     this.status = opts.status;
     this.unreadable = opts.unreadable ?? false;
+    this.timedOut = opts.timedOut ?? false;
     this.userMessage = opts.userMessage ?? (opts.retryable ? BUSY_MESSAGE : GENERIC_MESSAGE);
   }
 }
@@ -572,7 +575,7 @@ async function readStream(
   } catch (err) {
     if (err instanceof GeminiError) throw err;
     const timedOut = err instanceof Error && err.name === 'TimeoutError';
-    throw new GeminiError(timedOut ? 'timed out while streaming' : `network error: ${String(err)}`, { retryable: true });
+    throw new GeminiError(timedOut ? 'timed out while streaming' : `network error: ${String(err)}`, { retryable: true, timedOut });
   }
   return { text: cleanJsonText(text), finishReason, outputTokens };
 }
@@ -602,7 +605,7 @@ async function callModel(
     const timedOut = err instanceof Error && err.name === 'TimeoutError';
     throw new GeminiError(
       timedOut ? `timed out after ${timeoutMs}ms` : `network error: ${String(err)}`,
-      { retryable: true }
+      { retryable: true, timedOut }
     );
   }
 
@@ -738,7 +741,8 @@ ${sampledText}
     }),
   };
 
-  const deadline = Date.now() + TOTAL_BUDGET_MS;
+  const extraCards = Math.max(0, count - LONG_GENERATION_THRESHOLD);
+  const deadline = Date.now() + TOTAL_BUDGET_MS + extraCards * 2_500;
   let lastError: GeminiError | undefined;
 
   const minValid = minValidItems(count);
@@ -749,7 +753,7 @@ ${sampledText}
 
   for (const { id: model, family, attempts, timeoutMs, perExtraItemMs } of MODEL_CHAIN) {
     const modelTimeoutMs =
-      timeoutMs + Math.max(0, count - DEFAULT_QUESTION_COUNT) * perExtraItemMs + (attachment ? ATTACHMENT_EXTRA_MS : 0);
+      timeoutMs + Math.max(0, count - DEFAULT_QUESTION_COUNT) * perExtraItemMs + extraCards * 1_500 + (attachment ? ATTACHMENT_EXTRA_MS : 0);
     for (let attempt = 1; attempt <= attempts; attempt++) {
       const remaining = deadline - Date.now();
       if (remaining < 2_000) break;
@@ -829,6 +833,8 @@ ${sampledText}
         if (!error.retryable) throw error;
         // Quota errors won't clear in a few seconds; go straight to the next model.
         if (error.status === 429) break;
+        // Save the rest of a large deck's budget for another model after a timeout.
+        if (extraCards > 0 && error.timedOut) break;
 
         if (attempt < attempts) {
           const backoff = 1_000 * 2 ** (attempt - 1) + Math.random() * 500;
