@@ -227,9 +227,9 @@ export default function GuidePage() {
           </div>
 
           <div className="paper rounded-lg p-3.5 space-y-1 border border-ink/10">
-            <h3 className="font-medium text-sm text-ink">🔊 Read Aloud & Auto</h3>
+            <h3 className="font-medium text-sm text-ink">🔊 Read Aloud</h3>
             <p className="text-xs text-muted leading-relaxed">
-              Use the brass Read Aloud button to listen to clues and answers using your browser&apos;s speech. Turn on Auto to have each card read aloud as it comes up, and the answer when you turn it over.
+              Turn on the brass Read Aloud button to have each card read aloud as it comes up, and the answer when you turn it over, using your browser&apos;s speech. Click it again to stop.
             </p>
           </div>
 

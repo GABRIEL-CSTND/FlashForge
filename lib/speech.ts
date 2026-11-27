@@ -32,8 +32,9 @@ export function useCanSpeak(): boolean {
   return useSyncExternalStore(neverChanges, canSpeak, () => false);
 }
 
-// "Auto": read each card as it appears. Remembered on this device; if storage
-// is blocked (some private windows), it lasts until the page is closed.
+// The Read aloud switch (#117; called "Auto" before it was merged with the
+// Read aloud button): read each card as it appears. Remembered on this device;
+// if storage is blocked (some private windows), it lasts until the page is closed.
 const AUTO_KEY = 'flashforge_read_aloud';
 const AUTO_EVENT = 'flashforge-read-aloud';
 let autoInMemory = false;
