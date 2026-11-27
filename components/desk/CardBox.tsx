@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useUser } from '@/lib/auth';
 import { useProfile } from '@/components/ProfileProvider';
 import { canUseTeacherTools, type Role } from '@/lib/role-types';
+import FullscreenToggle from './FullscreenToggle';
 
 export interface CardBoxTab {
   label: string;
@@ -70,14 +71,17 @@ export default function CardBox() {
         >
           FlashForge
         </Link>
-        <Link
-          href="/play"
-          aria-current={isActive(pathname, '/play') ? 'page' : undefined}
-          title="Quiz your friends at the same time"
-          className={`${isActive(pathname, '/play') ? 'brass' : 'brass-ring'} inline-flex min-h-9 items-center whitespace-nowrap rounded-md px-3 text-sm font-semibold`}
-        >
-          Play live
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/play"
+            aria-current={isActive(pathname, '/play') ? 'page' : undefined}
+            title="Quiz your friends at the same time"
+            className={`${isActive(pathname, '/play') ? 'brass' : 'brass-ring'} inline-flex min-h-9 items-center whitespace-nowrap rounded-md px-3 text-sm font-semibold`}
+          >
+            Play live
+          </Link>
+          <FullscreenToggle />
+        </div>
       </div>
     </nav>
   );

@@ -270,7 +270,7 @@ export default function GuidePage() {
               <strong className="text-ink">Card Box Tabs:</strong> Sticking up from the wooden box are divider tabs for quick navigation: <em>My Sets</em>, <em>History</em>, <em>My Classes</em> (or <em>Classes</em> for teachers), <em>Admin</em> for admins, and <em>Guide</em>, which everyone sees, signed in or not.
             </li>
             <li>
-              <strong className="text-ink">Front of the Box:</strong> <em>FlashForge</em> starts a new deck, and <em>Play live</em> opens a live game with friends (see section 7).
+              <strong className="text-ink">Front of the Box:</strong> <em>FlashForge</em> starts a new deck, and <em>Play live</em> opens a live game with friends (see section 7). Use the four-corner button beside <em>Play live</em> to enter or exit full screen when your browser supports it.
             </li>
             <li>
               <strong className="text-ink">My Sets:</strong> Each saved set is displayed as a real deck on the green leather desk, tagged with your best score (e.g. <em>Best 9 of 10</em>) or <em>Not studied yet</em>. Picking up a deck morphs smoothly into your study session.
