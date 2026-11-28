@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useUser } from '@/lib/auth';
 import { useProfile } from '@/components/ProfileProvider';
 import { canUseTeacherTools, type Role } from '@/lib/role-types';
+import FullscreenToggle from './FullscreenToggle';
 import NotificationBell from './NotificationBell';
 
 export interface CardBoxTab {
@@ -81,6 +82,7 @@ export default function CardBox() {
           >
             Play live
           </Link>
+          <FullscreenToggle />
         </div>
       </div>
     </nav>

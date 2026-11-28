@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 const state = vi.hoisted(() => ({ user: null as unknown, profile: null as unknown, pathname: '/' }));
 
@@ -89,5 +89,97 @@ describe('card box', () => {
     state.pathname = '/play/K7MQ';
     render(<CardBox />);
     expect(screen.getByRole('link', { name: 'Play live' }).getAttribute('aria-current')).toBe('page');
+  });
+});
+
+describe('full screen', () => {
+  let fullscreenElement: Element | null = null;
+
+  function setFullscreenElement(element: Element | null) {
+    fullscreenElement = element;
+    document.dispatchEvent(new Event('fullscreenchange'));
+  }
+
+  function mockFullscreen() {
+    const request = vi.fn(async () => setFullscreenElement(document.documentElement));
+    const exit = vi.fn(async () => setFullscreenElement(null));
+    Object.defineProperties(document, {
+      fullscreenEnabled: { configurable: true, value: true },
+      fullscreenElement: { configurable: true, get: () => fullscreenElement },
+      exitFullscreen: { configurable: true, value: exit },
+    });
+    Object.defineProperty(document.documentElement, 'requestFullscreen', { configurable: true, value: request });
+    return { request, exit };
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(document, 'fullscreenEnabled');
+    Reflect.deleteProperty(document, 'fullscreenElement');
+    Reflect.deleteProperty(document, 'exitFullscreen');
+    Reflect.deleteProperty(document.documentElement, 'requestFullscreen');
+    fullscreenElement = null;
+  });
+
+  it('enters full screen for the whole page and exits from the same button', () => {
+    const { request, exit } = mockFullscreen();
+    render(<CardBox />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enter full screen' }));
+    expect(request).toHaveBeenCalledOnce();
+    expect(document.fullscreenElement).toBe(document.documentElement);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exit full screen' }));
+    expect(exit).toHaveBeenCalledOnce();
+    expect(document.fullscreenElement).toBeNull();
+    expect(screen.getByRole('button', { name: 'Enter full screen' })).toBeTruthy();
+  });
+
+  it('updates when the browser exits full screen', () => {
+    mockFullscreen();
+    render(<CardBox />);
+    fireEvent.click(screen.getByRole('button', { name: 'Enter full screen' }));
+
+    act(() => setFullscreenElement(null));
+    expect(screen.getByRole('button', { name: 'Enter full screen' })).toBeTruthy();
+  });
+
+  it('reports a rejected request and lets the user retry', async () => {
+    const { request } = mockFullscreen();
+    request.mockRejectedValueOnce(new Error('Full screen denied'));
+    render(<CardBox />);
+
+    const button = screen.getByRole('button', { name: 'Enter full screen' });
+    fireEvent.click(button);
+    expect((await screen.findByRole('alert')).textContent).toBe('Could not enter full screen.');
+
+    fireEvent.click(button);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Exit full screen' })).toBeTruthy();
+  });
+
+  it('takes the failure note away after 4 seconds', async () => {
+    vi.useFakeTimers();
+    try {
+      const { request } = mockFullscreen();
+      request.mockRejectedValueOnce(new Error('Full screen denied'));
+      render(<CardBox />);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Enter full screen' }));
+      });
+      expect(screen.getByRole('alert').textContent).toBe('Could not enter full screen.');
+
+      act(() => vi.advanceTimersByTime(3_900));
+      expect(screen.getByRole('alert')).toBeTruthy();
+      act(() => vi.advanceTimersByTime(100));
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('hides the control when full screen is unavailable', () => {
+    render(<CardBox />);
+    expect(screen.queryByRole('button', { name: 'Enter full screen' })).toBeNull();
   });
 });
