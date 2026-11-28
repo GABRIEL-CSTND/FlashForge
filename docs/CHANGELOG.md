@@ -10,6 +10,14 @@ with the next release of `dev` to `main`.
 
 ### Fixed
 
+- **Removed ownerless study sets and scoped set access strictly to owners, classes and admins (#131):**
+  legacy/orphaned study sets without a valid owner (`user_id` null or pointing to a
+  non-existent user) and their cards, assignments and attempts are removed by migration
+  `20261128000100_remove_ownerless_sets.sql` and the idempotent cleanup utility
+  (`lib/cleanup-ownerless-sets.ts`, `scripts/cleanup-ownerless-sets.mjs --dry-run`).
+  `flashcard_sets.user_id` is now `NOT NULL`, the `"Sets are viewable by owner or anon-created"`
+  policy is replaced by `"Sets are viewable by owner"`, and `study_set_source()` and
+  `lib/attempts.ts` no longer grant access to ownerless sets.
 - **One Read aloud switch (#117):** the study desk had a Read aloud button and a separate
   Auto switch that did nearly the same thing, which confused people. They're now one brass
   **Read aloud** switch: turning it on reads the card on screen straight away, then each

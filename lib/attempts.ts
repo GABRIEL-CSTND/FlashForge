@@ -136,8 +136,9 @@ interface StudySet {
   studyType: StudyType;
 }
 
-// The set if this user may study it: they own it, it's a legacy set with no
-// owner, or it's assigned to a class they're in. Otherwise null.
+// The set if this user may study it: they own it, they are an admin, or it's
+// assigned to a class they're in (#131: ownerless/orphaned sets are never
+// accessible). Otherwise null.
 export async function findStudySet(
   userId: string,
   setId: string,
@@ -149,9 +150,29 @@ export async function findStudySet(
     .eq('id', setId)
     .maybeSingle();
   if (error) throw error;
-  if (!set) return null;
+  const ownerId = typeof set?.user_id === 'string' ? set.user_id.trim() : '';
+  if (!set || !ownerId) return null;
+
+  // Verify the owner exists when profiles are populated in the database.
+  const { data: ownerProfile, error: ownerErr } = await client
+    .from('profiles')
+    .select('id')
+    .eq('id', ownerId)
+    .maybeSingle();
+  if (!ownerErr && !ownerProfile) {
+    const { data: anyProfiles } = await client.from('profiles').select('id').limit(1);
+    if ((anyProfiles ?? []).length > 0) return null;
+  }
+
   const result = { id: set.id as string, studyType: toStudyType(set.study_type) };
-  if (set.user_id === null || set.user_id === userId) return result;
+  if (ownerId === userId) return result;
+
+  const { data: callerProfile } = await client
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .maybeSingle();
+  if (callerProfile?.role === 'admin') return result;
 
   const { data: assigned, error: assignedError } = await client
     .from('assignments')

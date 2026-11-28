@@ -59,7 +59,7 @@ begin
   perform set_config('request.jwt.claims', '{}', true); -- anon has no sign-in
   execute 'set local role anon';
   select count(*) into v from public.flashcard_sets where user_id is null;
-  reset role; insert into results values (10, 'anon reads ownerless (legacy) sets', '>0 (allowed)', v::text);
+  reset role; insert into results values (10, 'anon reads ownerless (legacy) sets', '0', v::text);
 end $$;
 select n, check_name, expected, actual from results order by n;
 rollback;

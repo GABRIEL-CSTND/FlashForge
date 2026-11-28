@@ -45,6 +45,7 @@ soon as it's applied.
 | `20261121000200_class_content_categories.sql` | #115 (PR #122) | Found applied on 2026-11-21, before the PR was merged |
 | `20261121000300_class_source_material.sql` | #116 (PR #123) | 2026-11-21 |
 | `20261121000400_class_file_posts.sql` | #112 (PR #124) | 2026-11-21 |
+| `20261128000100_remove_ownerless_sets.sql` | #131 | Pending release (deletes ownerless sets, sets `user_id NOT NULL`, scopes set RLS to owner/classes/admins) |
 
 Add a row here whenever you apply a new migration.
 

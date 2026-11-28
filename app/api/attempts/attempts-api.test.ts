@@ -110,7 +110,7 @@ describe('POST /api/attempts', () => {
     ['an assignment for a different set', 'xFlash'],
     ['a malformed assignment id', 'not-a-uuid'],
   ] as const)('records %s as private', async (_label, key) => {
-    if (key === 'xFlash') db.rows.assignments.push({ id: ASSIGNMENTS.xFlash, class_id: CLASSES.x, set_id: SETS.legacy, due_at: null, created_at: '2026-10-20T00:00:00Z' });
+    if (key === 'xFlash') db.rows.assignments.push({ id: ASSIGNMENTS.xFlash, class_id: CLASSES.x, set_id: SETS.privateFlash, due_at: null, created_at: '2026-10-20T00:00:00Z' });
     const assignmentId = key === undefined ? undefined : key === 'not-a-uuid' ? key : ASSIGNMENTS[key];
     const res = await post('stu', { id: fakeUuid(), setId: SETS.mc, assignmentId, answers: mcAnswers });
     expect(res.status).toBe(201);
@@ -120,6 +120,7 @@ describe('POST /api/attempts', () => {
   it.each([
     ['an assigned set when not in the class', 'out' as Token, SETS.mc],
     ["the owner's private set", 'stu' as Token, SETS.privateFlash],
+    ['an ownerless legacy set (#131)', 'out' as Token, SETS.legacy],
     ['a set that does not exist', 'stu' as Token, fakeUuid()],
   ])('will not record %s (404)', async (_label, token, setId) => {
     const res = await post(token, { id: fakeUuid(), setId, answers: [{ cardId: CARDS.p1, result: 'got' }] });
@@ -127,11 +128,11 @@ describe('POST /api/attempts', () => {
     expect(db.rows.attempts).toEqual([]);
   });
 
-  it('records the owner studying their own set, and anyone studying a legacy set', async () => {
+  it('records the owner studying their own set, and rejects ownerless legacy sets (#131)', async () => {
     const own = await post('owner', { id: fakeUuid(), setId: SETS.privateFlash, answers: [{ cardId: CARDS.p1, result: 'got' }, { cardId: CARDS.p2, result: 'missed' }] });
     expect(own.body.attempt).toMatchObject({ studyType: 'flashcard', score: 1, total: 2, assignmentId: null });
     const legacy = await post('out', { id: fakeUuid(), setId: SETS.legacy, answers: [{ cardId: CARDS.l1, result: null }] });
-    expect(legacy.body.attempt).toMatchObject({ score: 0, total: 1 });
+    expect(legacy).toEqual({ status: 404, body: { error: 'Study set not found.' } });
   });
 
   it('creates exactly one attempt when the same finish is sent twice', async () => {
@@ -145,8 +146,8 @@ describe('POST /api/attempts', () => {
 
   it("won't let someone reuse another user's attempt id (409)", async () => {
     const id = fakeUuid();
-    await post('stu', { id, setId: SETS.legacy, answers: [{ cardId: CARDS.l1, result: 'got' }] });
-    const res = await post('stu2', { id, setId: SETS.legacy, answers: [{ cardId: CARDS.l1, result: 'missed' }] });
+    await post('stu', { id, setId: SETS.mc, answers: mcAnswers });
+    const res = await post('stu2', { id, setId: SETS.mc, answers: mcAnswers });
     expect(res.status).toBe(409);
     expect(db.rows.attempts).toHaveLength(1);
     expect(db.rows.attempts[0].user_id).toBe(USERS.stu.id);

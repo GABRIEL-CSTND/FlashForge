@@ -1304,7 +1304,7 @@ runs the game**, and the browsers talk through Supabase Realtime.
 
 | Table | Columns | Notes |
 |---|---|---|
-| `flashcard_sets` | `id`, `user_id` → `auth.users`, `title`, `source_filename`, `study_type`, `created_at` | `user_id` is null for legacy sets made before sign-in was required |
+| `flashcard_sets` | `id`, `user_id` → `auth.users` (not null, #131), `title`, `source_filename`, `study_type`, `created_at` | Every set has an owner (#131); orphaned/legacy ownerless sets were removed |
 | `flashcards` | `id`, `set_id` → `flashcard_sets` (cascade), `question`, `answer`, `options` (jsonb: 4 choices for multiple choice, `["True","False"]` for true or false, null for flashcards and identification; in a mixed quiz this is what tells the parts apart), `explanation` (1–300 chars, true or false only, #68), `source_excerpt` and `source_location` (the quote a card was made from and its page or line, #21; since `20261121000310`, only written: a trigger keeps them in `private.card_source_quotes`, #116), `position` | Indexed on `set_id`. Ids stay the same when a card is edited (#55); a card's quote is cleared when its question or answer changes |
 | `private.card_source_quotes` | `card_id` → `flashcards` (cascade, deferred), `excerpt`, `location` | The cards' quotes, once `20261121000310` is applied (#116). No grants: only `study_set_source()` reads them, and a trigger on `flashcards` writes them |
 | `profiles` | `id` → `auth.users` (cascade), `display_name`, `role`, `role_chosen_at`, `created_at` | `role_chosen_at` is for the sign-up role choice (#52) |
@@ -1350,8 +1350,7 @@ runs the game**, and the browsers talk through Supabase Realtime.
 
 | Table | Who | Can |
 |---|---|---|
-| `flashcard_sets` | Owner | Read, rename, delete their own sets. Renaming is the only change they can make: signed-in users may update the `title` column only (PR #84) |
-| `flashcard_sets` | Anyone | Read legacy sets with no owner |
+| `flashcard_sets` | Owner | Read, rename, delete their own sets. Renaming is the only change they can make: signed-in users may update the `title` column only (PR #84); ownerless legacy sets were removed and `user_id` is `NOT NULL` (#131) |
 | `flashcard_sets` | Students in a class | Read a set while it's assigned to a class they're in (#56) |
 | `flashcard_sets` | Admins | Read every set, and so its cards (#61); no extra write rights |
 | `flashcard_sets` | Anyone | **Insert: nobody** (saves go through `/api/save-set`); browsers have no insert grant either (PR #84) |
