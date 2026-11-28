@@ -90,8 +90,34 @@ describe('upload page options', () => {
     expect(word('How hard').textContent).toBe('medium');
     expect(word('What kind').textContent).toBe('flashcards');
     const counts = slips('How many');
-    expect(counts.getAllByRole('button').map((b) => b.textContent)).toEqual(['5', '10', '15', '20', '30']);
+    expect(counts.getAllByRole('button', { name: /^\d+$/ }).map((b) => b.textContent)).toEqual(['5', '10', '15', '20', '30', '40', '50']);
     expect(counts.getByRole('button', { name: '10' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('applies a whole custom count and sends it with the generation request (#104)', async () => {
+    render(<UploadPage />);
+    const counts = slips('How many');
+    const input = counts.getByRole('spinbutton', { name: 'Custom count' });
+    const apply = counts.getByRole('button', { name: 'Apply' }) as HTMLButtonElement;
+    for (const invalid of ['', '4', '51', '49.5']) {
+      fireEvent.change(input, { target: { value: invalid } });
+      expect(apply.disabled).toBe(true);
+      fireEvent.keyDown(input, { key: 'Enter' });
+      expect(word('How many').textContent).toBe('10');
+    }
+    fireEvent.change(input, { target: { value: '49' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(word('How many').textContent).toBe('49');
+    expect(screen.queryByRole('group', { name: 'How many' })).toBeNull();
+    expect(document.activeElement).toBe(word('How many'));
+    const reopened = slips('How many');
+    expect(document.activeElement).toBe(reopened.getByRole('spinbutton', { name: 'Custom count' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    chooseFile();
+    make();
+    expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
+    expect(sentForms).toEqual([{ file: 'file:notes.txt', studyType: 'flashcard', count: '49', difficulty: 'medium' }]);
   });
 
   it('offers true or false, and says what each kind of deck is (#68)', () => {
@@ -238,13 +264,13 @@ describe('upload page options', () => {
   it('sends the chosen kind of deck and number of cards with the file (#65)', async () => {
     render(<UploadPage />);
     pick('What kind', 'Multiple choice');
-    pick('How many', '20');
-    expect(word('How many').textContent).toBe('20');
+    pick('How many', '40');
+    expect(word('How many').textContent).toBe('40');
     expect(word('What kind').textContent).toBe('multiple-choice questions');
     chooseFile();
     make();
     expect(await screen.findByText('Fluid inside the chloroplast')).toBeTruthy();
-    expect(sentForms).toEqual([{ file: 'file:notes.txt', studyType: 'multiple_choice', count: '20', difficulty: 'medium' }]);
+    expect(sentForms).toEqual([{ file: 'file:notes.txt', studyType: 'multiple_choice', count: '40', difficulty: 'medium' }]);
   });
 });
 

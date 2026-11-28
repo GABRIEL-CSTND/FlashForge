@@ -2,7 +2,7 @@
 
 Upload your notes and get an AI-generated study guide in seconds.
 
-FlashForge turns a PDF (scanned ones too), Word, PowerPoint or TXT file, a photo of your notes, notes pasted as text, a link to a web page, or just a **topic** (looked up on Wikipedia) into a study guide of 5 to 30 questions (10 by
+FlashForge turns a PDF (scanned ones too), Word, PowerPoint or TXT file, a photo of your notes, notes pasted as text, a link to a web page, or just a **topic** (looked up on Wikipedia) into a study guide of 5 to 50 questions (10 by
 default): **identification-style flashcards** (a clue on the front, a 1–4 word term on
 the back), **multiple-choice questions**, **true-or-false statements** with the
 correction shown after each false one, or a **mixed quiz** set out like a school exam

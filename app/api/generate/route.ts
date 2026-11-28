@@ -36,8 +36,8 @@ import {
 import { addToHistory } from '@/lib/history';
 
 export const runtime = 'nodejs';
-// Model retries are capped at ~75s (see lib/gemini.ts); leave headroom for upload + PDF parsing.
-export const maxDuration = 90;
+// Model retries are capped at 125s for 50 cards. Leave room for upload and parsing.
+export const maxDuration = 150;
 
 // `units` says how the text splits into PDF pages or text lines, so a card can say
 // where its quote is (lib/source-quotes.ts). Word and PowerPoint files have no
@@ -113,7 +113,7 @@ async function generate(
     const studyTypeRaw = formData.get('studyType');
     const studyType = isStudyType(studyTypeRaw) ? studyTypeRaw : 'flashcard';
     log.studyType = studyType;
-    // How many questions (#65): 5 to 30, otherwise the default 10.
+    // Use the shared count range and default (#65, #104).
     const count = parseQuestionCount(formData.get('count'));
     // Easy, medium or hard (#79); anything else is medium.
     const difficulty = parseDifficulty(formData.get('difficulty'));

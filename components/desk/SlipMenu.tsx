@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ComponentType } from 'react';
 
 export interface SlipOption<T extends string | number> {
   value: T;
@@ -22,6 +22,7 @@ export default function SlipMenu<T extends string | number>({
   options,
   value,
   onChange,
+  extra: Extra,
   disabled = false,
 }: {
   // The question the slips answer, e.g. "How many".
@@ -31,6 +32,7 @@ export default function SlipMenu<T extends string | number>({
   options: SlipOption<T>[];
   value: T;
   onChange: (value: T) => void;
+  extra?: ComponentType<{ value: T; onPick: (value: T) => void }>;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -51,24 +53,39 @@ export default function SlipMenu<T extends string | number>({
     };
     document.addEventListener('pointerdown', onPointer);
     document.addEventListener('keydown', onKey);
-    // Opening puts focus on the slip that's chosen now.
-    menuRef.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus();
+    // For a custom value, focus its input when no preset slip is selected.
+    const menu = menuRef.current;
+    (menu?.querySelector<HTMLElement>('[aria-pressed="true"]') ?? menu?.querySelector('input'))?.focus();
     return () => {
       document.removeEventListener('pointerdown', onPointer);
       document.removeEventListener('keydown', onKey);
     };
   }, [open]);
 
-  // The slips are centered on their word; near the edge of a phone screen they
-  // move back inside it.
+  // Keep the slips in reach near the edges of the screen.
   useLayoutEffect(() => {
     const menu = menuRef.current;
-    if (!open || !menu) return;
+    const word = wordRef.current;
+    if (!open || !menu || !word) return;
     menu.style.marginLeft = '';
     const box = menu.getBoundingClientRect();
     const margin = 8;
     const shift = box.left < margin ? margin - box.left : box.right > window.innerWidth - margin ? window.innerWidth - margin - box.right : 0;
     if (shift) menu.style.marginLeft = `${Math.round(shift)}px`;
+    if (box.top < margin) {
+      const trigger = word.getBoundingClientRect();
+      const roomAbove = box.bottom - margin;
+      const roomBelow = window.innerHeight - trigger.bottom - 10 - margin;
+      if (roomBelow > roomAbove) {
+        menu.style.bottom = 'auto';
+        menu.style.top = 'calc(100% + 10px)';
+      }
+      const room = Math.max(roomAbove, roomBelow);
+      if (box.height > room) {
+        menu.style.maxHeight = `${Math.max(0, Math.floor(room))}px`;
+        menu.style.overflowY = 'auto';
+      }
+    }
   }, [open]);
 
   const pick = (next: T) => {
@@ -80,9 +97,10 @@ export default function SlipMenu<T extends string | number>({
   // The slips fan out upwards, so ↑ moves away from the word and ↓ back.
   const onMenuKey = (e: React.KeyboardEvent) => {
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-    e.preventDefault();
-    const slips = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+    const slips = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('button[aria-pressed]') ?? [])];
     const at = slips.indexOf(document.activeElement as HTMLButtonElement);
+    if (at === -1) return;
+    e.preventDefault();
     const next = e.key === 'ArrowUp' ? Math.min(slips.length - 1, at + 1) : Math.max(0, at - 1);
     slips[next]?.focus();
   };
@@ -131,6 +149,7 @@ export default function SlipMenu<T extends string | number>({
               )}
             </button>
           ))}
+          {Extra && <Extra value={value} onPick={pick} />}
         </span>
       )}
     </span>

@@ -82,6 +82,12 @@ with the next release of `dev` to `main`.
 
 ### Changed
 
+- **Custom deck sizes, up to 50 cards (#104):** the Make Card's *how many* slips add 40
+  and 50 to the presets and take any whole number from 5 to 50 typed in (it was 5 to 30).
+  Decks over 30 get more time: `/api/generate` may run for 150 seconds (was 90), each
+  question over 30 adds 2.5 seconds to the AI's budget and 1.5 seconds to each model's
+  timeout, and a timeout on such a deck goes straight to the next model. The page says a
+  deck that big can take a couple of minutes.
 - **Assignments, quizzes and learning materials (#115):** a teacher shares a set with a class
   as an assignment, a quiz or a learning material, and can change it later on the class
   page; the class page and *My classes* list the three apart. Assignments and quizzes have

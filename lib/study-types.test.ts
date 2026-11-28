@@ -9,12 +9,13 @@ describe('parseQuestionCount (#65)', () => {
     }
   });
 
-  it('accepts any whole number from 5 to 30', () => {
+  it('accepts any whole number from 5 to 50', () => {
     expect(parseQuestionCount('7')).toBe(7);
-    expect(parseQuestionCount(' 25 ')).toBe(25);
+    expect(parseQuestionCount(' 49 ')).toBe(49);
+    expect(parseQuestionCount('50')).toBe(50);
   });
 
-  it.each([null, undefined, '', 'abc', '4', '31', '1000', '-10', '10.5', '1e1', 12.5, {}])(
+  it.each([null, undefined, '', 'abc', '4', '51', '1000', '-10', '10.5', '1e1', 12.5, {}])(
     'falls back to 10 for %j',
     (value) => {
       expect(parseQuestionCount(value)).toBe(10);

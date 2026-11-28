@@ -87,7 +87,7 @@ export default function GuidePage() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-brass-ink">Step 2</span>
             <h3 className="font-medium text-sm text-ink">Customize with the Make Card</h3>
             <p className="text-xs text-muted leading-relaxed">
-              Click the words in &ldquo;Make me 10 medium flashcards&rdquo; to fan out paper slips. Choose your card count (5–30), difficulty (Easy, Medium, Hard), and study format.
+              Click the words in &ldquo;Make me 10 medium flashcards&rdquo; to fan out paper slips. Pick a preset or enter a custom card count from 5 to 50, then choose the difficulty and study format.
             </p>
           </div>
           <div className="paper rounded-lg p-4 space-y-1.5 border border-ink/10">
