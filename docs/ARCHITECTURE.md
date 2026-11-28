@@ -117,7 +117,8 @@ Every page sits on **the desk** (desk redesign, phase 1, on `UI_changes`). The r
 
 - **Card box** (`components/desk/CardBox.tsx`), at the top left, holds the navigation that
   used to be the upload page's header links. Its front is the brass **FlashForge** button
-  (to `/`, a new study guide), **Play live** (`/play`, #26, for everyone; on the front
+  (to `/`, a new study guide), the students' notification **bell** (#110, see "Student
+  notifications" below), **Play live** (`/play`, #26, for everyone; on the front
   because a sixth tab wouldn't fit a phone) and a **full-screen** button
   (`components/desk/FullscreenToggle.tsx`, #126), which puts the whole page in full screen
   and back with the browser's Fullscreen API. Browsers without it (Safari on iPhone, for
