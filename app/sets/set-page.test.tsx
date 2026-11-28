@@ -121,6 +121,31 @@ describe('study set page', () => {
     expect(screen.getByRole('heading', { name: 'Edit cards' })).toBeTruthy();
   });
 
+  it('stays in the Enter cards tab on the set page across consecutive card saves without switching back to study view (#105)', async () => {
+    state.apiResult = {
+      ok: true,
+      status: 200,
+      data: {
+        cards: [
+          { id: CARD, question: 'Pigment that absorbs light', answer: 'Chlorophyll', options: null, position: 0 },
+          { id: '00000000-0000-4000-8000-000000000099', question: 'Gas released', answer: 'Oxygen', options: null, position: 1 },
+        ],
+      },
+    };
+    render(<SetPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit cards' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Enter cards' }));
+
+    fireEvent.change(screen.getByLabelText('Question / Definition'), { target: { value: 'Gas released' } });
+    fireEvent.change(screen.getByLabelText('Answer / Term'), { target: { value: 'Oxygen' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save card' }));
+
+    expect((await screen.findByTestId('card-saved-badge')).textContent).toContain('Card saved!');
+    expect(screen.getByRole('tab', { name: 'Enter cards' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('heading', { name: 'Edit cards' })).toBeTruthy();
+    expect(screen.getByTestId('card-counter').textContent).toBe('2 cards');
+  });
+
   it.each([['teacher'], ['admin']])('offers a %s who owns the set "Assign to class"', async (role) => {
     state.role = role;
     render(<SetPage />);

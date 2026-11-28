@@ -232,3 +232,90 @@ describe('CardEditor: mixed quiz (#69)', () => {
     ]);
   });
 });
+
+describe('CardEditor: stay in the tab where cards are entered (#105)', () => {
+  it('stays locked on the Enter cards tab across multiple consecutive card additions, resets inputs, returns focus to the first input, and increments the card counter with a "Card saved!" confirmation', async () => {
+    render(<CardEditor studyType="flashcard" cards={FLASH} onSave={onSave} onCancel={onCancel} />);
+
+    // Initially 3 cards
+    expect(screen.getByTestId('card-counter').textContent).toBe('3 cards');
+
+    // Switch to the "Enter cards" tab
+    const enterTab = screen.getByRole('tab', { name: 'Enter cards' });
+    fireEvent.click(enterTab);
+    expect(enterTab.getAttribute('aria-selected')).toBe('true');
+
+    const questionInput = screen.getByLabelText('Question / Definition') as HTMLTextAreaElement;
+    const answerInput = screen.getByLabelText('Answer / Term') as HTMLInputElement;
+
+    // 1st consecutive card entry
+    fireEvent.change(questionInput, { target: { value: 'Organelle that produces ATP' } });
+    fireEvent.change(answerInput, { target: { value: 'Mitochondria' } });
+    fireEvent.submit(screen.getByRole('form', { name: 'Enter a new card' }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenLastCalledWith(
+      [
+        { id: FLASH[0].id, question: FLASH[0].question, answer: FLASH[0].answer },
+        { id: FLASH[1].id, question: FLASH[1].question, answer: FLASH[1].answer },
+        { id: FLASH[2].id, question: FLASH[2].question, answer: FLASH[2].answer },
+        { question: 'Organelle that produces ATP', answer: 'Mitochondria' },
+      ],
+      { keepOpen: true }
+    );
+
+    // Active tab stays locked on "Enter cards" (no redirect or view switch)
+    expect(enterTab.getAttribute('aria-selected')).toBe('true');
+    expect(onCancel).not.toHaveBeenCalled();
+
+    // Inputs are reset to empty
+    expect(questionInput.value).toBe('');
+    expect(answerInput.value).toBe('');
+
+    // Focus automatically returned to the first input field
+    expect(document.activeElement).toBe(questionInput);
+
+    // Inline confirmation badge and incremented counter (3 -> 4 cards)
+    expect(screen.getByTestId('card-saved-badge').textContent).toContain('Card saved!');
+    expect(screen.getByTestId('card-counter').textContent).toBe('4 cards');
+    expect(screen.getByRole('tab', { name: 'All cards (4)' })).toBeTruthy();
+
+    // 2nd consecutive card entry back-to-back
+    fireEvent.change(questionInput, { target: { value: 'Site of protein synthesis' } });
+    fireEvent.change(answerInput, { target: { value: 'Ribosome' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save card' }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
+    expect(onSave).toHaveBeenLastCalledWith(
+      expect.arrayContaining([
+        { question: 'Organelle that produces ATP', answer: 'Mitochondria' },
+        { question: 'Site of protein synthesis', answer: 'Ribosome' },
+      ]),
+      { keepOpen: true }
+    );
+
+    // Still on the Enter cards tab, inputs reset, focus on first input, counter at 5 cards
+    expect(enterTab.getAttribute('aria-selected')).toBe('true');
+    expect(questionInput.value).toBe('');
+    expect(answerInput.value).toBe('');
+    expect(document.activeElement).toBe(questionInput);
+    expect(screen.getByTestId('card-saved-badge').textContent).toContain('Card saved!');
+    expect(screen.getByTestId('card-counter').textContent).toBe('5 cards');
+  });
+
+  it('keeps the active tab and input values if validation or saving fails', async () => {
+    render(<CardEditor studyType="flashcard" cards={FLASH} onSave={onSave} onCancel={onCancel} initialTab="enter" />);
+    const enterTab = screen.getByRole('tab', { name: 'Enter cards' });
+    expect(enterTab.getAttribute('aria-selected')).toBe('true');
+
+    const questionInput = screen.getByLabelText('Question / Definition') as HTMLTextAreaElement;
+    fireEvent.change(questionInput, { target: { value: 'Missing answer card' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save card' }));
+
+    expect(screen.getByRole('alert').textContent).toBe('Card 4: write an answer.');
+    expect(onSave).not.toHaveBeenCalled();
+    expect(enterTab.getAttribute('aria-selected')).toBe('true');
+    expect(questionInput.value).toBe('Missing answer card');
+    expect(screen.getByTestId('card-counter').textContent).toBe('3 cards');
+  });
+});

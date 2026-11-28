@@ -8,7 +8,7 @@ import { useUser } from '@/lib/auth';
 import StudyViewer, { type StudyResult } from '@/components/StudyViewer';
 import OpeningDeck from '@/components/desk/OpeningDeck';
 import { isUuid, newId } from '@/lib/ids';
-import CardEditor, { type CardPayload, type SaveResult } from '@/components/CardEditor';
+import CardEditor, { type CardPayload, type SaveOptions, type SaveResult } from '@/components/CardEditor';
 import { apiFetch, errorMessage } from '@/lib/api-client';
 import AssignPanel from '@/components/AssignPanel';
 import { useProfile } from '@/components/ProfileProvider';
@@ -208,7 +208,7 @@ function StudySet({ id, userId, assignmentId, classItemId }: {
     setIsEditingTitle(false);
   };
 
-  const saveCards = async (payload: CardPayload[]): Promise<SaveResult> => {
+  const saveCards = async (payload: CardPayload[], options?: SaveOptions): Promise<SaveResult> => {
     if (!set) return { ok: false, error: 'Set not found.', cardIndex: null };
     try {
       const res = await apiFetch(`/api/sets/${set.id}/cards`, { method: 'PUT', body: { cards: payload } });
@@ -228,7 +228,9 @@ function StudySet({ id, userId, assignmentId, classItemId }: {
           return { ...c, source: same ? was.source ?? null : null, sourceLocation: same ? was.sourceLocation ?? null : null };
         });
       });
-      setEditingCards(false);
+      if (!options?.keepOpen) {
+        setEditingCards(false);
+      }
       setViewerVersion((v) => v + 1);
       return { ok: true };
     } catch {
