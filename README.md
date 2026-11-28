@@ -137,7 +137,7 @@ components/
   study/QuizDesk.tsx    Quizzes on the desk: question card, Right / Wrong piles, a card for each part, score by part
   study/AnswerSlips.tsx A quiz question's answers as paper slips (A–D, or True and False)
   study/TypedForm.tsx   The line to type an answer on (Type mode, and Part III of a mixed quiz)
-  study/StudyTools.tsx  The brass Flip / Type / Match / Read aloud buttons and the Auto switch (quizzes: Read aloud only)
+  study/StudyTools.tsx  The brass Flip / Type / Match buttons and the Read aloud switch (quizzes: Read aloud only)
   study/logic.ts        Card and result types, scoring and reporting, what Read aloud says (both desks)
   study/sizes.ts        Text sizes that keep a clue, a question or a term on its card
   study/SourceNote.tsx  Where a card came from: its quote and page
@@ -196,7 +196,7 @@ lib/
   office-text.ts        Text from Word (.docx) and PowerPoint (.pptx) files, with zip-bomb limits (server-only)
   shrink-image.ts       Shrinks photos to 1,600 pixels before upload (browser-only)
   pending-guide.ts      Keeps an unsaved guide across the Google sign-in redirect (browser-only)
-  speech.ts             Reading cards aloud with the browser's built-in speech, and the Auto setting (browser-only)
+  speech.ts             Reading cards aloud with the browser's built-in speech, and the Read aloud setting (browser-only)
   web-page.ts           Fetches a linked web page safely (no private addresses) and keeps its main text (server-only)
   topic.ts              Looks a typed topic up on Wikipedia and returns the best article's text (server-only)
   answer-check.ts       Checking typed answers (capitals, accents, one typo), shared by the study screen and server

@@ -681,23 +681,33 @@ describe('read aloud (#77)', () => {
       }
     );
     localStorage.clear();
+    // Each test starts with Read aloud off. (Cleared storage alone isn't enough:
+    // the in-memory fallback for blocked storage would carry the last test's choice.)
+    localStorage.setItem('flashforge_read_aloud', '0');
   });
   afterEach(() => {
     vi.unstubAllGlobals();
     localStorage.clear();
   });
 
-  // "🔊 Read aloud" on the quiz screen, "Read aloud" among the desk's tools.
+  // One Read aloud switch (#117): on reads the card at once and each one after.
   const readAloud = () => click(/Read aloud/);
+  const readAloudButton = () => screen.getByRole('button', { name: /Read aloud/ });
   const TF = [
     { id: 't1', question: 'Chloroplasts make most of the ATP', answer: 'False', options: ['True', 'False'], explanation: 'Mitochondria do.' },
   ];
 
-  it('shows no read-aloud controls where the browser cannot speak', () => {
+  it('shows no read-aloud control where the browser cannot speak', () => {
     vi.unstubAllGlobals();
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
     expect(screen.queryByRole('button', { name: /Read aloud/ })).toBeNull();
+  });
+
+  it('has one Read aloud switch and no separate Auto button', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    expect(screen.getAllByRole('button', { name: /Read aloud/ })).toHaveLength(1);
     expect(screen.queryByRole('button', { name: 'Auto' })).toBeNull();
+    expect(readAloudButton().getAttribute('aria-pressed')).toBe('false');
   });
 
   it('reads the side of the flashcard that is showing', () => {
@@ -705,7 +715,6 @@ describe('read aloud (#77)', () => {
     readAloud();
     expect(spoken).toEqual(['Fluid inside the chloroplast']);
     flip();
-    readAloud();
     expect(spoken.at(-1)).toBe('Stroma');
   });
 
@@ -714,7 +723,6 @@ describe('read aloud (#77)', () => {
     readAloud();
     expect(spoken).toEqual(['Layer 3? Choices: Physical. Network. Transport.']);
     click('Transport');
-    readAloud();
     expect(spoken.at(-1)).toBe('Layer 3? Choices: Physical. Network. Transport. The answer is Network.');
   });
 
@@ -723,7 +731,6 @@ describe('read aloud (#77)', () => {
     readAloud();
     expect(spoken).toEqual(['True or false? Chloroplasts make most of the ATP.']);
     click('True');
-    readAloud();
     expect(spoken.at(-1)).toBe('True or false? Chloroplasts make most of the ATP. The answer is False. Mitochondria do.');
   });
 
@@ -736,11 +743,11 @@ describe('read aloud (#77)', () => {
     );
   });
 
-  it('reads each card by itself with Auto on, and remembers the choice', () => {
+  it('reads each card while it is on, stops when turned off, and remembers the choice', () => {
     const first = render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
     expect(spoken).toEqual([]);
-    click('Auto');
-    expect(screen.getByRole('button', { name: 'Auto' }).getAttribute('aria-pressed')).toBe('true');
+    readAloud();
+    expect(readAloudButton().getAttribute('aria-pressed')).toBe('true');
     expect(spoken).toEqual(['Fluid inside the chloroplast']);
     flip();
     expect(spoken.at(-1)).toBe('Stroma');
@@ -748,15 +755,26 @@ describe('read aloud (#77)', () => {
     expect(spoken.at(-1)).toBe('Enzyme that fixes CO2');
     expect(localStorage.getItem('flashforge_read_aloud')).toBe('1');
 
+    // Turning it off stops the reading, and the next card isn't read.
     const cancelsBefore = cancels;
-    first.unmount();
+    readAloud();
+    expect(readAloudButton().getAttribute('aria-pressed')).toBe('false');
     expect(cancels).toBeGreaterThan(cancelsBefore);
+    const spokenBefore = spoken.length;
+    flip();
+    sortTo('Got it');
+    expect(spoken).toHaveLength(spokenBefore);
+    expect(localStorage.getItem('flashforge_read_aloud')).toBe('0');
+
+    readAloud();
+    const cancelsOnUnmount = cancels;
+    first.unmount();
+    expect(cancels).toBeGreaterThan(cancelsOnUnmount);
 
     spoken = [];
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
     expect(spoken).toEqual(['Fluid inside the chloroplast']);
-    click('Auto');
-    expect(localStorage.getItem('flashforge_read_aloud')).toBe('0');
+    expect(readAloudButton().getAttribute('aria-pressed')).toBe('true');
   });
 
   it("reads the card that opens each part of a mixed quiz", () => {
@@ -767,7 +785,7 @@ describe('read aloud (#77)', () => {
 
   it('stops reading when the set is finished', () => {
     render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
-    click('Auto');
+    readAloud();
     click('Network');
     click('Next question →');
     expect(spoken.at(-1)).toBe('Reliable transport? Choices: UDP. TCP. ARP.');
@@ -781,7 +799,7 @@ describe('read aloud (#77)', () => {
 
   it('stops reading when the flashcard deck is finished', () => {
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
-    click('Auto');
+    readAloud();
     sortTo('Got it');
     sortTo('Got it');
     const spokenBefore = spoken.length;

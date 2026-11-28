@@ -205,7 +205,7 @@ score and report the same way (`components/study/logic.ts`, moved out of
 - **The layout.** On a laptop (a desk at least 960 px wide): the deck on the left with
   the set's name on a paper label (the page's `h1`), the save or rename controls and the
   pencil; the card in the middle; the Got it and Missed it piles on the right; the brass
-  tools (Flip, Type, Match, Read aloud, Auto) under the card. On a phone: the deck peeks
+  tools (Flip, Type, Match, Read aloud) under the card. On a phone: the deck peeks
   out above the card, the piles are two trays under it (Missed it on the left, Got it on
   the right), then the tools. The paper sheet steps aside for it
   (`.desk-sheet:has(.on-desk)` in `globals.css`).
@@ -273,7 +273,7 @@ layout hook (`useDeskLayout`), so it reads the same way on a laptop and a phone.
 - **Focus.** Picking an answer (or checking a typed one) moves focus to *Next*; *Next*
   moves it to the new card's words (a typed card puts it on the line to type on), and the
   last one to the finish note. The card's words show no focus ring, as they aren't a
-  control. Read aloud and Auto are under the card, as for flashcards; Auto also reads a
+  control. Read aloud is under the card, as for flashcards; it also reads a
   part's card (*Part 2. True or false. 3 questions.*).
 - **Scoring is unchanged:** the first time through, each answer is reported in the
   quiz's order (`reportAnswer()`), and the server scores it in `lib/attempts.ts`.
@@ -1078,19 +1078,20 @@ live database's keys were checked on 2026-11-14: they match the migrations.
 
 ### Reading cards aloud (#77)
 
-- **Read aloud** (a brass button under the card, on the flashcard and the quiz desk)
-  reads what's on screen: the
-  question (with the choices, or "True or false?" before a statement), the answer once a
-  flashcard is flipped, the right answer and any explanation once a question is answered,
-  in matching the round's clues, and a mixed quiz's part card (*Part 2. True or false. 3
-  questions.*). **Auto** reads each card as it appears and the answer when a card is
-  flipped; moving on, finishing or leaving stops the reading.
+- **Read aloud** (a brass switch under the card, on the flashcard and the quiz desk; one
+  control since #117, which merged the old Read aloud button and Auto switch). Turning it
+  on reads what's on screen straight away: the
+  question (with the choices, or "True or false?" before a statement), in matching the
+  round's clues, and a mixed quiz's part card (*Part 2. True or false. 3 questions.*).
+  While it's on, each card is read as it appears, the answer once a flashcard is flipped,
+  and the right answer and any explanation once a question is answered. Turning it off,
+  moving on, finishing or leaving stops the reading.
 - It uses the browser's built-in speech (`speechSynthesis` in `lib/speech.ts`): free, no AI
   requests, and on most phones it works offline. Where a browser can't speak, the
-  controls aren't shown. The voice is the device's default, at 0.95 speed.
-- Auto is remembered on the device (`localStorage`, falling back to the open page if
-  storage is blocked). Both values are read with `useSyncExternalStore`, so the page
-  renders the same on the server and in the browser.
+  control isn't shown. The voice is the device's default, at 0.95 speed.
+- The switch is remembered on the device (`localStorage` key `flashforge_read_aloud`,
+  falling back to the open page if storage is blocked). Both values are read with
+  `useSyncExternalStore`, so the page renders the same on the server and in the browser.
 
 ### Student results for teachers (#58)
 

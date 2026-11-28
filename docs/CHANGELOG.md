@@ -10,6 +10,12 @@ with the next release of `dev` to `main`.
 
 ### Fixed
 
+- **One Read aloud switch (#117):** the study desk had a Read aloud button and a separate
+  Auto switch that did nearly the same thing, which confused people. They're now one brass
+  **Read aloud** switch: turning it on reads the card on screen straight away, then each
+  card as it comes up and the answer once it's shown (on quizzes too, which before only
+  read the answer when asked); turning it off stops the reading. The choice is remembered
+  on the device as before.
 - **Database checks no longer depend on who's an admin:** `assignments-rls-check.sql`,
   `generation-limits-check.sql`, `generation-logs-check.sql` and `admin-users-check.sql`
   took the oldest live accounts as their students and non-admins. Once those accounts

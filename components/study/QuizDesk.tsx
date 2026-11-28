@@ -187,10 +187,12 @@ export default function QuizDesk({
       ? { w: flashcard.w, h: Math.max(290, Math.round(flashcard.w * 0.52)) }
       : { w: flashcard.w, h: Math.round(Math.min(420, Math.max(260, flashcard.w * 0.9))) };
 
-  // Read aloud (#77). With Auto on, each card is read as it comes to the
-  // middle. Moving on stops what's being read.
+  // Read aloud (#77, one switch since #117). While it's on, each card is read
+  // as it comes to the middle, and again with the right answer (and any
+  // correction) once it's answered. Moving on stops what's being read.
   const speechAvailable = useCanSpeak();
   const [autoRead, setAutoRead] = useAutoRead();
+  const answered = answer ? 1 : 0;
   const speech = !sheet
     ? ''
     : sheet.kind === 'part'
@@ -199,9 +201,9 @@ export default function QuizDesk({
   useEffect(() => {
     if (autoRead && speech) speak(speech);
     else stopSpeaking();
-    // Only when another card is shown, not again after each answer.
+    // Only when another card is shown or the card is answered.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRead, finished, deck.pos, run]);
+  }, [autoRead, finished, deck.pos, run, answered]);
   useEffect(() => stopSpeaking, []);
 
   // Keyboard focus follows the work: to Next once a question is answered, to
@@ -541,7 +543,7 @@ export default function QuizDesk({
   const pencil = onEdit ? <Pencil onClick={onEdit} /> : null;
   const tools =
     finished || !speechAvailable ? null : (
-      <StudyTools speechAvailable={speechAvailable} onSpeak={() => speak(speech)} autoRead={autoRead} onAutoRead={setAutoRead} />
+      <StudyTools speechAvailable={speechAvailable} readAloud={autoRead} onReadAloud={setAutoRead} />
     );
 
   if (kind === 'phone') {

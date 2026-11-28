@@ -50,9 +50,9 @@ const ICONS: Record<FlashcardMode | 'speak', ReactNode> = {
 
 // A round brass button with its name underneath. The whole thing is the
 // button, so the touch target is the icon and the word.
-function Tool({ label, icon, pressed, onClick }: { label: string; icon: ReactNode; pressed?: boolean; onClick: () => void }) {
+function Tool({ label, icon, pressed, title, onClick }: { label: string; icon: ReactNode; pressed?: boolean; title?: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} aria-pressed={pressed} className="desk-tool flex w-[68px] flex-col items-center gap-1.5 text-xs font-medium text-on-desk/85">
+    <button type="button" onClick={onClick} aria-pressed={pressed} title={title} className="desk-tool flex w-[68px] flex-col items-center gap-1.5 text-xs font-medium text-on-desk/85">
       <span aria-hidden="true" className={`inline-flex h-[52px] w-[52px] items-center justify-center rounded-full ${pressed ? 'brass' : 'brass-ring'}`}>
         {icon}
       </span>
@@ -61,23 +61,24 @@ function Tool({ label, icon, pressed, onClick }: { label: string; icon: ReactNod
   );
 }
 
-// Flip, Type and Match (changing one starts the deck over), then Read aloud
-// and its Auto switch (#77) where the browser can speak. Quizzes have one way
-// to answer, so they leave out `mode` and get only Read aloud.
+// Flip, Type and Match, then Read aloud (#77) where the browser can speak.
+// Read aloud is one switch (#117; it used to be a Read aloud button and a
+// separate Auto switch): turning it on reads the card on screen straight away,
+// then each card as it comes up and the answer once it's shown; turning it off
+// stops the reading. Quizzes have one way to answer, so they leave out `mode`
+// and get only Read aloud.
 export default function StudyTools({
   mode,
   onMode,
   speechAvailable,
-  onSpeak,
-  autoRead,
-  onAutoRead,
+  readAloud,
+  onReadAloud,
 }: {
   mode?: FlashcardMode;
   onMode?: (mode: FlashcardMode) => void;
   speechAvailable: boolean;
-  onSpeak: () => void;
-  autoRead: boolean;
-  onAutoRead: (on: boolean) => void;
+  readAloud: boolean;
+  onReadAloud: (on: boolean) => void;
 }) {
   return (
     <div className="flex flex-wrap items-start justify-center gap-x-2 gap-y-3 sm:gap-x-4">
@@ -89,18 +90,13 @@ export default function StudyTools({
         </div>
       )}
       {speechAvailable && (
-        <div className="flex items-start gap-1">
-          <Tool label="Read aloud" icon={ICONS.speak} onClick={onSpeak} />
-          <button
-            type="button"
-            onClick={() => onAutoRead(!autoRead)}
-            aria-pressed={autoRead}
-            title="Read each card aloud as it appears"
-            className={`mt-1 min-h-11 rounded-full px-3.5 text-xs font-semibold ${autoRead ? 'brass' : 'brass-ring'}`}
-          >
-            Auto
-          </button>
-        </div>
+        <Tool
+          label="Read aloud"
+          icon={ICONS.speak}
+          pressed={readAloud}
+          title={readAloud ? 'Reading each card aloud. Click to stop.' : 'Read each card aloud as it comes up'}
+          onClick={() => onReadAloud(!readAloud)}
+        />
       )}
     </div>
   );

@@ -95,11 +95,12 @@ describe('user guide page (#25)', () => {
     expect(normalizeJoinCode(example)).not.toBeNull();
   });
 
-  it('says when the daily limit resets and what Auto read-aloud does, without promising what the app lacks', () => {
+  it('says when the daily limit resets and what Read Aloud does, without promising what the app lacks', () => {
     render(<GuidePage />);
     const text = document.body.textContent!;
     expect(text).toContain('resets at midnight Pacific time (3 PM in the Philippines)');
-    expect(text).toContain('Turn on Auto to have each card read aloud as it comes up');
+    expect(text).toContain('Turn on the brass Read Aloud button to have each card read aloud as it comes up');
+    expect(text).not.toMatch(/Turn on Auto/);
     expect(text).not.toMatch(/spaced repetition|every 24 hours|hands-free|cookie banners/i);
   });
 
