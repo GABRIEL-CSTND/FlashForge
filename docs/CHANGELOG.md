@@ -19,6 +19,15 @@ with the next release of `dev` to `main`.
 
 ### Added
 
+- **Student notification bell for teacher posts (#110):** signed-in students get a bell on
+  the front of the card box, with a badge counting the assignments, quizzes, learning
+  materials and class files their teachers posted that they haven't opened. It checks when
+  a page opens, when the bell is opened and when the window gets focus, so a new post shows
+  up the next time a student opens a page or comes back to the tab. It isn't live yet:
+  that needs a migration (see ARCHITECTURE, "Student notifications"). The bell opens a
+  list of recent posts with times, class and teacher; picking one opens it and marks it
+  read, and *Mark all as read* clears the badge. What's been read is remembered on that
+  device (`localStorage`). On a phone the list spans the front of the card box.
 - **View source file (#111):** a guide made from a file keeps the file, so its owner can open
   it again from History or the saved set: PDFs and photos show in the page, TXT, Word and
   PowerPoint files as text, and any can be downloaded. The new deck has it too, right after
