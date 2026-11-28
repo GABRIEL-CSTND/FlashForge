@@ -9,6 +9,7 @@ import { speak, stopSpeaking, useAutoRead, useCanSpeak } from '@/lib/speech';
 import { matchRounds, type FlashcardMode, type StudyMode } from '@/lib/study-types';
 import { cardSpeech, isCorrect, reportAnswer, sameTerm, type CardAnswer, type FlashcardMark, type Interaction, type StudyItem, type StudyResult } from './logic';
 import MatchBoard from './MatchBoard';
+import PileModal from './PileModal';
 import SourceNote from './SourceNote';
 import StudyTools from './StudyTools';
 import TypedForm from './TypedForm';
@@ -102,6 +103,8 @@ export default function FlashcardDesk({
   const [draft, setDraft] = useState('');
   // The card on its way to a pile keeps its words until it lands.
   const [flying, setFlying] = useState<number | null>(null);
+  // Which pile ("got" or "missed") is currently open in the inspection modal.
+  const [viewingPile, setViewingPile] = useState<Pile | null>(null);
   // Bumped on every restart and every new pass, so typed cards and Match
   // rounds start fresh.
   const [run, setRun] = useState(0);
@@ -223,6 +226,7 @@ export default function FlashcardDesk({
   // Got it pile stays where it is.
   const dealMissed = () => {
     if (!finished || missedList.length === 0) return;
+    setViewingPile(null);
     setDeck({ order: missedList, pos: 0, pile: Object.fromEntries(gotList.map((i) => [i, 'got' as const])), landed: gotList, practice: true });
     setAnswers({});
     setFlipped(false);
@@ -244,6 +248,7 @@ export default function FlashcardDesk({
 
   // ← and → sort the card while the card or a pile has focus.
   const onDeskKey = (e: React.KeyboardEvent) => {
+    if (viewingPile !== null) return;
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
     if (reviewing || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     if (!finished && mode !== 'flip') return;
@@ -280,6 +285,7 @@ export default function FlashcardDesk({
   };
 
   const restart = () => {
+    setViewingPile(null);
     setDeck(freshDeck(count));
     setAnswers({});
     setReviewPos(null);
@@ -301,6 +307,8 @@ export default function FlashcardDesk({
   const placed = slots ?? {};
   const visibleGot = gotList.filter((index) => index !== current);
   const visibleMissed = missedList.filter((index) => index !== current);
+  const topGot = visibleGot.at(-1);
+  const topMissed = visibleMissed.at(-1);
   const place = (i: number): { spot: Spot | null; z: number; shown: boolean; turned: boolean } => {
     if (i === current) return { spot: middleSpot(placed, lifted), z: 300, shown: true, turned: shownFlipped };
     const pile = deck.pile[i];
@@ -375,6 +383,45 @@ export default function FlashcardDesk({
     );
   };
 
+  // Top card face rendered on the "Got it" and "Missed it" piles (#149):
+  // displays the answer/definition text with clean typography, padding, and
+  // overflow truncation so it fits neatly inside the scaled card surface.
+  const pileCardFace = (i: number, pile: Pile) => {
+    const c = cards[i];
+    return (
+      <div
+        data-testid={`pile-top-card-${pile}`}
+        data-pile-top={pile}
+        onClick={() => setViewingPile(pile)}
+        className={`flex h-full cursor-pointer flex-col justify-between gap-2 text-center transition-opacity hover:opacity-95 ${pad}`}
+      >
+        <div className="flex items-baseline justify-between gap-3 text-left">
+          <span
+            className={`text-xs font-bold uppercase tracking-[0.16em] ${
+              pile === 'got' ? 'text-brass-ink' : 'text-pencil'
+            }`}
+          >
+            {pile === 'got' ? 'Got it' : 'Missed it'}
+          </span>
+          <span className="text-[12.5px] tabular-nums text-muted">
+            {i + 1}/{count}
+          </span>
+        </div>
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-1">
+          <p
+            className="line-clamp-3 overflow-hidden text-ellipsis font-serif font-semibold leading-[1.15] tracking-[-0.01em] text-ink [overflow-wrap:anywhere]"
+            style={{ fontSize: termSize(c.answer, kind, false) }}
+          >
+            {c.answer}
+          </p>
+        </div>
+        <p className="truncate text-[13px] font-medium text-muted">
+          Click to view pile
+        </p>
+      </div>
+    );
+  };
+
   // Every card, drawn where it lies. Only the card in the middle is there for
   // screen readers; the rest are paper on the desk.
   const cardLayer = (
@@ -382,6 +429,9 @@ export default function FlashcardDesk({
       {cards.map((_, i) => {
         const { spot, z, shown, turned } = place(i);
         const isCurrent = i === current;
+        const isTopGot = i === topGot;
+        const isTopMissed = i === topMissed;
+        const isTopOfPile = isTopGot || isTopMissed;
         const isFlying = i === flying && !isCurrent;
         return (
           <div
@@ -394,14 +444,24 @@ export default function FlashcardDesk({
               transform: spot ? spotTransform(spot, size) : undefined,
               zIndex: z,
               opacity: spot && shown ? 1 : 0,
-              pointerEvents: isCurrent && mode === 'type' ? 'auto' : 'none',
+              pointerEvents: (isCurrent && mode === 'type') || isTopOfPile ? 'auto' : 'none',
               willChange: isCurrent || isFlying ? 'transform' : undefined,
             }}
           >
             <PaperCard
               flipped={turned}
-              front={isCurrent || isFlying ? front(i, isCurrent) : null}
-              back={isCurrent ? (reviewing || backSeen ? back(i, true) : null) : isFlying ? back(i, false) : null}
+              front={isCurrent ? front(i, true) : isFlying && !isTopOfPile ? front(i, false) : null}
+              back={
+                isCurrent
+                  ? reviewing || backSeen
+                    ? back(i, true)
+                    : null
+                  : isTopOfPile
+                    ? pileCardFace(i, isTopGot ? 'got' : 'missed')
+                    : isFlying
+                      ? back(i, false)
+                      : null
+              }
             />
           </div>
         );
@@ -443,32 +503,61 @@ export default function FlashcardDesk({
   const piles =
     kind === 'laptop' ? (
       <div role="group" aria-label="Did you know it?" className="flex flex-col items-center gap-7 pt-2">
-        {(['got', 'missed'] as const).map((pile, k) => (
-          <div key={pile} className="flex flex-col items-start">
-            <div
-              aria-hidden="true"
-              className={`paper relative z-20 -mb-3 ml-3.5 rounded px-3.5 py-1 text-[13.5px] font-semibold text-ink shadow-[0_6px_12px_-8px_rgb(0_0_0/0.6)] ${k ? 'rotate-[1.5deg]' : '-rotate-2'}`}
-            >
-              {pileWord(pile)}
-              <span className={countClass(pile, false)}>{pile === 'got' ? got : missed}</span>
+        {(['got', 'missed'] as const).map((pile, k) => {
+          const countInPile = pile === 'got' ? got : missed;
+          return (
+            <div key={pile} className="flex flex-col items-start">
+              <button
+                type="button"
+                onClick={() => countInPile > 0 && setViewingPile(pile)}
+                disabled={countInPile === 0}
+                aria-label={`View ${pileWord(pile)} pile (${cardsWord(countInPile)})`}
+                data-testid={`view-pile-${pile}`}
+                className={`paper relative z-20 -mb-3 ml-3.5 inline-flex items-center gap-1 rounded px-3.5 py-1 text-[13.5px] font-semibold text-ink shadow-[0_6px_12px_-8px_rgb(0_0_0/0.6)] transition-transform ${
+                  countInPile > 0 ? 'cursor-pointer hover:-translate-y-0.5 hover:ring-2 hover:ring-brass' : 'cursor-default'
+                } ${k ? 'rotate-[1.5deg]' : '-rotate-2'}`}
+              >
+                <span>{pileWord(pile)}</span>
+                <span className={countClass(pile, false)}>{countInPile}</span>
+                {countInPile > 0 && (
+                  <span className="ml-1 text-[11px] font-normal text-brass-ink underline decoration-brass/60 underline-offset-2">
+                    View
+                  </span>
+                )}
+              </button>
+              {pileButton(pile)}
             </div>
-            {pileButton(pile)}
-          </div>
-        ))}
+          );
+        })}
       </div>
     ) : (
       <div role="group" aria-label="Did you know it?" className="mt-4 grid w-full grid-cols-2 gap-2">
-        {(['missed', 'got'] as const).map((pile) => (
-          <div key={pile}>
-            {pileButton(
-              pile,
-              <span aria-hidden="true" className="text-[13px] font-semibold text-on-desk">
-                {pileWord(pile)}
-                <span className={countClass(pile, true)}>{pile === 'got' ? got : missed}</span>
-              </span>
-            )}
-          </div>
-        ))}
+        {(['missed', 'got'] as const).map((pile) => {
+          const countInPile = pile === 'got' ? got : missed;
+          return (
+            <div key={pile} className="relative">
+              {pileButton(
+                pile,
+                <span aria-hidden="true" className="text-[13px] font-semibold text-on-desk">
+                  {pileWord(pile)}
+                  <span className={countClass(pile, true)}>{countInPile}</span>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => countInPile > 0 && setViewingPile(pile)}
+                disabled={countInPile === 0}
+                aria-label={`View ${pileWord(pile)} pile (${cardsWord(countInPile)})`}
+                data-testid={`view-pile-${pile}`}
+                className={`paper absolute bottom-2 left-2.5 z-20 rounded px-2 py-0.5 text-[11px] font-semibold text-ink shadow-sm ${
+                  countInPile > 0 ? 'cursor-pointer hover:ring-1 hover:ring-brass' : 'pointer-events-none opacity-0'
+                }`}
+              >
+                View cards
+              </button>
+            </div>
+          );
+        })}
       </div>
     );
 
@@ -558,6 +647,15 @@ export default function FlashcardDesk({
   const tools = finished ? null : (
     <StudyTools mode={mode} onMode={changeMode} speechAvailable={speechAvailable} readAloud={autoRead} onReadAloud={setAutoRead} />
   );
+  const pileModal =
+    viewingPile !== null ? (
+      <PileModal
+        pile={viewingPile}
+        entries={(viewingPile === 'got' ? gotList : missedList).map((index) => ({ index, card: cards[index] }))}
+        totalCount={count}
+        onClose={() => setViewingPile(null)}
+      />
+    ) : null;
 
   if (kind === 'phone') {
     return (
@@ -581,6 +679,7 @@ export default function FlashcardDesk({
             )}
           </div>
         </div>
+        {pileModal}
       </main>
     );
   }
@@ -607,6 +706,7 @@ export default function FlashcardDesk({
           {tools && <div className="col-start-2">{tools}</div>}
         </div>
       </div>
+      {pileModal}
     </main>
   );
 }

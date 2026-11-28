@@ -1074,3 +1074,67 @@ describe('cards that arrive while studying', () => {
     expect(screen.getByText('Question 2 of 2')).toBeTruthy();
   });
 });
+
+describe('Got it and Missed it pile card previews and modal (#149)', () => {
+  it('renders the top card answer text directly on non-empty Got it and Missed it piles and updates as new cards land', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+
+    // Before sorting any cards, neither pile has a top card preview
+    expect(screen.queryByTestId('pile-top-card-got')).toBeNull();
+    expect(screen.queryByTestId('pile-top-card-missed')).toBeNull();
+
+    // Sort card 1 ("Fluid inside the chloroplast" -> "Stroma") into Got it
+    sortTo('Got it');
+    const gotTop1 = screen.getByTestId('pile-top-card-got');
+    expect(gotTop1.textContent).toContain('Stroma');
+    expect(screen.queryByTestId('pile-top-card-missed')).toBeNull();
+
+    // Sort card 2 ("Enzyme that fixes CO2" -> "RuBisCO") into Missed it
+    sortTo('Missed it');
+    expect(screen.getByTestId('pile-top-card-got').textContent).toContain('Stroma');
+    expect(screen.getByTestId('pile-top-card-missed').textContent).toContain('RuBisCO');
+
+    // Sort card 3 ("Pigment that absorbs light" -> "Chlorophyll") into Got it;
+    // the top card on Got it now displays "Chlorophyll"
+    sortTo('Got it');
+    expect(screen.getByTestId('pile-top-card-got').textContent).toContain('Chlorophyll');
+    expect(screen.getByTestId('pile-top-card-missed').textContent).toContain('RuBisCO');
+  });
+
+  it('opens a themed modal listing all sorted cards (question and answer) when clicking either pile stack or top card', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+
+    // Sort card 1 and card 3 into Got it, card 2 into Missed it
+    sortTo('Got it');
+    sortTo('Missed it');
+    sortTo('Got it');
+
+    // Clicking the Got it pile top card opens the Got it modal with all 2 sorted cards
+    fireEvent.click(screen.getByTestId('pile-top-card-got'));
+    const gotDialog = screen.getByRole('dialog', { name: 'Got it pile' });
+    expect(gotDialog).toBeTruthy();
+    const gotItems = within(gotDialog).getAllByRole('listitem');
+    expect(gotItems).toHaveLength(2);
+    expect(gotItems[0].textContent).toContain('Fluid inside the chloroplast');
+    expect(gotItems[0].textContent).toContain('Stroma');
+    expect(gotItems[1].textContent).toContain('Pigment that absorbs light');
+    expect(gotItems[1].textContent).toContain('Chlorophyll');
+
+    // Close via the Close button
+    fireEvent.click(within(gotDialog).getByRole('button', { name: 'Close pile cards' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    // Clicking the Missed it pile header button opens the Missed it modal with its sorted card
+    fireEvent.click(screen.getByRole('button', { name: 'View Missed it pile (1 card)' }));
+    const missedDialog = screen.getByRole('dialog', { name: 'Missed it pile' });
+    expect(missedDialog).toBeTruthy();
+    const missedItems = within(missedDialog).getAllByRole('listitem');
+    expect(missedItems).toHaveLength(1);
+    expect(missedItems[0].textContent).toContain('Enzyme that fixes CO2');
+    expect(missedItems[0].textContent).toContain('RuBisCO');
+
+    // Pressing Escape closes the modal
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
