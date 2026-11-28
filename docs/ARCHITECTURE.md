@@ -935,6 +935,13 @@ live database's keys were checked on 2026-11-14: they match the migrations.
   became one: `private.teaches_student_in_assignment()` skips materials, so RLS hides them
   too. Making a graded item a material asks first; making it an assignment or quiz again
   brings its scores back.
+- **Forward-only assessments (#102).** `assignments.allow_back` defaults to `true`.
+  Teachers choose the setting when posting an assignment or quiz and can update it
+  on the class page. When the study page opens a class link, it reads the assignment
+  through Supabase RLS using the item and set IDs. It verifies the category before
+  loading the desk. The desk reads the setting when it opens. In a forward-only
+  assessment, the flashcard mode stays fixed after the first advance. Learning materials
+  allow review, and changing an item back to a graded category restores its setting.
 
 ### Student notifications (#110)
 

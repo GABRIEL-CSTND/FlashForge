@@ -13,6 +13,7 @@ interface ClassOption {
   assignmentId: string | null;
   category?: ClassContentCategory | null;
   allowSourceMaterial?: boolean;
+  allowBack?: boolean;
   dueAt: string | null;
 }
 
@@ -45,6 +46,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
   const [selected, setSelected] = useState<string[]>([]);
   const [category, setCategory] = useState<ClassContentCategory>('assignment');
   const [allowSourceMaterial, setAllowSourceMaterial] = useState(false);
+  const [allowBack, setAllowBack] = useState(true);
   const [dueLocal, setDueLocal] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
@@ -75,7 +77,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
     try {
       const res = await apiFetch(`/api/teacher/sets/${setId}/assignments`, {
         method: 'POST',
-        body: { classIds: selected, category, dueAt: checked.dueAt, allowSourceMaterial },
+        body: { classIds: selected, category, dueAt: checked.dueAt, allowSourceMaterial, ...(category !== 'material' && { allowBack }) },
       });
       if (!res.ok) {
         setMessage({ kind: 'error', text: errorMessage(res.data) });
@@ -96,6 +98,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
       setSelected([]);
       setDueLocal('');
       setAllowSourceMaterial(false);
+      setAllowBack(true);
       if (typeof window !== 'undefined' && assigned.length > 0) {
         window.dispatchEvent(new Event(TEACHER_POST_EVENT));
       }
@@ -183,6 +186,7 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
                         <span className="block text-xs text-muted">
                           {sharedAs.label}{sharedAs.category !== 'material' && ` · ${c.dueAt ? `due ${formatDueDate(c.dueAt)}` : 'no due date'}`}
                           {' · '}{c.allowSourceMaterial ? 'Source shared' : 'Source hidden'}
+                          {sharedAs.category !== 'material' && c.allowBack === false && ' · Forward-only'}
                         </span>
                       )}
                     </span>
@@ -198,6 +202,13 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
                 <span className="block text-xs text-muted">Students can view available source files and excerpts while studying this set.</span>
               </span>
             </label>
+
+            {category !== 'material' && (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={allowBack} onChange={(event) => setAllowBack(event.target.checked)} disabled={saving} className="size-4 shrink-0" />
+                Allow going back
+              </label>
+            )}
 
             {category !== 'material' && <div className="space-y-1">
               <label htmlFor="assign-due" className="text-xs uppercase tracking-wide text-muted">

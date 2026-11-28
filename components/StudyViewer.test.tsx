@@ -103,6 +103,20 @@ describe('multiple choice', () => {
 describe('quizzes on the desk', () => {
   const slips = () => within(screen.getByRole('group', { name: 'Answers' })).getAllByRole('button');
 
+  it('keeps a forward-only quiz moving forward through its score', () => {
+    const onComplete = vi.fn();
+    render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} allowBack={false} onComplete={onComplete} />);
+    click('Network');
+    click('Next question →');
+    expect(screen.getByText('Forward-only ·')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '← Previous' })).toBeNull();
+    click('UDP');
+    click('See your score →');
+    expect(onComplete).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ correct: 1, total: 2 }));
+    click('Start over');
+    expect(screen.queryByRole('button', { name: '← Previous' })).toBeNull();
+  });
+
   it('keeps both picks and their score when going back after seeing a correction', () => {
     const onComplete = vi.fn();
     render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} onComplete={onComplete} />);
@@ -354,6 +368,28 @@ describe('type the answer (#66)', () => {
     within(screen.getByRole('group', { name: 'How do you want to study?' }))
       .getAllByRole('button')
       .map((b) => [b.textContent, b.getAttribute('aria-pressed')]);
+
+  it('keeps both Flip and Type forward-only and preserves the Missed it keyboard shortcut', () => {
+    const flipDesk = render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} allowBack={false} />);
+    pressKey('Flip the card', 'ArrowLeft');
+    expect(screen.getByText('Card 2 of 3')).toBeTruthy();
+    expect(screen.getByText('. Got it 0, Missed it 1.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '← Previous' })).toBeNull();
+    const typeMode = screen.getByRole('button', { name: 'Type' }) as HTMLButtonElement;
+    expect(typeMode.disabled).toBe(true);
+    fireEvent.click(typeMode);
+    expect(screen.getByText('Card 2 of 3')).toBeTruthy();
+    flipDesk.unmount();
+
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} allowBack={false} />);
+    click('Type');
+    type('Stroma');
+    click('Check');
+    click('Next card →');
+    expect(screen.getByText('Card 2 of 3')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '← Previous' })).toBeNull();
+    expect((screen.getByRole('button', { name: 'Flip' }) as HTMLButtonElement).disabled).toBe(true);
+  });
 
   it('reviews flipped cards without marking them again or losing the active side', () => {
     const onComplete = vi.fn();

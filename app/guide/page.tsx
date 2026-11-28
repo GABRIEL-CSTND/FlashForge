@@ -300,6 +300,7 @@ export default function GuidePage() {
               <li>Manage your classes using kraft folders with brass join-code plates.</li>
               <li>Share each class&apos;s join code (e.g. &ldquo;K7M-2QX&rdquo;) with students.</li>
               <li>Share decks with your classes as an <strong>Assignment</strong> or a <strong>Quiz</strong> (scored, with an optional due date), or as a <strong>Learning material</strong> to practice with (no due date, not scored).</li>
+              <li>Turn off <strong>Allow going back</strong> when posting a forward-only assignment or quiz. You can change this setting later from the class page.</li>
               <li>Tick <strong>Share source material with students</strong> when you post a set, or under it on the class page, to let them open the file it was made from and see where its cards came from while they study it. It&apos;s off unless you turn it on.</li>
               <li>Open the <strong>Grade Book</strong> to see student attempts, class averages, and export CSV reports.</li>
               <li>Review <strong>Most-missed questions</strong> to pinpoint difficult concepts before tests.</li>
@@ -314,6 +315,7 @@ export default function GuidePage() {
               <li>Each class&apos;s tray lists its assignments, quizzes and learning materials; assignments and quizzes are tagged with due dates (<em>Due Fri</em>, <em>Overdue</em>, or <em>Done</em>).</li>
               <li>If your teacher shares a set&apos;s source material, <strong>View source file</strong> opens the file it was made from while you study it.</li>
               <li>Take assigned quizzes and study sets; scores sync directly to your teacher&apos;s grade book.</li>
+              <li>On a <strong>Forward-only</strong> assessment, you advance through each card in order.</li>
               <li>Open <strong>Class files</strong> under a class to download the files your teacher posted.</li>
               <li>The <strong>bell</strong> on the front of the card box counts new assignments, quizzes, learning materials and files from your teachers. It checks when you open a page or come back to FlashForge, and picking a post opens it. What you&apos;ve read is remembered on that device only.</li>
             </ul>

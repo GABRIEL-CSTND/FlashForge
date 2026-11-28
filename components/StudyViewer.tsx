@@ -13,6 +13,7 @@ interface StudyViewerProps {
   title: string;
   studyType: StudyType;
   cards: StudyItem[];
+  allowBack?: boolean;
   onFinish?: () => void;
   // Called by the Exit button instead of navigating home. Needed when the viewer
   // is already rendered on "/" (a freshly generated guide), where a link to "/"

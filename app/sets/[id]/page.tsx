@@ -82,6 +82,12 @@ function SetLocation({ id }: { id: string }) {
   const classItemId = isUuid(shared) ? shared : null;
   const { user, loading } = useUser();
   if (loading) return <OpeningDeck morph={`deck-${id}`} />;
+  if (shared !== null && !classItemId) {
+    return <main className="min-h-screen flex items-center justify-center" role="alert">Open this class item from My Classes.</main>;
+  }
+  if (classItemId && !user) {
+    return <main className="min-h-screen flex items-center justify-center" role="alert">Sign in to open this class item.</main>;
+  }
   return (
     <StudySet key={`${id}/${user?.id ?? ''}/${assignment ? 'assessment' : 'practice'}/${classItemId ?? ''}`}
       id={id} userId={user?.id} assignmentId={isUuid(assignment) ? assignment : null} classItemId={classItemId} />
@@ -97,7 +103,8 @@ function StudySet({ id, userId, assignmentId, classItemId }: {
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [sourceName, setSourceName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [allowBack, setAllowBack] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
@@ -113,17 +120,33 @@ function StudySet({ id, userId, assignmentId, classItemId }: {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      const { data: setData, error: setError } = await supabase
-        .from('flashcard_sets')
-        .select('id, title, source_filename, study_type, user_id')
-        .eq('id', id)
-        .single();
+      const [{ data: setData, error: setError }, classItem] = await Promise.all([
+        supabase.from('flashcard_sets').select('id, title, source_filename, study_type, user_id').eq('id', id).single(),
+        // RLS limits reads to the class teacher and its members. Match the set and
+        // category too, so an unrelated link cannot supply a different setting.
+        classItemId ? supabase.from('assignments').select('category, allow_back')
+          .eq('id', classItemId).eq('set_id', id).maybeSingle() : null,
+      ]);
 
       if (cancelled) return;
       if (setError || !setData) {
-        setNotFound(true);
+        setLoadError('Set not found.');
         setLoading(false);
         return;
+      }
+      if (classItem) {
+        const item = classItem.data;
+        if (classItem.error || (assignmentId && item && typeof item.allow_back !== 'boolean')) {
+          setLoadError('Could not load the class item settings. Refresh to try again.');
+          setLoading(false);
+          return;
+        }
+        const matchesLink = item && (assignmentId ? item.category !== 'material' : item.category === 'material');
+        if (!matchesLink) {
+          setLoadError('Class item not found. Open it from My Classes.');
+          setLoading(false);
+          return;
+        }
       }
       const [{ data: cardData }, { data: sourceData }] = await Promise.all([
         supabase.from('flashcards').select('id, question, answer, options, explanation, position')
@@ -134,6 +157,7 @@ function StudySet({ id, userId, assignmentId, classItemId }: {
       const source = sourceData as SetSource | null;
       const quotes = new Map((source?.quotes ?? []).map((quote) => [quote.id, quote]));
       setSet(setData);
+      setAllowBack(!assignmentId || classItem?.data?.allow_back === true);
       setSourceName(source?.name ?? null);
       setCards((cardData ?? []).map((card) => {
         const quote = quotes.get(card.id);
@@ -143,7 +167,7 @@ function StudySet({ id, userId, assignmentId, classItemId }: {
     };
     load();
     return () => { cancelled = true; };
-  }, [id, classItemId]);
+  }, [id, assignmentId, classItemId]);
 
   const handleDelete = async () => {
     if (!set) return;
@@ -266,8 +290,8 @@ function StudySet({ id, userId, assignmentId, classItemId }: {
   // A deck picked up in My Sets or My Classes morphs into this while it loads.
   if (loading) return <OpeningDeck morph={`deck-${id}`} />;
 
-  if (notFound || !set) {
-    return <main className="min-h-screen flex items-center justify-center">Set not found.</main>;
+  if (loadError || !set) {
+    return <main className="min-h-screen flex items-center justify-center" role="alert">{loadError || 'Set not found.'}</main>;
   }
 
   const isOwner = !!userId && set.user_id === userId;
@@ -400,6 +424,7 @@ function StudySet({ id, userId, assignmentId, classItemId }: {
       title={set.title}
       studyType={set.study_type}
       cards={cards}
+      allowBack={allowBack}
       onFinish={() => router.push('/')}
       onEdit={isOwner ? () => setEditingCards(true) : undefined}
       saveSlot={

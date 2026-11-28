@@ -14,6 +14,8 @@ const state = vi.hoisted(() => ({
   user: null as null | { id: string },
   set: null as null | Record<string, unknown>,
   cards: [] as Record<string, unknown>[],
+  assignment: null as null | { id: string; setId: string; category: string; allow_back: boolean },
+  assignmentError: false,
   sharedSource: false,
   sourceCalls: [] as { p_set_id: string; p_class_item_id: string | null }[],
   apiCalls: [] as { path: string; init: unknown }[],
@@ -49,10 +51,15 @@ vi.mock('@/lib/supabase', () => ({
     },
     from: (table: string) => ({
       select: () => ({
-        eq: () =>
+        eq: (_column: string, id: string) =>
           table === 'flashcard_sets'
             ? { single: async () => ({ data: state.set, error: state.set ? null : { message: 'not found' } }) }
-            : { order: async () => ({ data: state.cards, error: null }) },
+            : table === 'assignments'
+              ? { eq: (_column: string, setId: string) => ({ maybeSingle: async () => ({
+                data: state.assignment?.id === id && state.assignment.setId === setId ? state.assignment : null,
+                error: state.assignmentError ? { message: 'settings unavailable' } : null,
+              }) }) }
+              : { order: async () => ({ data: state.cards, error: null }) },
       }),
     }),
   },
@@ -72,6 +79,8 @@ beforeEach(() => {
   state.set = { id: SET_ID, title: 'Photosynthesis', source_filename: 'bio.pdf', study_type: 'flashcard', user_id: OWNER };
   state.cards = [{ id: CARD, question: 'Pigment that absorbs light', answer: 'Chlorophyll', options: null, position: 0 }];
   state.sharedSource = false;
+  state.assignment = { id: ASSIGNMENT, setId: SET_ID, category: 'assignment', allow_back: true };
+  state.assignmentError = false;
   state.sourceCalls = [];
   state.apiCalls = [];
   state.apiResult = null;
@@ -145,6 +154,46 @@ describe('study set page', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Edit cards' })).toBeNull());
     expect(screen.queryByRole('button', { name: 'Rename this set' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Assign to class' })).toBeNull();
+  });
+});
+
+describe('assignment navigation (#102)', () => {
+  beforeEach(() => {
+    state.user = { id: STUDENT };
+    state.assignment!.allow_back = false;
+  });
+
+  it('uses the class setting even when the address asks to allow going back', async () => {
+    window.history.replaceState(null, '', `/sets/${SET_ID}?assignment=${ASSIGNMENT}&allowBack=true`);
+    state.cards.push({ id: 'second-card', question: 'Plants give off this gas', answer: 'Oxygen', options: null, position: 1 });
+    render(<SetPage />);
+    expect(await screen.findByText('Forward-only ·')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
+    expect(screen.getByText('Card 2 of 2')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Previous/ })).toBeNull();
+  });
+
+  it.each(['unreadable', 'wrong set', 'wrong category', 'request failed', 'malformed'])(
+    'blocks a class exam link when the assignment is %s', async (problem) => {
+      const token = problem === 'malformed' ? 'bad-id' : ASSIGNMENT;
+      window.history.replaceState(null, '', `/sets/${SET_ID}?assignment=${token}`);
+      if (problem === 'unreadable') state.assignment = null;
+      if (problem === 'wrong set') state.assignment!.setId = 'another-set';
+      if (problem === 'wrong category') state.assignment!.category = 'material';
+      if (problem === 'request failed') state.assignmentError = true;
+      render(<SetPage />);
+      expect(await screen.findByRole('alert')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Flip the card' })).toBeNull();
+      expect(state.sourceCalls).toEqual([]);
+    }
+  );
+
+  it('keeps review available when a former assessment is opened as a learning material', async () => {
+    state.assignment!.category = 'material';
+    window.history.replaceState(null, '', `/sets/${SET_ID}?material=${ASSIGNMENT}`);
+    render(<SetPage />);
+    expect(await screen.findByRole('button', { name: '← Previous' })).toBeTruthy();
+    expect(screen.queryByText('Forward-only ·')).toBeNull();
   });
 });
 

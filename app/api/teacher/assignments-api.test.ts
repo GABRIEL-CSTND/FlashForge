@@ -130,6 +130,31 @@ describe('assigning a set from its page', () => {
     expect(rows()[0].allow_source_material).toBe(false);
   });
 
+  it('stores and updates navigation per assessment and exposes it to students in that class', async () => {
+    expect((await assign('t1', SETS.bio, { classIds: [CLASSES.a], category: 'quiz', allowBack: false })).status).toBe(201);
+    expect((await assign('t1', SETS.bio, { classIds: [CLASSES.b], category: 'quiz' })).status).toBe(201);
+    const [restricted, defaultQuiz] = rows();
+    expect([restricted.allow_back, defaultQuiz.allow_back]).toEqual([false, true]);
+    const path = ctx({ id: CLASSES.a, assignmentId: restricted.id as string });
+    const patch = (token: Token, body: unknown) => classAssignment.PATCH(req('PATCH', token, body), path);
+
+    expect((await patch('stu', { allowBack: true })).status).toBe(403);
+    expect((await patch('t2', { allowBack: true })).status).toBe(404);
+    expect((await classAssignment.PATCH(req('PATCH', 't1', { allowBack: true }), ctx({ id: CLASSES.b, assignmentId: restricted.id as string }))).status).toBe(404);
+    expect((await patch('t1', { allowBack: 'true' })).status).toBe(400);
+    expect((await patch('t1', { allowBack: true, allowSourceMaterial: true })).status).toBe(400);
+    const studentQuiz = async () => (await json(await studentClasses.GET(req('GET', 'stu')))).body.classes[0].assignments[0];
+    expect(await studentQuiz()).toMatchObject({ id: restricted.id, allowBack: false });
+
+    expect((await patch('t1', { category: 'material' })).status).toBe(200);
+    expect((await patch('t1', { allowBack: true })).status).toBe(404);
+    expect(await studentQuiz()).toMatchObject({ category: 'material', allowBack: true });
+    expect((await patch('t1', { category: 'quiz' })).status).toBe(200);
+    expect(await studentQuiz()).toMatchObject({ category: 'quiz', allowBack: false });
+    expect(await json(await patch('t1', { allowBack: true }))).toEqual({ status: 200, body: { allowBack: true } });
+    expect(await studentQuiz()).toMatchObject({ allowBack: true });
+  });
+
   it('leaves a class that already has the set as it is', async () => {
     await assign('t1', SETS.bio, { classIds: [CLASSES.a], dueAt: inDays(2) });
     const res = await assign('t1', SETS.bio, { classIds: [CLASSES.a, CLASSES.b], dueAt: null });
@@ -143,6 +168,8 @@ describe('assigning a set from its page', () => {
     ['a due date in the past', { classIds: [CLASSES.a], dueAt: inDays(-1) }, 'That due date has already passed.'],
     ['a due date 3 years out', { classIds: [CLASSES.a], dueAt: inDays(3 * 366) }, 'Pick a due date within the next 2 years.'],
     ['an invalid due date', { classIds: [CLASSES.a], dueAt: 'tomorrow' }, 'Pick a valid due date.'],
+    ['an invalid navigation setting', { classIds: [CLASSES.a], allowBack: 'false' }, 'Choose whether students can go back.'],
+    ['restricted navigation for a learning material', { classIds: [CLASSES.a], category: 'material', allowBack: false }, 'Learning materials always allow going back.'],
   ])('rejects %s (400)', async (_label, body, error) => {
     expect(await assign('t1', SETS.bio, body)).toEqual({ status: 400, body: { error } });
     expect(rows()).toEqual([]);
@@ -217,7 +244,7 @@ describe('what students see', () => {
     const res = await json(await studentClasses.GET(req('GET', 'stu')));
     expect(res.body.classes).toHaveLength(1);
     expect(res.body.classes[0].assignments).toEqual([
-      { id: expect.any(String), setId: SETS.bio, setTitle: 'Photosynthesis', studyType: 'flashcard', category: 'assignment', dueAt: inDays(2), createdAt: NOW.toISOString(), myProgress: null },
+      { id: expect.any(String), setId: SETS.bio, setTitle: 'Photosynthesis', studyType: 'flashcard', category: 'assignment', allowBack: true, dueAt: inDays(2), createdAt: NOW.toISOString(), myProgress: null },
     ]);
     const outsider = await json(await studentClasses.GET(req('GET', 'out')));
     expect(outsider.body.classes).toEqual([]);

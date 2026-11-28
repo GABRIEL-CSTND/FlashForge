@@ -23,6 +23,9 @@ begin
   insert into public.classes (teacher_id, name, join_code) values (a, 'assign test X', 'ASGNXX') returning id into x;
   insert into public.class_members (class_id, student_id) values (x, b);
   insert into public.assignments (class_id, set_id, due_at) values (x, s, now() + interval '1 day') returning id into asg;
+  select allow_back into ok from public.assignments where id = asg;
+  insert into results values (17, 'new assessments allow review by default', 'true', ok::text);
+  update public.assignments set allow_back = false where id = asg;
 
   -- B: in the class
   perform set_config('request.jwt.claims', json_build_object('sub', b, 'role', 'authenticated')::text, true);
@@ -52,6 +55,13 @@ begin
   begin delete from public.assignments where id = asg; ok := true;
   exception when others then ok := false; end;
   reset role; insert into results values (8, 'student removes an assignment directly', 'denied', case when ok then 'ALLOWED' else 'denied' end);
+  execute 'set local role authenticated';
+  select allow_back into ok from public.assignments where id = asg;
+  reset role; insert into results values (18, 'student reads the forward-only setting', 'false', ok::text);
+  execute 'set local role authenticated';
+  begin update public.assignments set allow_back = true where id = asg; code := 'allowed';
+  exception when insufficient_privilege then code := 'denied'; end;
+  reset role; insert into results values (19, 'student updates the navigation setting directly', 'denied', code);
 
   -- C: not in the class
   perform set_config('request.jwt.claims', json_build_object('sub', c, 'role', 'authenticated')::text, true);

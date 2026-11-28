@@ -42,6 +42,7 @@ const freshDeck = (count: number): DeckState => ({
 export interface FlashcardDeskProps {
   title: string;
   cards: StudyItem[];
+  allowBack?: boolean;
   onFinish?: () => void;
   onExit?: () => void;
   // Shows the pencil, which opens the card editor.
@@ -66,6 +67,7 @@ export interface FlashcardDeskProps {
 export default function FlashcardDesk({
   title,
   cards,
+  allowBack = true,
   onFinish,
   onExit,
   onEdit,
@@ -128,8 +130,9 @@ export default function FlashcardDesk({
   const rounds = matchRounds(deck.order.length);
   const roundIndex = mode === 'match' && !finished ? rounds.findIndex(([start]) => start === deck.pos) : -1;
   const round = roundIndex >= 0 ? deck.order.slice(rounds[roundIndex][0], rounds[roundIndex][1]) : [];
-  const reviewing = reviewPos !== null;
-  const shownPos = reviewPos ?? deck.pos;
+  const reviewing = allowBack && reviewPos !== null;
+  const modeLocked = !allowBack && deck.pos > 0;
+  const shownPos = (allowBack ? reviewPos : null) ?? deck.pos;
   const current = !finished && mode !== 'match' ? deck.order[shownPos] : undefined;
   const shownChecked = mode === 'type' && reviewing && current !== undefined ? answers[current] : checked;
   const shownFlipped = reviewing ? mode === 'type' || reviewFlipped : flipped;
@@ -209,7 +212,7 @@ export default function FlashcardDesk({
   };
 
   const previous = () => {
-    if (current === undefined || shownPos === 0) return;
+    if (!allowBack || current === undefined || shownPos === 0) return;
     setReviewPos(shownPos - 1);
     setReviewFlipped(false);
   };
@@ -292,6 +295,7 @@ export default function FlashcardDesk({
   };
 
   const changeMode = (next: FlashcardMode) => {
+    if (modeLocked) return;
     setMode(next);
     restart();
   };
@@ -528,7 +532,7 @@ export default function FlashcardDesk({
     <div ref={slot('card')} className="shrink-0" style={{ width: size.w, height: size.h }} />
   );
 
-  const navigation = current === undefined ? null : (
+  const navigation = !allowBack || current === undefined ? null : (
     <div role="group" aria-label="Card navigation" className="mt-4 flex items-center justify-center gap-2.5">
       <PreviousCardButton disabled={shownPos === 0} onClick={previous} />
       {reviewing && (
@@ -544,7 +548,7 @@ export default function FlashcardDesk({
     : roundIndex >= 0
       ? `Round ${roundIndex + 1} of ${rounds.length}`
       : `${reviewing ? 'Reviewing card' : 'Card'} ${shownPos + 1} of ${Math.max(deck.order.length, expected ?? 0)}`;
-  const header = <DeskHeader onExit={onExit} progress={progress} tally={`. Got it ${got}, Missed it ${missed}.`} />;
+  const header = <DeskHeader onExit={onExit} progress={progress} tally={`. Got it ${got}, Missed it ${missed}.`} forwardOnly={!allowBack} />;
 
   const toGo = deck.order.length - deck.pos;
   const label = (
@@ -556,7 +560,7 @@ export default function FlashcardDesk({
   const notes = saveSlot ? <div className="paper paper-shadow rounded px-4 py-3 text-sm text-ink">{saveSlot}</div> : null;
   const pencil = onEdit ? <Pencil onClick={onEdit} /> : null;
   const tools = finished ? null : (
-    <StudyTools mode={mode} onMode={changeMode} speechAvailable={speechAvailable} readAloud={autoRead} onReadAloud={setAutoRead} />
+    <StudyTools mode={mode} onMode={changeMode} modeLocked={modeLocked} speechAvailable={speechAvailable} readAloud={autoRead} onReadAloud={setAutoRead} />
   );
 
   if (kind === 'phone') {

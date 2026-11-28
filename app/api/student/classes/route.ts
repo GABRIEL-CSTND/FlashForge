@@ -27,12 +27,13 @@ export async function GET(req: NextRequest) {
         ...c,
         assignments: assignments
           .filter((a) => a.classId === c.id)
-          .map(({ id, setId, setTitle, studyType, category, dueAt, createdAt }) => ({
+          .map(({ id, setId, setTitle, studyType, category, allowBack, dueAt, createdAt }) => ({
             id,
             setId,
             setTitle,
             studyType,
             category,
+            allowBack: category === 'material' || allowBack,
             dueAt,
             createdAt,
             myProgress: progress.get(id) ?? null,

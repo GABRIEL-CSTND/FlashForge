@@ -4,7 +4,7 @@ import { TEACHER_ROLES } from '@/lib/role-types';
 import { isUuid } from '@/lib/ids';
 import { parseDueAt } from '@/lib/due-dates';
 import { isClassContentCategory } from '@/lib/classes-shared';
-import { unassign, updateAssignmentCategory, updateAssignmentDue, updateAssignmentSourceSharing } from '@/lib/assignments';
+import { unassign, updateAssignmentCategory, updateAssignmentDue, updateAssignmentNavigation, updateAssignmentSourceSharing } from '@/lib/assignments';
 import { getAssignmentQuestions } from '@/lib/class-results';
 import { errorResponse, notFound, readJsonBody } from '@/lib/route-helpers';
 
@@ -29,13 +29,21 @@ export async function GET(req: NextRequest, { params }: Context) {
   }
 }
 
-// Change a category, due date, or source sharing setting.
+// Change one assignment setting at a time.
 export async function PATCH(req: NextRequest, { params }: Context) {
   try {
     const user = await requireRole(req, TEACHER_ROLES);
     const { id, assignmentId } = await params;
     if (!isUuid(id) || !isUuid(assignmentId)) return notFound('Assignment');
     const body = await readJsonBody(req);
+    if (body?.allowBack !== undefined) {
+      const { allowBack } = body;
+      if (typeof allowBack !== 'boolean' || body.allowSourceMaterial !== undefined || body.category !== undefined || body.dueAt !== undefined) {
+        return NextResponse.json({ error: 'Change the navigation setting on its own.' }, { status: 400 });
+      }
+      const updated = await updateAssignmentNavigation(user.id, id, assignmentId, allowBack);
+      return updated ? NextResponse.json({ allowBack }) : notFound('Assignment');
+    }
     if (body?.allowSourceMaterial !== undefined) {
       const allow = body.allowSourceMaterial;
       if (typeof allow !== 'boolean' || body.category !== undefined || body.dueAt !== undefined) {

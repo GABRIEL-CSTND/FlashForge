@@ -25,6 +25,7 @@ with the next release of `dev` to `main`.
 
 ### Added
 
+- **Forward-only assessments (#102).** Teachers can turn off **Allow going back** for a class assignment or quiz. Students see the setting before opening the assessment and move through cards in order.
 - **Previous card during study (#101).** Review earlier flashcards in Flip or Type mode
   and earlier quiz questions. Previously recorded answers and scores are preserved when you resume.
 - **Student notification bell for teacher posts (#110):** signed-in students get a bell on

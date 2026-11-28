@@ -48,7 +48,14 @@ export async function POST(req: NextRequest, { params }: Context) {
     if (typeof allowSourceMaterial !== 'boolean') {
       return NextResponse.json({ error: 'Choose whether to share the source material.' }, { status: 400 });
     }
-    const result = await assignSet(user.id, id, classIds, due.dueAt, category, allowSourceMaterial);
+    const allowBack = body?.allowBack === undefined ? true : body.allowBack;
+    if (typeof allowBack !== 'boolean') {
+      return NextResponse.json({ error: 'Choose whether students can go back.' }, { status: 400 });
+    }
+    if (category === 'material' && !allowBack) {
+      return NextResponse.json({ error: 'Learning materials always allow going back.' }, { status: 400 });
+    }
+    const result = await assignSet(user.id, id, classIds, due.dueAt, category, allowSourceMaterial, allowBack);
     if (!result.ok) return notFound(result.reason === 'set-not-found' ? 'Study set' : 'Class');
     return NextResponse.json(result, { status: result.assigned.length > 0 ? 201 : 200 });
   } catch (err) {

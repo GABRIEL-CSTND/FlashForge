@@ -76,6 +76,7 @@ export interface QuizDeskProps {
   title: string;
   studyType: StudyType;
   cards: StudyItem[];
+  allowBack?: boolean;
   onFinish?: () => void;
   onExit?: () => void;
   // Shows the pencil, which opens the card editor.
@@ -102,6 +103,7 @@ export default function QuizDesk({
   title,
   studyType,
   cards: givenCards,
+  allowBack = true,
   onFinish,
   onExit,
   onEdit,
@@ -169,8 +171,8 @@ export default function QuizDesk({
   const interactionFor = (c: StudyItem): Interaction => (mixed && cardKind(c.options) === 'identification' ? 'typed' : 'choice');
 
   const finished = deck.pos >= deck.order.length;
-  const reviewing = reviewPos !== null;
-  const shownPos = reviewPos ?? deck.pos;
+  const reviewing = allowBack && reviewPos !== null;
+  const shownPos = (allowBack ? reviewPos : null) ?? deck.pos;
   const current = finished ? undefined : deck.order[shownPos];
   const sheet = current === undefined ? undefined : sheets[current];
   const card = sheet?.kind === 'question' ? cards[sheet.index] : undefined;
@@ -249,7 +251,7 @@ export default function QuizDesk({
   };
 
   const previous = () => {
-    if (previousPos < 0) return;
+    if (!allowBack || previousPos < 0) return;
     movedOn.current = true;
     setReviewPos(previousPos);
   };
@@ -546,8 +548,8 @@ export default function QuizDesk({
       {card && interaction === 'choice' && (
         <AnswerSlips key={`${run}-${current}`} options={card.options ?? []} answer={card.answer} picked={shownAnswer?.chosen} onPick={pick} kind={kind} locked={reviewing} />
       )}
-      <div role="group" aria-label="Question navigation" className="flex min-h-12 w-full flex-wrap items-center justify-center gap-2.5">
-        <PreviousCardButton disabled={previousPos < 0} onClick={previous} />
+      <div role={allowBack ? 'group' : undefined} aria-label={allowBack ? 'Question navigation' : undefined} className="flex min-h-12 w-full flex-wrap items-center justify-center gap-2.5">
+        {allowBack && <PreviousCardButton disabled={previousPos < 0} onClick={previous} />}
         {ready && (
           <button ref={nextRef} type="button" onClick={next} className="btn btn-primary min-h-12 rounded-full px-5 text-[15px]">
             {nextLabel}
@@ -565,7 +567,7 @@ export default function QuizDesk({
     : sheet?.kind === 'part'
       ? `Part ${sheet.part.numeral} · ${sheet.part.label}`
       : `${reviewing ? 'Reviewing question' : 'Question'} ${questionsBefore + 1} of ${Math.max(passCount, expected ?? 0)}`;
-  const header = <DeskHeader onExit={onExit} progress={progress} tally={`. Right ${right}, Wrong ${wrong}.`} />;
+  const header = <DeskHeader onExit={onExit} progress={progress} tally={`. Right ${right}, Wrong ${wrong}.`} forwardOnly={!allowBack} />;
 
   const label = (
     <div className="paper paper-shadow -rotate-1 rounded px-4 py-2.5 text-ink">

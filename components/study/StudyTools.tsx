@@ -50,9 +50,9 @@ const ICONS: Record<FlashcardMode | 'speak', ReactNode> = {
 
 // A round brass button with its name underneath. The whole thing is the
 // button, so the touch target is the icon and the word.
-function Tool({ label, icon, pressed, title, onClick }: { label: string; icon: ReactNode; pressed?: boolean; title?: string; onClick: () => void }) {
+function Tool({ label, icon, pressed, title, disabled, onClick }: { label: string; icon: ReactNode; pressed?: boolean; title?: string; disabled?: boolean; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} aria-pressed={pressed} title={title} className="desk-tool flex w-[68px] flex-col items-center gap-1.5 text-xs font-medium text-on-desk/85">
+    <button type="button" onClick={onClick} aria-pressed={pressed} title={title} disabled={disabled} className="desk-tool flex w-[68px] flex-col items-center gap-1.5 text-xs font-medium text-on-desk/85 disabled:cursor-not-allowed disabled:opacity-60">
       <span aria-hidden="true" className={`inline-flex h-[52px] w-[52px] items-center justify-center rounded-full ${pressed ? 'brass' : 'brass-ring'}`}>
         {icon}
       </span>
@@ -70,12 +70,14 @@ function Tool({ label, icon, pressed, title, onClick }: { label: string; icon: R
 export default function StudyTools({
   mode,
   onMode,
+  modeLocked = false,
   speechAvailable,
   readAloud,
   onReadAloud,
 }: {
   mode?: FlashcardMode;
   onMode?: (mode: FlashcardMode) => void;
+  modeLocked?: boolean;
   speechAvailable: boolean;
   readAloud: boolean;
   onReadAloud: (on: boolean) => void;
@@ -85,7 +87,7 @@ export default function StudyTools({
       {mode && onMode && (
         <div role="group" aria-label="How do you want to study?" className="flex gap-1 sm:gap-2">
           {FLASHCARD_MODES.map((m) => (
-            <Tool key={m} label={FLASHCARD_MODE_LABELS[m]} icon={ICONS[m]} pressed={mode === m} onClick={() => onMode(m)} />
+            <Tool key={m} label={FLASHCARD_MODE_LABELS[m]} icon={ICONS[m]} pressed={mode === m} disabled={modeLocked} onClick={() => onMode(m)} />
           ))}
         </div>
       )}

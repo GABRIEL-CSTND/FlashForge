@@ -28,6 +28,7 @@ interface Assignment {
   studyType: string;
   category?: ClassContentCategory;
   allowSourceMaterial?: boolean;
+  allowBack?: boolean;
   dueAt: string | null;
   createdAt: string;
 }
@@ -240,6 +241,16 @@ function ClassView({ id }: { id: string }) {
     });
   };
 
+  const changeNavigation = async (assignment: Assignment, allowBack: boolean) => {
+    const data = await run(() => apiFetch(`/api/teacher/classes/${id}/assignments/${assignment.id}`, {
+      method: 'PATCH',
+      body: { allowBack },
+    }));
+    if (data) update({
+      assignments: cls.assignments.map((item) => item.id === assignment.id ? { ...item, allowBack } : item),
+    });
+  };
+
   const deleteClass = async () => {
     const count = cls.students.length;
     const who = count === 0 ? '' : ` Its ${count} student${count === 1 ? '' : 's'} will be removed from it.`;
@@ -410,6 +421,19 @@ function ClassView({ id }: { id: string }) {
                           />
                           Share source material
                         </label>
+                        {group.category !== 'material' && (
+                          <label className="flex min-h-11 items-center gap-2 text-sm text-on-desk">
+                            <input
+                              type="checkbox"
+                              aria-label={`Allow going back for ${a.setTitle}`}
+                              checked={a.allowBack ?? true}
+                              disabled={busy}
+                              onChange={(event) => changeNavigation(a, event.target.checked)}
+                              className="size-4 shrink-0"
+                            />
+                            Allow going back
+                          </label>
+                        )}
                         {editingDueId === a.id && (
                           <div className="paper paper-shadow mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-3 py-2 text-sm text-ink">
                             <label htmlFor={`due-${a.id}`} className="sr-only">

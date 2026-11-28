@@ -19,6 +19,7 @@ interface AssignedSet {
   setTitle: string;
   studyType: string;
   category?: ClassContentCategory;
+  allowBack?: boolean;
   dueAt: string | null;
   createdAt: string;
   // The student's own results on this assignment, or null if not done (#57).
@@ -227,7 +228,7 @@ function MyClasses() {
                                 morph={morph}
                                 kind={STUDY_TYPE_LABELS[toStudyType(a.studyType)]}
                                 title={a.setTitle}
-                                meta={`${isMaterial ? 'Shared' : 'Assigned'} ${shortDate(a.createdAt)}`}
+                                meta={`${isMaterial ? 'Shared' : 'Assigned'} ${shortDate(a.createdAt)}${!isMaterial && a.allowBack === false ? ' · Forward-only' : ''}`}
                                 tag={isMaterial ? undefined : assignmentTag(a)}
                               />
                             );

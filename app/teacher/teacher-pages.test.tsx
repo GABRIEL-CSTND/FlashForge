@@ -70,7 +70,8 @@ vi.mock('@/lib/api-client', async (importOriginal) => {
           cls.assignments = cls.assignments.filter((a) => a.id !== m![2]);
           return ok({ unassigned: true });
         }
-        const body = init.body as { category?: string; dueAt: string | null };
+        const body = init.body as { category?: string; dueAt: string | null; allowBack?: boolean };
+        if (body.allowBack !== undefined) return ok({ allowBack: body.allowBack });
         if (body.category) return ok({ category: body.category, dueAt: null });
         const { dueAt } = body;
         cls.assignments = cls.assignments.map((a) => (a.id === m![2] ? { ...a, dueAt } : a));
@@ -279,6 +280,7 @@ describe('class page', () => {
     const materials = (await screen.findByRole('heading', { name: 'Learning materials (1)' })).closest('section')!;
     expect(within(materials).getByRole('link', { name: /^Pick up Photosynthesis/ })).toBeTruthy();
     expect(within(materials).queryByRole('button', { name: /Change due date/ })).toBeNull();
+    expect(within(materials).queryByRole('checkbox', { name: /Allow going back/ })).toBeNull();
     expect(state.calls.find((c) => c.method === 'PATCH')?.body).toEqual({ category: 'material' });
     expect(confirmMock).toHaveBeenCalledWith(expect.stringMatching(/scores on it will be hidden from the Grade Book until you change it back/));
   });
@@ -291,6 +293,17 @@ describe('class page', () => {
     expect(state.calls.some((c) => c.method === 'PATCH')).toBe(false);
     expect(screen.getByRole('heading', { name: 'Learning materials (0)' })).toBeTruthy();
     expect((screen.getByRole('combobox', { name: 'Category for Photosynthesis' }) as HTMLSelectElement).value).toBe('assignment');
+  });
+
+  it('lets a teacher turn off back navigation on an existing assignment', async () => {
+    render(<TeacherClassPage />);
+    const back = await screen.findByRole('checkbox', { name: 'Allow going back for Photosynthesis' }) as HTMLInputElement;
+    expect(back.checked).toBe(true);
+    fireEvent.click(back);
+    await waitFor(() => expect(back.checked).toBe(false));
+    expect(state.calls.find((c) => c.method === 'PATCH')).toEqual({
+      method: 'PATCH', path: '/api/teacher/classes/c1/assignments/a1', body: { allowBack: false },
+    });
   });
 
   it('unassigns a set after confirming', async () => {

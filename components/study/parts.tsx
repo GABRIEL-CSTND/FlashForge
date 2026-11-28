@@ -21,11 +21,12 @@ export function ExitButton({ onExit, className }: { onExit?: () => void; classNa
 
 // The line above the desk: Exit, and where you are. It's read out as it
 // changes, with the piles' counts (`tally`) for screen readers.
-export function DeskHeader({ onExit, progress, tally }: { onExit?: () => void; progress: string; tally: string }) {
+export function DeskHeader({ onExit, progress, tally, forwardOnly }: { onExit?: () => void; progress: string; tally: string; forwardOnly?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-4">
       <ExitButton onExit={onExit} className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-on-desk/80 hover:text-on-desk" />
       <p aria-live="polite" className="text-sm font-medium text-on-desk/85">
+        {forwardOnly && <span className="whitespace-nowrap text-on-desk/75">Forward-only ·{' '}</span>}
         <span>{progress}</span>
         <span className="sr-only">{tally}</span>
       </p>
