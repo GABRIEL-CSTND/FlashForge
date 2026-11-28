@@ -25,6 +25,11 @@ with the next release of `dev` to `main`.
 
 ### Added
 
+- **Stay in the card-entry tab when adding cards (#105):** added a dedicated *Enter cards*
+  tab in `CardEditor` for back-to-back flashcard and question creation. Saving a new card
+  persists it immediately without closing the editor or switching back to the study view,
+  resets the question and answer inputs, returns focus to the first input field, increments
+  the card counter, and displays an inline *Card saved!* status badge.
 - **Previous card during study (#101).** Review earlier flashcards in Flip or Type mode
   and earlier quiz questions. Previously recorded answers and scores are preserved when you resume.
 - **Student notification bell for teacher posts (#110):** signed-in students get a bell on

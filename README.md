@@ -143,7 +143,7 @@ components/
   study/sizes.ts        Text sizes that keep a clue, a question or a term on its card
   study/SourceNote.tsx  Where a card came from: its quote and page
   study/parts.tsx       Exit, the line above the desk, and the verdicts for typed and picked answers
-  CardEditor.tsx        Edit mode for a set: change, add, delete and reorder cards (of any kind in a mixed quiz)
+  CardEditor.tsx        Edit mode for a set: change, add, delete and reorder cards, or enter new cards back-to-back in the Enter cards tab without leaving (#105)
   SourceFileViewer.tsx  "View source file": the file a guide was made from, shown in the page or downloaded (#111)
   AssignPanel.tsx       "Assign to class" dialog on a set the teacher owns
   ClassFiles.tsx        "Class files": the teacher posts and removes them, a class's students download them (#112)

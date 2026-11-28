@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   CARD_LIMITS,
   kindFor,
@@ -35,11 +35,18 @@ export interface CardPayload {
 
 export type SaveResult = { ok: true } | { ok: false; error: string; cardIndex: number | null };
 
+export interface SaveOptions {
+  keepOpen?: boolean;
+}
+
+export type CardEditorTab = 'edit' | 'enter';
+
 interface CardEditorProps {
   studyType: StudyType;
   cards: EditableCard[];
-  onSave: (cards: CardPayload[]) => Promise<SaveResult>;
+  onSave: (cards: CardPayload[], options?: SaveOptions) => Promise<SaveResult>;
   onCancel: () => void;
+  initialTab?: CardEditorTab;
 }
 
 interface DraftCard {
@@ -112,18 +119,35 @@ function toPayload(draft: DraftCard): CardPayload {
   };
 }
 
-// Edit mode for a study set (#55): change, add, delete and reorder cards, then
-// save them all at once. Uses the same rules as the server (lib/card-rules.ts).
-export default function CardEditor({ studyType, cards, onSave, onCancel }: CardEditorProps) {
+// Edit mode for a study set (#55, #105): change, add, delete and reorder cards,
+// or switch to the "Enter cards" tab for seamless back-to-back card entry that
+// saves each new card without leaving the tab.
+export default function CardEditor({
+  studyType,
+  cards,
+  onSave,
+  onCancel,
+  initialTab = 'edit',
+}: CardEditorProps) {
   const initial = useMemo(() => cards.map((c) => toDraft(c, studyType)), [cards, studyType]);
   const [drafts, setDrafts] = useState<DraftCard[]>(initial);
+  const [savedSnapshot, setSavedSnapshot] = useState<string>(() => JSON.stringify(initial.map(toPayload)));
+  const [activeTab, setActiveTab] = useState<CardEditorTab>(initialTab);
+  const [entryKind, setEntryKind] = useState<CardKind>(() => kindFor(studyType, null));
+  const [entryQuestion, setEntryQuestion] = useState('');
+  const [entryAnswer, setEntryAnswer] = useState('');
+  const [entryExplanation, setEntryExplanation] = useState('');
+  const [entryChoices, setEntryChoices] = useState<string[]>(() => Array(CARD_LIMITS.choices).fill(''));
+  const [entryCorrectIndex, setEntryCorrectIndex] = useState<number | null>(null);
+  const [savedConfirmation, setSavedConfirmation] = useState<string | null>(null);
   const [error, setError] = useState<{ message: string; cardIndex: number | null } | null>(null);
   const [saving, setSaving] = useState(false);
+  const firstEntryInputRef = useRef<HTMLTextAreaElement>(null);
   const idBase = useId();
 
   const isMixed = studyType === 'mixed';
   const payload = drafts.map(toPayload);
-  const dirty = JSON.stringify(payload) !== JSON.stringify(initial.map(toPayload));
+  const dirty = JSON.stringify(payload) !== savedSnapshot;
 
   const update = (key: string, patch: Partial<DraftCard>) =>
     setDrafts((prev) => prev.map((d) => (d.key === key ? { ...d, ...patch } : d)));
@@ -147,9 +171,60 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
     }
     setSaving(true);
     setError(null);
+    setSavedConfirmation(null);
     try {
       const result = await onSave(payload);
       if (!result.ok) setError({ message: result.error, cardIndex: result.cardIndex });
+      else setSavedSnapshot(JSON.stringify(payload));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Seamless back-to-back card entry (#105): validates and saves the newly
+  // entered card while keeping the active tab locked on "Enter cards", resets
+  // the inputs, returns focus to the first field, and shows "Card saved!".
+  const handleQuickAddCard = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (saving) return;
+
+    const newDraft: DraftCard = {
+      key: newKey(),
+      id: null,
+      kind: isMixed ? entryKind : kindFor(studyType, null),
+      question: entryQuestion,
+      answer: entryAnswer,
+      choices: entryChoices,
+      correctIndex: entryCorrectIndex,
+      explanation: entryExplanation,
+    };
+    const nextDrafts = [...drafts, newDraft];
+    const nextPayload = nextDrafts.map(toPayload);
+    const checked = validateCards(nextPayload, studyType);
+    if (!checked.ok) {
+      setError({ message: checked.error, cardIndex: null });
+      setSavedConfirmation(null);
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSavedConfirmation(null);
+    try {
+      const result = await onSave(nextPayload, { keepOpen: true });
+      if (!result.ok) {
+        setError({ message: result.error, cardIndex: null });
+        return;
+      }
+      setDrafts(nextDrafts);
+      setSavedSnapshot(JSON.stringify(nextPayload));
+      setEntryQuestion('');
+      setEntryAnswer('');
+      setEntryExplanation('');
+      setEntryChoices(Array(CARD_LIMITS.choices).fill(''));
+      setEntryCorrectIndex(null);
+      setSavedConfirmation('Card saved!');
+      firstEntryInputRef.current?.focus();
     } finally {
       setSaving(false);
     }
@@ -160,14 +235,247 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
     onCancel();
   };
 
+  useEffect(() => {
+    if (!savedConfirmation) return;
+    const timer = setTimeout(() => setSavedConfirmation(null), 4000);
+    return () => clearTimeout(timer);
+  }, [savedConfirmation]);
+
+  const currentEntryKind = isMixed ? entryKind : kindFor(studyType, null);
+  const entryIsTrueFalse = currentEntryKind === 'true_false';
+  const entryIsMultipleChoice = currentEntryKind === 'multiple_choice';
+
   return (
     <main className="min-h-screen p-6 max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold">Edit cards</h1>
-        <p className="text-sm text-muted">
-          {drafts.length} card{drafts.length === 1 ? '' : 's'}
-        </p>
+        <div className="flex items-center gap-3">
+          {savedConfirmation && (
+            <span
+              role="status"
+              aria-live="polite"
+              data-testid="card-saved-badge"
+              className="inline-flex items-center rounded-full bg-green-800/15 px-3 py-1 text-xs font-semibold text-green-800"
+            >
+              ✓ {savedConfirmation}
+            </span>
+          )}
+          <p data-testid="card-counter" className="text-sm text-muted">
+            {drafts.length} card{drafts.length === 1 ? '' : 's'}
+          </p>
+        </div>
       </div>
+
+      <div
+        role="tablist"
+        aria-label="Card editor tabs"
+        className="flex gap-2 border-b border-ink/15 pb-2"
+      >
+        <button
+          type="button"
+          role="tab"
+          id={`${idBase}-tab-edit`}
+          aria-selected={activeTab === 'edit'}
+          aria-controls={`${idBase}-panel-edit`}
+          onClick={() => {
+            setActiveTab('edit');
+            setError(null);
+          }}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+            activeTab === 'edit' ? 'bg-accent text-ink' : 'text-muted hover:text-ink'
+          }`}
+        >
+          All cards ({drafts.length})
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id={`${idBase}-tab-enter`}
+          aria-selected={activeTab === 'enter'}
+          aria-controls={`${idBase}-panel-enter`}
+          onClick={() => {
+            setActiveTab('enter');
+            setError(null);
+            setTimeout(() => firstEntryInputRef.current?.focus(), 0);
+          }}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+            activeTab === 'enter' ? 'bg-accent text-ink' : 'text-muted hover:text-ink'
+          }`}
+        >
+          Enter cards
+        </button>
+      </div>
+
+      {activeTab === 'enter' ? (
+        <section
+          id={`${idBase}-panel-enter`}
+          role="tabpanel"
+          aria-labelledby={`${idBase}-tab-enter`}
+          className="space-y-5"
+        >
+          <form
+            aria-label="Enter a new card"
+            onSubmit={handleQuickAddCard}
+            className="space-y-4 rounded-xl border p-5"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold">
+                New card (#{drafts.length + 1})
+              </h2>
+              {isMixed && (
+                <select
+                  aria-label="New card type"
+                  value={entryKind}
+                  onChange={(e) => setEntryKind(e.target.value as CardKind)}
+                  disabled={saving}
+                  className="rounded-lg border bg-transparent px-2.5 py-1 text-xs"
+                >
+                  {MIXED_PARTS.map((p) => (
+                    <option key={p.kind} value={p.kind}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor={`${idBase}-entry-question`}
+                className="text-xs uppercase tracking-wide text-muted"
+              >
+                {entryIsTrueFalse ? 'Statement' : 'Question / Definition'}
+              </label>
+              <textarea
+                ref={firstEntryInputRef}
+                id={`${idBase}-entry-question`}
+                value={entryQuestion}
+                onChange={(e) => {
+                  setEntryQuestion(e.target.value);
+                  if (savedConfirmation) setSavedConfirmation(null);
+                }}
+                maxLength={CARD_LIMITS.question}
+                rows={2}
+                disabled={saving}
+                placeholder="Type the question, clue, or definition..."
+                className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+              />
+            </div>
+
+            {entryIsTrueFalse ? (
+              <>
+                <fieldset className="space-y-2" disabled={saving}>
+                  <legend className="text-xs uppercase tracking-wide text-muted">Answer</legend>
+                  <div className="flex gap-4">
+                    {TRUE_FALSE_OPTIONS.map((value) => (
+                      <label key={value} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="radio"
+                          name={`${idBase}-entry-truth`}
+                          checked={entryAnswer === value}
+                          onChange={() => setEntryAnswer(value)}
+                          className="h-4 w-4 accent-green-600"
+                        />
+                        {value}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <div className="space-y-1">
+                  <label
+                    htmlFor={`${idBase}-entry-explanation`}
+                    className="text-xs uppercase tracking-wide text-muted"
+                  >
+                    Explanation (optional)
+                  </label>
+                  <textarea
+                    id={`${idBase}-entry-explanation`}
+                    value={entryExplanation}
+                    onChange={(e) => setEntryExplanation(e.target.value)}
+                    maxLength={CARD_LIMITS.explanation}
+                    rows={2}
+                    disabled={saving}
+                    className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                  />
+                </div>
+              </>
+            ) : entryIsMultipleChoice ? (
+              <fieldset className="space-y-2" disabled={saving}>
+                <legend className="text-xs uppercase tracking-wide text-muted">
+                  Choices: select the correct one
+                </legend>
+                {entryChoices.map((choice, j) => (
+                  <div key={j} className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name={`${idBase}-entry-correct`}
+                      checked={entryCorrectIndex === j}
+                      onChange={() => setEntryCorrectIndex(j)}
+                      aria-label={`New card: choice ${j + 1} is correct`}
+                      className="h-4 w-4 shrink-0 accent-green-600"
+                    />
+                    <input
+                      value={choice}
+                      onChange={(e) =>
+                        setEntryChoices((prev) => prev.map((c, k) => (k === j ? e.target.value : c)))
+                      }
+                      maxLength={CARD_LIMITS.choice}
+                      aria-label={`New card: choice ${j + 1}`}
+                      className="min-w-0 flex-1 rounded-lg border bg-transparent px-3 py-1.5 text-sm"
+                    />
+                  </div>
+                ))}
+              </fieldset>
+            ) : (
+              <div className="space-y-1">
+                <label
+                  htmlFor={`${idBase}-entry-answer`}
+                  className="text-xs uppercase tracking-wide text-muted"
+                >
+                  Answer / Term
+                </label>
+                <input
+                  id={`${idBase}-entry-answer`}
+                  value={entryAnswer}
+                  onChange={(e) => {
+                    setEntryAnswer(e.target.value);
+                    if (savedConfirmation) setSavedConfirmation(null);
+                  }}
+                  maxLength={CARD_LIMITS.answer}
+                  disabled={saving}
+                  placeholder="Type the term or answer..."
+                  className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm"
+                />
+              </div>
+            )}
+
+            {error && (
+              <p role="alert" className="text-sm text-pencil">
+                {error.message}
+              </p>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={saving}
+                className="btn btn-secondary"
+              >
+                Done entering cards
+              </button>
+              <button
+                type="submit"
+                disabled={saving || drafts.length >= CARD_LIMITS.maxCards}
+                className="btn btn-primary"
+              >
+                {saving ? 'Saving...' : 'Save card'}
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : (
+        <>
 
       <ol className="space-y-4">
         {drafts.map((d, i) => {
@@ -377,6 +685,8 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
           {saving ? 'Saving...' : 'Save changes'}
         </button>
       </div>
+        </>
+      )}
     </main>
   );
 }
