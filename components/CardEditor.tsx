@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import {
   CARD_LIMITS,
   kindFor,
@@ -159,6 +159,18 @@ export default function CardEditor({ studyType, cards, onSave, onCancel }: CardE
     if (dirty && !window.confirm('Discard your changes to these cards?')) return;
     onCancel();
   };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleCancel();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty]);
 
   return (
     <main className="min-h-screen p-6 max-w-2xl mx-auto space-y-6">

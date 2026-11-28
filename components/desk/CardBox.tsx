@@ -7,6 +7,7 @@ import { useProfile } from '@/components/ProfileProvider';
 import { canUseTeacherTools, type Role } from '@/lib/role-types';
 import FullscreenToggle from './FullscreenToggle';
 import NotificationBell from './NotificationBell';
+import ThemePicker from './ThemePicker';
 
 export interface CardBoxTab {
   label: string;
@@ -82,6 +83,7 @@ export default function CardBox() {
           >
             Play live
           </Link>
+          <ThemePicker />
           <FullscreenToggle />
         </div>
       </div>

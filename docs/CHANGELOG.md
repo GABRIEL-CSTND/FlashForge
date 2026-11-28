@@ -25,6 +25,14 @@ with the next release of `dev` to `main`.
 
 ### Added
 
+- **Color theme customization & screen-reader accessibility (#90):** added a circular
+  color-swatch theme picker on the front of the card box with 9 WCAG 2.2 AA-compliant study
+  desk palettes (preserving the default Forest green & Walnut desk alongside Oxford Burgundy
+  & Mahogany, Midnight Navy & Teak, Espresso Roast & Maple, Charcoal Slate & Birch, Royal
+  Amethyst & Ebony, Burnt Umber & Cedar, Deep Obsidian & Walnut, and Sunlit Linen & Oak),
+  remembered per device in `localStorage`. Added screen-reader `aria-live` announcements for
+  flashcard flips and quiz validation results, keyboard flip/exit shortcuts, and global
+  `:focus-visible` outlines.
 - **Previous card during study (#101).** Review earlier flashcards in Flip or Type mode
   and earlier quiz questions. Previously recorded answers and scores are preserved when you resume.
 - **Student notification bell for teacher posts (#110):** signed-in students get a bell on
