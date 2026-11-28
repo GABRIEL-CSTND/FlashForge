@@ -38,9 +38,11 @@ function BellIcon({ ringing }: { ringing: boolean }) {
   );
 }
 
-// Real-time notification bell button in the student navigation bar (#110).
-// Alerts students when a teacher posts a new flashcard deck, quiz, or study
-// activity, with an unread badge counter and a warm-cream paper dropdown list.
+// Notification bell on the front of the card box, for students (#110): what
+// their teachers posted (sets, quizzes, learning materials and class files),
+// with an unread badge and a warm-cream paper list. It loads when a page opens
+// and again when the window gets focus; subscribeToTeacherPosts() says why it
+// isn't live yet.
 export default function NotificationBell() {
   const { user } = useUser();
   const { profile } = useProfile();
@@ -49,7 +51,10 @@ export default function NotificationBell() {
 
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<StudentNotificationItem[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  // What screen readers hear: posts that arrive while a page is open, not the
+  // count on every page load (the bell's label carries the count).
+  const [announcement, setAnnouncement] = useState('');
+  const seenIdsRef = useRef<Set<string> | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
@@ -87,8 +92,12 @@ export default function NotificationBell() {
           // Class files are optional if query is unavailable.
         }
       }
-      setItems(buildStudentNotifications(classes));
-      setLoaded(true);
+      const next = buildStudentNotifications(classes);
+      const seen = seenIdsRef.current;
+      seenIdsRef.current = new Set(next.map((item) => item.id));
+      const fresh = seen ? next.filter((item) => !seen.has(item.id)).length : 0;
+      if (fresh > 0) setAnnouncement(`${fresh} new post${fresh === 1 ? '' : 's'} from your teachers`);
+      setItems(next);
     } catch {
       // Silently ignore network/mock errors in header background fetch.
     }
@@ -106,6 +115,8 @@ export default function NotificationBell() {
     return () => {
       clearTimeout(timer);
       unsubscribe();
+      // Someone else signing in starts with nothing seen.
+      seenIdsRef.current = null;
     };
   }, [isStudent, userId, loadNotifications]);
 
@@ -160,14 +171,13 @@ export default function NotificationBell() {
   };
 
   return (
-    <div className="relative inline-flex items-center">
-      {/* Screen-reader live region announcing unread count updates */}
+    // Not positioned on phones, so the list hangs from the card box's front, as
+    // wide as it. From 640px it hangs from the bell and opens to the right,
+    // since the card box sits at the left of the screen.
+    <div className="inline-flex items-center sm:relative">
+      {/* Screen readers hear about posts that arrive while the page is open */}
       <span aria-live="polite" aria-atomic="true" className="sr-only">
-        {loaded
-          ? unreadCount > 0
-            ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`
-            : 'No unread notifications'
-          : ''}
+        {announcement}
       </span>
 
       <button
@@ -176,7 +186,6 @@ export default function NotificationBell() {
         onClick={handleToggle}
         aria-label={bellLabel}
         aria-expanded={open}
-        aria-haspopup="true"
         aria-controls={open ? panelId : undefined}
         title="Teacher activity notifications"
         className={`${
@@ -201,7 +210,7 @@ export default function NotificationBell() {
           id={panelId}
           role="region"
           aria-labelledby={headingId}
-          className="paper paper-shadow absolute left-0 top-[calc(100%+10px)] z-50 w-80 max-w-[calc(100vw-1.5rem)] rounded-lg border border-ink/15 p-3.5 text-ink sm:left-auto sm:right-0 sm:w-96"
+          className="paper paper-shadow absolute inset-x-0 top-[calc(100%+6px)] z-50 rounded-lg border border-ink/15 p-3.5 text-ink sm:inset-x-auto sm:left-0 sm:top-[calc(100%+10px)] sm:w-96"
         >
           <div className="flex items-center justify-between gap-2 border-b border-ink/15 pb-2.5">
             <div>

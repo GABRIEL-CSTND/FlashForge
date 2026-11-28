@@ -925,6 +925,31 @@ live database's keys were checked on 2026-11-14: they match the migrations.
   became one: `private.teaches_student_in_assignment()` skips materials, so RLS hides them
   too. Making a graded item a material asks first; making it an assignment or quiz again
   brings its scores back.
+
+### Student notifications (#110)
+
+- **The bell** (`components/desk/NotificationBell.tsx`) is on the front of the card box,
+  for signed-in students only. It lists what their classes' teachers posted, newest first
+  (`buildStudentNotifications()` in `lib/student-notifications.ts`): assigned sets,
+  quizzes and learning materials from `/api/student/classes`, and class files (the
+  `class_files` rows' names and dates, not their bytes). Picking one opens it and marks it
+  read; *Mark all as read* marks them all.
+- **When it reloads:** when a page opens, when the bell is opened, when the window gets
+  focus, and when this tab assigns a set (`AssignPanel` sends `TEACHER_POST_EVENT`). It
+  also subscribes to Supabase Realtime changes on `assignments` and `class_files` and to a
+  `teacher-post` broadcast, but nothing sends the broadcast, and neither table is in the
+  `supabase_realtime` publication (checked on the live database on 2026-11-28), so no
+  changes arrive. Live updates need a migration. Publishing `class_files` as it is would
+  send each file's base64 bytes with every change, so a small notifications table (or a
+  publication column list) is the better way.
+- **Read or not** is kept per student in the browser (`localStorage`, or memory when
+  storage is blocked), so another device shows everything as unread.
+- **Screen readers** hear about posts found after the first load ("1 new post from your
+  teachers"); the bell's label carries the unread count.
+- **Placement:** on a phone the list hangs from the card box's front, as wide as it; from
+  640 px it hangs from the bell, 384 px wide, and opens to the right, since the card box
+  is at the left of the screen.
+
 ### Study results (#57)
 
 - **Every finish on a saved set is saved** for signed-in users. `StudyViewer` reports what
@@ -1368,7 +1393,7 @@ to making a deck.
     Right / Wrong piles, the Wrong pile again, part cards and focus), `MatchBoard` (pairing,
     the five pair colours, same-answer grading, focus after Submit Answers), `CardEditor`,
     `AssignPanel`, the desk's card box and library card (the tabs each role gets, signing
-    in and out), `PageTurn` (the sheet, and the rise after Back and Forward), `PaperCard`, the desk layout at four widths, the
+    in and out), `NotificationBell` (#110: the list, read and unread, new posts), `PageTurn` (the sheet, and the rise after Back and Forward), `PaperCard`, the desk layout at four widths, the
     set page, My Sets (its decks, best scores, delete), the History pages (saving from a deck too), the User Guide, saving a guide made while signed out across the Google sign-in (`app/upload-sign-in-save.test.tsx`, #89) and the teacher and student pages, in jsdom with React Testing Library.
     Component tests start with `// @vitest-environment jsdom`.
 - Live games (#26): `lib/live-game.test.ts` (the rules: points, one pick, typed guesses,
@@ -1448,6 +1473,9 @@ to making a deck.
   page, which browsers slow down in a background tab and phones pause, so a host who
   switches away holds up the game: players see *We lost the host* after 25 s, and the
   game picks up when the host comes back.
+- **The notification bell (#110) isn't live:** it checks for teacher posts when a page
+  opens, when it's opened and when the window gets focus, since the database doesn't send
+  changes over Realtime yet (that needs a migration). What's been read is kept per device.
 - **The daily limits (#63) count signed-out visitors per IP**, so someone switching
   networks or using many IPs gets more, and so does someone with many Google accounts.
   Failed guides that asked the AI have their own cap (#41). `/admin/usage`

@@ -157,7 +157,7 @@ components/
   desk/view-transition.ts  React's ViewTransition, looked up, since the tests' React doesn't have it
   desk/DeskTurn.tsx     Turns one view of a page into another the same way (the home page's notes sheet, deck being made, new cards)
   desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, student notification bell (#110), Play live, and a tab for each section the role can open
-  desk/NotificationBell.tsx  Real-time student notification bell and popover for new teacher posts (#110)
+  desk/NotificationBell.tsx  Students' bell for new teacher posts, with its list (#110); reloads when a page opens or the window gets focus
   desk/LibraryCard.tsx  Library card (top right): name, role and Sign out, or Sign in with Google
   desk/PaperCard.tsx    A card with two faces that turns over
   desk/Pencil.tsx       The pencil on the desk that opens the card editor
@@ -212,6 +212,7 @@ lib/
   classes-shared.ts     Class name, join-code and student-name rules, and the class content categories (#115), shared by server and client
   student-classes.ts    Joining/leaving classes and the wrong-code rate limit (server-only)
   assignments.ts        Assigning sets to classes, scoped to the teacher/student (server-only)
+  student-notifications.ts  Students' notification bell (#110): the list, what's been read (localStorage), what reloads it (browser-only)
   due-dates.ts          Due-date checks, local-time display, Overdue, sorting (shared)
   attempts.ts           Saving study results, scored from the real cards; recent scores, progress (server-only)
   class-results.ts      A teacher's view of student results, scoped like the attempts RLS (server-only)

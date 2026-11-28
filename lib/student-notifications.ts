@@ -208,8 +208,12 @@ export function useReadNotificationIds(userId: string | null | undefined): Reado
   );
 }
 
-// Subscribes to real-time teacher posts (new assignments, quizzes, learning
-// materials, or class files) via Supabase Realtime and window events.
+// Reloads the bell when a teacher may have posted: when the window gets focus,
+// when this tab assigns a set (TEACHER_POST_EVENT), on a `teacher-post`
+// broadcast, and on Realtime changes to assignments and class_files. Nothing
+// sends that broadcast yet, and those tables aren't in the supabase_realtime
+// publication, so for now only focus and this tab's posts reload it; live
+// updates need a migration (#110).
 export function subscribeToTeacherPosts(userId: string, onPost: () => void): () => void {
   const onWindowPost = () => onPost();
   if (typeof window !== 'undefined') {

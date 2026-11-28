@@ -312,6 +312,7 @@ export default function GuidePage() {
               <li>If your teacher shares a set&apos;s source material, <strong>View source file</strong> opens the file it was made from while you study it.</li>
               <li>Take assigned quizzes and study sets; scores sync directly to your teacher&apos;s grade book.</li>
               <li>Open <strong>Class files</strong> under a class to download the files your teacher posted.</li>
+              <li>The <strong>bell</strong> on the front of the card box counts new assignments, quizzes, learning materials and files from your teachers. It checks when you open a page or come back to FlashForge, and picking a post opens it. What you&apos;ve read is remembered on that device only.</li>
             </ul>
           </div>
         </div>

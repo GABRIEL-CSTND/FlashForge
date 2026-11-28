@@ -124,7 +124,8 @@ describe('student notification bell (#110)', () => {
     render(<CardBox />);
     const bell = await screen.findByRole('button', { name: 'Notifications (3 unread)' });
     expect(bell.getAttribute('aria-expanded')).toBe('false');
-    expect(bell.getAttribute('aria-haspopup')).toBe('true');
+    // A disclosure button, not a menu button: the list is a region of links
+    expect(bell.getAttribute('aria-haspopup')).toBeNull();
     // Uses brass-ring when closed, matching the desk palette
     expect(bell.className).toContain('brass-ring');
     expect(bell.className).toContain('rounded-md');
@@ -133,9 +134,9 @@ describe('student notification bell (#110)', () => {
     expect(badge.textContent).toBe('3');
     expect(badge.className).toContain('bg-pencil');
 
-    // Live region announces the unread count for screen readers
+    // The first load is quiet for screen readers; the bell's label has the count
     const live = document.querySelector('[aria-live="polite"]');
-    expect(live?.textContent).toBe('3 unread notifications');
+    expect(live?.textContent).toBe('');
 
     // Opening switches the button to brass and opens the warm cream paper popover
     fireEvent.click(bell);
@@ -146,6 +147,14 @@ describe('student notification bell (#110)', () => {
     expect(region.className).toContain('paper');
     expect(region.className).toContain('paper-shadow');
     expect(region.className).toContain('rounded-lg');
+
+    // On a phone the list hangs from the card box's front, as wide as it; from
+    // 640px it hangs from the bell and opens to the right
+    expect(region.className).toContain('inset-x-0');
+    expect(region.className).toContain('sm:left-0');
+    const wrapperClasses = region.parentElement?.className.split(' ') ?? [];
+    expect(wrapperClasses).toContain('sm:relative');
+    expect(wrapperClasses).not.toContain('relative');
   });
 
   it('hides the notification bell for teachers, admins, and signed-out visitors', () => {
@@ -269,6 +278,8 @@ describe('student notification bell (#110)', () => {
     // Unread badge automatically increments to 1 for the new post
     expect(await screen.findByRole('button', { name: 'Notifications (1 unread)' })).toBeTruthy();
     expect(screen.getByTestId('notification-badge').textContent).toBe('1');
+    // Screen readers hear about the new post
+    expect(document.querySelector('[aria-live="polite"]')?.textContent).toBe('1 new post from your teachers');
 
     // Also responds to same-tab teacher post event
     state.classes[0].assignments.push({
