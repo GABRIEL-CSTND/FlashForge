@@ -64,6 +64,9 @@ with the next release of `dev` to `main`.
   from *My classes*. A teacher's classes keep up to 50 MB of files in all (100 MB for
   everyone); a file that doesn't fit is refused with a message. Files go with their class.
   Migration `20261121000400_class_file_posts.sql`.
+- **Full screen (#126):** a four-corner button beside *Play live* on the front of the card
+  box puts the whole app in full screen and back. Browsers that can't (Safari on iPhone,
+  for one) don't show it; if the browser refuses, a short note says so for 4 seconds.
 
 ### Changed
 

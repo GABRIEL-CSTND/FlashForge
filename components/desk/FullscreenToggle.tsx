@@ -1,6 +1,9 @@
 'use client';
 
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+
+// How long a "Could not…" note stays up.
+const ERROR_MS = 4_000;
 
 function subscribe(onChange: () => void) {
   document.addEventListener('fullscreenchange', onChange);
@@ -20,6 +23,13 @@ const getServerState = () => 'unavailable' as const;
 export default function FullscreenToggle() {
   const state = useSyncExternalStore(subscribe, getFullscreenState, getServerState);
   const [error, setError] = useState('');
+
+  // The note goes away on its own.
+  useEffect(() => {
+    if (!error) return;
+    const timer = window.setTimeout(() => setError(''), ERROR_MS);
+    return () => window.clearTimeout(timer);
+  }, [error]);
 
   if (state === 'unavailable') return null;
 

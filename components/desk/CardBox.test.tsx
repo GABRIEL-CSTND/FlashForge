@@ -157,6 +157,27 @@ describe('full screen', () => {
     expect(screen.getByRole('button', { name: 'Exit full screen' })).toBeTruthy();
   });
 
+  it('takes the failure note away after 4 seconds', async () => {
+    vi.useFakeTimers();
+    try {
+      const { request } = mockFullscreen();
+      request.mockRejectedValueOnce(new Error('Full screen denied'));
+      render(<CardBox />);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Enter full screen' }));
+      });
+      expect(screen.getByRole('alert').textContent).toBe('Could not enter full screen.');
+
+      act(() => vi.advanceTimersByTime(3_900));
+      expect(screen.getByRole('alert')).toBeTruthy();
+      act(() => vi.advanceTimersByTime(100));
+      expect(screen.queryByRole('alert')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('hides the control when full screen is unavailable', () => {
     render(<CardBox />);
     expect(screen.queryByRole('button', { name: 'Enter full screen' })).toBeNull();

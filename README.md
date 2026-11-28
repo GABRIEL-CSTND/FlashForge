@@ -159,6 +159,7 @@ components/
   desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, Play live, and a tab for each section the role can open
   desk/LibraryCard.tsx  Library card (top right): name, role and Sign out, or Sign in with Google
   desk/PaperCard.tsx    A card with two faces that turns over
+  desk/FullscreenToggle.tsx  Full-screen button on the front of the card box, where the browser allows it (#126)
   desk/Pencil.tsx       The pencil on the desk that opens the card editor
   desk/LibraryDesk.tsx  The library pages' frame on the desk: name, line, tip note, and a paper note for empty states
   desk/LibraryDeck.tsx  A deck lying in the library: the link that picks it up, with its paper tag
