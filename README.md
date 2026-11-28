@@ -157,7 +157,8 @@ components/
   desk/PageTurn.tsx     The sheet; turns the page on every navigation (React ViewTransition) and eases it in on Back
   desk/view-transition.ts  React's ViewTransition, looked up, since the tests' React doesn't have it
   desk/DeskTurn.tsx     Turns one view of a page into another the same way (the home page's notes sheet, deck being made, new cards)
-  desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, student notification bell (#110), Play live, full screen (#126), and a tab for each section the role can open
+  desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, student notification bell (#110), Play live, theme picker (#90), full screen (#126), and a tab for each section the role can open
+  desk/ThemePicker.tsx  Color theme swatch picker on the front of the card box (#90)
   desk/NotificationBell.tsx  Students' bell for new teacher posts, with its list (#110); reloads when a page opens or the window gets focus
   desk/LibraryCard.tsx  Library card (top right): name, role and Sign out, or Sign in with Google
   desk/PaperCard.tsx    A card with two faces that turns over

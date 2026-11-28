@@ -567,6 +567,13 @@ export default function QuizDesk({
       : `${reviewing ? 'Reviewing question' : 'Question'} ${questionsBefore + 1} of ${Math.max(passCount, expected ?? 0)}`;
   const header = <DeskHeader onExit={onExit} progress={progress} tally={`. Right ${right}, Wrong ${wrong}.`} />;
 
+  const validationAnnouncement =
+    shownAnswer && card
+      ? isCorrect(interaction, card, shownAnswer)
+        ? `Answer validated: Correct. ${card.answer}`
+        : `Answer validated: Incorrect. The correct answer is ${card.answer}`
+      : '';
+
   const label = (
     <div className="paper paper-shadow -rotate-1 rounded px-4 py-2.5 text-ink">
       <h1 className="text-[19px] leading-tight">{title}</h1>
@@ -583,6 +590,9 @@ export default function QuizDesk({
   if (kind === 'phone') {
     return (
       <main className={`on-desk w-full pb-4${arrive ? ' desk-arrive' : ''}`}>
+        <div data-testid="quiz-live-announcement" aria-live="polite" aria-atomic="true" className="sr-only">
+          {validationAnnouncement}
+        </div>
         <div ref={stageRef} className="relative mx-auto w-full">
           {header}
           <div className="mt-2">{label}</div>
@@ -608,6 +618,9 @@ export default function QuizDesk({
 
   return (
     <main className={`on-desk w-full pb-6${arrive ? ' desk-arrive' : ''}`}>
+      <div data-testid="quiz-live-announcement" aria-live="polite" aria-atomic="true" className="sr-only">
+        {validationAnnouncement}
+      </div>
       <div ref={stageRef} className="relative mx-auto w-full">
         {header}
         <div className="mt-3 grid items-start gap-x-6 gap-y-7" style={{ gridTemplateColumns: `minmax(0, 1fr) ${size.w}px minmax(0, 1fr)` }}>

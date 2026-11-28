@@ -3,27 +3,190 @@
 /* The desk (UI redesign, phase 1): a forest-green leather desk with cream paper
    on it and brass as the one accent. It is one look in light and dark mode, so
    pages always sit on light paper (the old dark theme is gone). */
+:root,
+:root[data-theme="forest"] {
+  --bg-surface: #1f3b2d;
+  --card-surface: #f6efdf;
+  --sheet-surface: #fbf7ee;
+  --text-primary: #2a2620;
+  --text-muted: #5c5346;
+  --accent-color: #c9a45c;
+  --accent-hover-color: #d8b56e;
+  --accent-ink: #7a5c22;
+  --on-desk-text: #ede6d6;
+  --box-surface: #5b3e2a;
+  --box-ring-text: #e2c887;
+  --sticky-bg: #e9d48c;
+  --border-color: #dcd2bd;
+  --button-text: #2a2112;
+  --pencil: #b4473b;
+}
+
+/* Theme 1: Oxford Burgundy & Mahogany (Classic Vintage Library) */
+:root[data-theme="burgundy"] {
+  --bg-surface: #42181a;
+  --card-surface: #f5ecdc;
+  --sheet-surface: #fbf6ec;
+  --text-primary: #2a231e;
+  --text-muted: #5e5248;
+  --accent-color: #c9a256;
+  --accent-hover-color: #d8b368;
+  --accent-ink: #78571c;
+  --on-desk-text: #f2e8d9;
+  --box-surface: #82532d;
+  --box-ring-text: #f5dfb0;
+  --sticky-bg: #e3c37b;
+  --border-color: #dccfbe;
+  --button-text: #281e10;
+}
+
+/* Theme 2: Midnight Navy & Teak (Late-Night Study Desk) */
+:root[data-theme="navy"] {
+  --bg-surface: #152438;
+  --card-surface: #f5efe2;
+  --sheet-surface: #faf6ed;
+  --text-primary: #21262e;
+  --text-muted: #525863;
+  --accent-color: #cca65a;
+  --accent-hover-color: #dbb76c;
+  --accent-ink: #78581c;
+  --on-desk-text: #ece7dc;
+  --box-surface: #78472a;
+  --box-ring-text: #f2d99b;
+  --sticky-bg: #ece07d;
+  --border-color: #d9d0be;
+  --button-text: #261e10;
+}
+
+/* Theme 3: Espresso Roast & Maple (Warm Café Study Table) */
+:root[data-theme="espresso"] {
+  --bg-surface: #211a16;
+  --card-surface: #f4ebd9;
+  --sheet-surface: #faf4e8;
+  --text-primary: #28211c;
+  --text-muted: #5c5046;
+  --accent-color: #c89f52;
+  --accent-hover-color: #d7b064;
+  --accent-ink: #785518;
+  --on-desk-text: #efe6d5;
+  --box-surface: #7d4e29;
+  --box-ring-text: #f3dca6;
+  --sticky-bg: #bce3cf;
+  --border-color: #dbcbb6;
+  --button-text: #261d0f;
+}
+
+/* Theme 4: Charcoal Slate & Birch (Modern Architect's Desk) */
+:root[data-theme="slate"] {
+  --bg-surface: #2b3036;
+  --card-surface: #f5f3ee;
+  --sheet-surface: #faf9f5;
+  --text-primary: #22262a;
+  --text-muted: #52585e;
+  --accent-color: #cca358;
+  --accent-hover-color: #dab46a;
+  --accent-ink: #78561a;
+  --on-desk-text: #eef0f2;
+  --box-surface: #d8b485;
+  --box-ring-text: #2e2010;
+  --sticky-bg: #eba386;
+  --border-color: #d8d5cc;
+  --button-text: #261d10;
+}
+
+/* Theme 5: Royal Amethyst & Ebony (Dark Mode) */
+:root[data-theme="amethyst"] {
+  --bg-surface: #23152e;
+  --card-surface: #efe8f5;
+  --sheet-surface: #f7f3fa;
+  --text-primary: #241b2e;
+  --text-muted: #564a63;
+  --accent-color: #c9a45c;
+  --accent-hover-color: #d8b56e;
+  --accent-ink: #73541c;
+  --on-desk-text: #efe8f5;
+  --box-surface: #6e482b;
+  --box-ring-text: #f2daa0;
+  --sticky-bg: #ece07d;
+  --border-color: #d5cbe0;
+  --button-text: #2a2112;
+}
+
+/* Theme 6: Burnt Umber & Cedar (Dark Mode) */
+:root[data-theme="umber"] {
+  --bg-surface: #2e1c12;
+  --card-surface: #f5ede0;
+  --sheet-surface: #faf5ec;
+  --text-primary: #2a201a;
+  --text-muted: #5e4f45;
+  --accent-color: #cca356;
+  --accent-hover-color: #dbb468;
+  --accent-ink: #78561a;
+  --on-desk-text: #f0e6d8;
+  --box-surface: #8f5b30;
+  --box-ring-text: #f7e2b2;
+  --sticky-bg: #eba386;
+  --border-color: #dccfbd;
+  --button-text: #261d10;
+}
+
+/* Theme 7: Deep Obsidian & Walnut (Dark Mode) */
+:root[data-theme="obsidian"] {
+  --bg-surface: #141716;
+  --card-surface: #f2eadb;
+  --sheet-surface: #f8f3e8;
+  --text-primary: #24221e;
+  --text-muted: #575248;
+  --accent-color: #c8a258;
+  --accent-hover-color: #d7b36a;
+  --accent-ink: #755519;
+  --on-desk-text: #ece5d5;
+  --box-surface: #6b4629;
+  --box-ring-text: #f0d79c;
+  --sticky-bg: #bce3cf;
+  --border-color: #d9ceb9;
+  --button-text: #261e10;
+}
+
+/* Theme 8: Sunlit Linen & Oak (Daylight Mode) */
+:root[data-theme="linen"] {
+  --bg-surface: #5e513f;
+  --card-surface: #faf6ed;
+  --sheet-surface: #fdfbf6;
+  --text-primary: #2a241c;
+  --text-muted: #5c5245;
+  --accent-color: #c99e4e;
+  --accent-hover-color: #d8af60;
+  --accent-ink: #785516;
+  --on-desk-text: #fbf7ee;
+  --box-surface: #8c5a32;
+  --box-ring-text: #26180b;
+  --sticky-bg: #ece07d;
+  --border-color: #ded4c1;
+  --button-text: #261c0e;
+}
+
 :root {
-  --desk: #1f3b2d;
+  --desk: var(--bg-surface);
   /* The sheet every page sits on, and the cream card stock for cards and labels. */
-  --sheet: #fbf7ee;
-  --paper: #f6efdf;
-  --ink: #2a2620;
-  --muted: #6b6255;
+  --sheet: var(--sheet-surface);
+  --paper: var(--card-surface);
+  --ink: var(--text-primary);
+  --muted: var(--text-muted);
   /* Brass is a fill (buttons, the card box plate) with dark text on it. Brass
-     words on paper use the darker brass-ink, which keeps 5.4:1 contrast. */
-  --brass: #c9a45c;
-  --brass-hover: #d8b56e;
-  --brass-ink: #7a5c22;
+     words on paper use the darker brass-ink, which keeps >= 5.4:1 contrast. */
+  --brass: var(--accent-color);
+  --brass-hover: var(--accent-hover-color);
+  --brass-ink: var(--accent-ink);
   /* Red pencil, for corrections and warnings written on paper. */
   --pencil: #b4473b;
   /* Words written straight on the desk, outside any paper. */
-  --on-desk: #ede6d6;
+  --on-desk: var(--on-desk-text);
 
   /* The names the pages already use, pointed at the desk palette. */
   --background: var(--sheet);
   --foreground: var(--ink);
-  --border: #dcd2bd;
+  --border: var(--border-color);
   --accent: var(--brass);
   --accent-hover: var(--brass-hover);
   --link: var(--brass-ink);
@@ -67,7 +230,8 @@
     @apply py-3 text-base;
   }
   .btn-primary {
-    @apply bg-accent text-ink;
+    @apply bg-accent;
+    color: var(--button-text, var(--ink));
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 -2px 0 rgb(0 0 0 / 0.15);
   }
   .btn-primary:not(:disabled):hover {
@@ -102,7 +266,7 @@
   }
   .brass {
     background-color: var(--brass);
-    color: #2a2112;
+    color: var(--button-text, #2a2112);
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35), inset 0 -2px 0 rgb(0 0 0 / 0.18);
   }
 }
@@ -117,6 +281,10 @@
   ::backdrop,
   ::file-selector-button {
     border-color: var(--border);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent-color, var(--brass));
+    outline-offset: 2px;
   }
 }
 
@@ -138,7 +306,7 @@ body {
 /* The card box (components/desk/CardBox.tsx): a walnut box front with the
    divider tabs rising out of it; the open page's tab has a brass edge. */
 .card-box-front {
-  background-color: #5b3e2a;
+  background-color: var(--box-surface, #5b3e2a);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.14),
     inset 0 -3px 0 rgb(0 0 0 / 0.25),
@@ -174,10 +342,19 @@ body {
   background: none;
   box-shadow: none;
 }
+.on-desk .text-\[\#f3ecdd\] {
+  color: var(--on-desk);
+}
+:root[data-theme="twilight"] .paper,
+:root[data-theme="twilight"] .sheet,
+:root[data-theme="charcoal"] .paper,
+:root[data-theme="charcoal"] .sheet {
+  background-blend-mode: soft-light;
+}
 
 /* Focus rings that show on the dark leather, and in brass ink on paper. */
 .on-desk :focus-visible {
-  outline: 2px solid #e7c97e;
+  outline: 2px solid var(--brass);
   outline-offset: 3px;
 }
 .on-desk .paper :focus-visible,
@@ -192,9 +369,12 @@ body {
   color: #e2c887;
   box-shadow: inset 0 0 0 1.5px var(--brass);
 }
+.card-box-front .brass-ring {
+  color: var(--box-ring-text, #e2c887);
+}
 button.brass-ring:hover,
 .desk-tool:hover .brass-ring {
-  background-color: rgb(201 164 92 / 0.16);
+  background-color: color-mix(in srgb, var(--brass) 18%, transparent);
 }
 button.brass:hover,
 a.brass:hover,
@@ -205,7 +385,7 @@ a.brass:hover,
 /* Where a pile goes: a dashed outline on the leather. The flashcard piles are
    buttons (click one to sort the card); the quiz piles are only paper. */
 .desk-spot {
-  border: 1.5px dashed rgb(237 230 214 / 0.32);
+  border: 1.5px dashed color-mix(in srgb, var(--on-desk) 35%, transparent);
   border-radius: 14px;
   background-color: rgb(0 0 0 / 0.08);
   transition: border-color 0.15s, background-color 0.15s;
@@ -339,7 +519,7 @@ button.desk-spot:not(:disabled) {
 
 /* The yellow sticky note with a tip. */
 .sticky-note {
-  background-color: #e9d48c;
+  background-color: var(--sticky-bg, #e9d48c);
   background-image: url("/textures/paper.png");
   background-size: 256px 256px;
   background-blend-mode: multiply;
