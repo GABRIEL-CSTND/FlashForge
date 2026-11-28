@@ -130,7 +130,7 @@ export default function FlashcardDesk({
 
   const { stageRef, slot, kind, card: size, slots, settled } = useDeskLayout(`${mode}|${finished}|${roundIndex}|${run}`);
 
-  // Read aloud (#77). With Auto on, each card is read as it appears, and the
+  // Read aloud (#77, one switch since #117). While it's on, each card is read as it appears, and the
   // term when it's turned over. Moving on stops what's being read.
   const speechAvailable = useCanSpeak();
   const [autoRead, setAutoRead] = useAutoRead();
@@ -508,7 +508,7 @@ export default function FlashcardDesk({
   const notes = saveSlot ? <div className="paper paper-shadow rounded px-4 py-3 text-sm text-ink">{saveSlot}</div> : null;
   const pencil = onEdit ? <Pencil onClick={onEdit} /> : null;
   const tools = finished ? null : (
-    <StudyTools mode={mode} onMode={changeMode} speechAvailable={speechAvailable} onSpeak={() => speak(speech)} autoRead={autoRead} onAutoRead={setAutoRead} />
+    <StudyTools mode={mode} onMode={changeMode} speechAvailable={speechAvailable} readAloud={autoRead} onReadAloud={setAutoRead} />
   );
 
   if (kind === 'phone') {

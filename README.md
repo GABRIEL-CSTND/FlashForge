@@ -2,7 +2,7 @@
 
 Upload your notes and get an AI-generated study guide in seconds.
 
-FlashForge turns a PDF (scanned ones too), Word, PowerPoint or TXT file, a photo of your notes, notes pasted as text, a link to a web page, or just a **topic** (looked up on Wikipedia) into a study guide of 5 to 30 questions (10 by
+FlashForge turns a PDF (scanned ones too), Word, PowerPoint or TXT file, a photo of your notes, notes pasted as text, a link to a web page, or just a **topic** (looked up on Wikipedia) into a study guide of 5 to 50 questions (10 by
 default): **identification-style flashcards** (a clue on the front, a 1–4 word term on
 the back), **multiple-choice questions**, **true-or-false statements** with the
 correction shown after each false one, or a **mixed quiz** set out like a school exam
@@ -137,7 +137,7 @@ components/
   study/QuizDesk.tsx    Quizzes on the desk: question card, Right / Wrong piles, a card for each part, score by part
   study/AnswerSlips.tsx A quiz question's answers as paper slips (A–D, or True and False)
   study/TypedForm.tsx   The line to type an answer on (Type mode, and Part III of a mixed quiz)
-  study/StudyTools.tsx  The brass Flip / Type / Match / Read aloud buttons and the Auto switch (quizzes: Read aloud only)
+  study/StudyTools.tsx  The brass Flip / Type / Match buttons and the Read aloud switch (quizzes: Read aloud only)
   study/logic.ts        Card and result types, scoring and reporting, what Read aloud says (both desks)
   study/sizes.ts        Text sizes that keep a clue, a question or a term on its card
   study/SourceNote.tsx  Where a card came from: its quote and page
@@ -156,7 +156,8 @@ components/
   desk/PageTurn.tsx     The sheet; turns the page on every navigation (React ViewTransition) and eases it in on Back
   desk/view-transition.ts  React's ViewTransition, looked up, since the tests' React doesn't have it
   desk/DeskTurn.tsx     Turns one view of a page into another the same way (the home page's notes sheet, deck being made, new cards)
-  desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, Play live, and a tab for each section the role can open
+  desk/CardBox.tsx      Card box (top left): FlashForge for a new guide, student notification bell (#110), Play live, and a tab for each section the role can open
+  desk/NotificationBell.tsx  Students' bell for new teacher posts, with its list (#110); reloads when a page opens or the window gets focus
   desk/LibraryCard.tsx  Library card (top right): name, role and Sign out, or Sign in with Google
   desk/PaperCard.tsx    A card with two faces that turns over
   desk/FullscreenToggle.tsx  Full-screen button on the front of the card box, where the browser allows it (#126)
@@ -196,7 +197,7 @@ lib/
   office-text.ts        Text from Word (.docx) and PowerPoint (.pptx) files, with zip-bomb limits (server-only)
   shrink-image.ts       Shrinks photos to 1,600 pixels before upload (browser-only)
   pending-guide.ts      Keeps an unsaved guide across the Google sign-in redirect (browser-only)
-  speech.ts             Reading cards aloud with the browser's built-in speech, and the Auto setting (browser-only)
+  speech.ts             Reading cards aloud with the browser's built-in speech, and the Read aloud setting (browser-only)
   web-page.ts           Fetches a linked web page safely (no private addresses) and keeps its main text (server-only)
   topic.ts              Looks a typed topic up on Wikipedia and returns the best article's text (server-only)
   answer-check.ts       Checking typed answers (capitals, accents, one typo), shared by the study screen and server
@@ -212,6 +213,7 @@ lib/
   classes-shared.ts     Class name, join-code and student-name rules, and the class content categories (#115), shared by server and client
   student-classes.ts    Joining/leaving classes and the wrong-code rate limit (server-only)
   assignments.ts        Assigning sets to classes, scoped to the teacher/student (server-only)
+  student-notifications.ts  Students' notification bell (#110): the list, what's been read (localStorage), what reloads it (browser-only)
   due-dates.ts          Due-date checks, local-time display, Overdue, sorting (shared)
   attempts.ts           Saving study results, scored from the real cards; recent scores, progress (server-only)
   class-results.ts      A teacher's view of student results, scoped like the attempts RLS (server-only)
@@ -220,7 +222,7 @@ lib/
   route-helpers.ts      Shared error/404 responses for API routes
   supabase.ts           Browser Supabase client (anon key)
   supabase-admin.ts     Server-only Supabase client (service-role key)
-  auth.ts               useUser hook, Google sign-in/out
+  auth.ts               useUser hook, Google sign-in (always asks which account) and sign-out
 test-utils/
   fake-supabase.ts      In-memory Supabase client for route tests
 public/

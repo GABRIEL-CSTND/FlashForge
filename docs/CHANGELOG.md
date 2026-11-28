@@ -10,6 +10,12 @@ with the next release of `dev` to `main`.
 
 ### Fixed
 
+- **One Read aloud switch (#117):** the study desk had a Read aloud button and a separate
+  Auto switch that did nearly the same thing, which confused people. They're now one brass
+  **Read aloud** switch: turning it on reads the card on screen straight away, then each
+  card as it comes up and the answer once it's shown (on quizzes too, which before only
+  read the answer when asked); turning it off stops the reading. The choice is remembered
+  on the device as before.
 - **Database checks no longer depend on who's an admin:** `assignments-rls-check.sql`,
   `generation-limits-check.sql`, `generation-logs-check.sql` and `admin-users-check.sql`
   took the oldest live accounts as their students and non-admins. Once those accounts
@@ -19,6 +25,15 @@ with the next release of `dev` to `main`.
 
 ### Added
 
+- **Student notification bell for teacher posts (#110):** signed-in students get a bell on
+  the front of the card box, with a badge counting the assignments, quizzes, learning
+  materials and class files their teachers posted that they haven't opened. It checks when
+  a page opens, when the bell is opened and when the window gets focus, so a new post shows
+  up the next time a student opens a page or comes back to the tab. It isn't live yet:
+  that needs a migration (see ARCHITECTURE, "Student notifications"). The bell opens a
+  list of recent posts with times, class and teacher; picking one opens it and marks it
+  read, and *Mark all as read* clears the badge. What's been read is remembered on that
+  device (`localStorage`). On a phone the list spans the front of the card box.
 - **View source file (#111):** a guide made from a file keeps the file, so its owner can open
   it again from History or the saved set: PDFs and photos show in the page, TXT, Word and
   PowerPoint files as text, and any can be downloaded. The new deck has it too, right after
@@ -70,6 +85,12 @@ with the next release of `dev` to `main`.
 
 ### Changed
 
+- **Custom deck sizes, up to 50 cards (#104):** the Make Card's *how many* slips add 40
+  and 50 to the presets and take any whole number from 5 to 50 typed in (it was 5 to 30).
+  Decks over 30 get more time: `/api/generate` may run for 150 seconds (was 90), each
+  question over 30 adds 2.5 seconds to the AI's budget and 1.5 seconds to each model's
+  timeout, and a timeout on such a deck goes straight to the next model. The page says a
+  deck that big can take a couple of minutes.
 - **Assignments, quizzes and learning materials (#115):** a teacher shares a set with a class
   as an assignment, a quiz or a learning material, and can change it later on the class
   page; the class page and *My classes* list the three apart. Assignments and quizzes have
@@ -83,6 +104,9 @@ with the next release of `dev` to `main`.
   green, wrong ones red pencil with the right term under the clue, and the quotes appear. A
   card's answer is the term it was paired with when the round was submitted, not the first
   one picked, so changing your mind before submitting no longer counts against you.
+- **Sign in with Google asks which account to use:** Google always shows its account
+  chooser (`prompt: 'select_account'`), so someone on a shared or school computer no
+  longer signs straight back in as whoever used it last.
 
 ## 2026-11-16: the desk redesign
 

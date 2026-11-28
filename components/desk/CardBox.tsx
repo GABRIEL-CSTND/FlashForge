@@ -6,6 +6,7 @@ import { useUser } from '@/lib/auth';
 import { useProfile } from '@/components/ProfileProvider';
 import { canUseTeacherTools, type Role } from '@/lib/role-types';
 import FullscreenToggle from './FullscreenToggle';
+import NotificationBell from './NotificationBell';
 
 export interface CardBoxTab {
   label: string;
@@ -72,6 +73,7 @@ export default function CardBox() {
           FlashForge
         </Link>
         <div className="flex items-center gap-2">
+          <NotificationBell />
           <Link
             href="/play"
             aria-current={isActive(pathname, '/play') ? 'page' : undefined}

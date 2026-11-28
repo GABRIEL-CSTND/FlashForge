@@ -19,6 +19,7 @@ import {
   DEFAULT_DIFFICULTY,
   DEFAULT_QUESTION_COUNT,
   DIFFICULTY_LABELS,
+  LONG_GENERATION_THRESHOLD,
   STUDY_TYPE_LABELS,
   type Difficulty,
   type StudyType,
@@ -520,11 +521,13 @@ export default function UploadPage() {
         : source === 'text'
           ? 'from the notes on the sheet'
           : 'Put your notes, a link or a topic on the sheet first.';
-  const waitNote = sendingPhoto
-    ? 'Reading a photo can take about 30 seconds.'
-    : count > DEFAULT_QUESTION_COUNT
-      ? `${count} cards can take about 30 seconds.`
-      : 'This can take about 20 seconds.';
+  const waitNote = count > LONG_GENERATION_THRESHOLD
+    ? `${count} cards can take a couple of minutes.`
+    : sendingPhoto
+      ? 'Reading a photo can take about 30 seconds.'
+      : count > DEFAULT_QUESTION_COUNT
+        ? `${count} cards can take about 30 seconds.`
+        : 'This can take about 20 seconds.';
 
   // While the AI writes the guide: the deck being made, what it's making, and
   // the steps so far (GenerationProgress, which screen readers follow).
@@ -548,7 +551,9 @@ export default function UploadPage() {
             )}
             {slowGeneration && progress.attempt <= 1 && (
               <p className="max-w-sm text-sm text-on-desk/85">
-                Our AI is extra busy right now, so we&apos;re using a slower backup. This can take up to a minute.
+                {count > LONG_GENERATION_THRESHOLD
+                  ? 'The AI is still writing your deck.'
+                  : 'Our AI is extra busy right now, so we’re using a slower backup. This can take up to a minute.'}
               </p>
             )}
           </div>

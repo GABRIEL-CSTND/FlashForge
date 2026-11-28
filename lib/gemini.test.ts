@@ -64,12 +64,12 @@ describe('question count (#65)', () => {
   });
 
   it('asks the AI for the chosen count plus spares, and returns no more than the count', async () => {
-    mockModel(() => reply(flashcards(24)));
-    const { items, model } = await generateStudyItems('Some notes about cells.', 'flashcard', { count: 20 });
+    mockModel(() => reply(flashcards(60)));
+    const { items, model } = await generateStudyItems('Some notes about cells.', 'flashcard', { count: 50 });
     expect(sent).toHaveLength(1);
-    expect(sent[0].prompt).toContain('Produce exactly 24 items.');
-    expect(items).toHaveLength(20);
-    expect(items[19]).toEqual({ question: 'Clue number 20', answer: 'Term 20' });
+    expect(sent[0].prompt).toContain('Produce exactly 60 items.');
+    expect(items).toHaveLength(50);
+    expect(items[49]).toEqual({ question: 'Clue number 50', answer: 'Term 50' });
     expect(model).toBe('gemini-3.5-flash');
   });
 
@@ -77,6 +77,20 @@ describe('question count (#65)', () => {
     mockModel(() => reply([...flashcards(3), { question: 'Broken', answer: '<b>html</b>' }]));
     const { items } = await generateStudyItems('Some notes.', 'flashcard', { count: 5 });
     expect(items).toHaveLength(3);
+  });
+
+  it('gives a 50-card request more time and tries another model after a timeout', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    mockModel(({ model }) => {
+      if (model === 'gemini-3.5-flash') throw new DOMException('Timed out', 'TimeoutError');
+      return reply(flashcards(60));
+    });
+
+    const { items } = await generateStudyItems('Some notes about cells.', 'flashcard', { count: 50 });
+
+    expect(items).toHaveLength(50);
+    expect(timeout).toHaveBeenNthCalledWith(1, 75_000);
+    expect(sent.map(({ model }) => model)).toEqual(['gemini-3.5-flash', 'gemini-3.5-flash-lite']);
   });
 
   it('tries the next model when too few items are usable for the chosen count', async () => {

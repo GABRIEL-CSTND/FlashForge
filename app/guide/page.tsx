@@ -87,7 +87,7 @@ export default function GuidePage() {
             <span className="text-[11px] font-bold uppercase tracking-wider text-brass-ink">Step 2</span>
             <h3 className="font-medium text-sm text-ink">Customize with the Make Card</h3>
             <p className="text-xs text-muted leading-relaxed">
-              Click the words in &ldquo;Make me 10 medium flashcards&rdquo; to fan out paper slips. Choose your card count (5–30), difficulty (Easy, Medium, Hard), and study format.
+              Click the words in &ldquo;Make me 10 medium flashcards&rdquo; to fan out paper slips. Pick a preset or enter a custom card count from 5 to 50, then choose the difficulty and study format.
             </p>
           </div>
           <div className="paper rounded-lg p-4 space-y-1.5 border border-ink/10">
@@ -227,9 +227,9 @@ export default function GuidePage() {
           </div>
 
           <div className="paper rounded-lg p-3.5 space-y-1 border border-ink/10">
-            <h3 className="font-medium text-sm text-ink">🔊 Read Aloud & Auto</h3>
+            <h3 className="font-medium text-sm text-ink">🔊 Read Aloud</h3>
             <p className="text-xs text-muted leading-relaxed">
-              Use the brass Read Aloud button to listen to clues and answers using your browser&apos;s speech. Turn on Auto to have each card read aloud as it comes up, and the answer when you turn it over.
+              Turn on the brass Read Aloud button to have each card read aloud as it comes up, and the answer when you turn it over, using your browser&apos;s speech. Click it again to stop.
             </p>
           </div>
 
@@ -312,6 +312,7 @@ export default function GuidePage() {
               <li>If your teacher shares a set&apos;s source material, <strong>View source file</strong> opens the file it was made from while you study it.</li>
               <li>Take assigned quizzes and study sets; scores sync directly to your teacher&apos;s grade book.</li>
               <li>Open <strong>Class files</strong> under a class to download the files your teacher posted.</li>
+              <li>The <strong>bell</strong> on the front of the card box counts new assignments, quizzes, learning materials and files from your teachers. It checks when you open a page or come back to FlashForge, and picking a post opens it. What you&apos;ve read is remembered on that device only.</li>
             </ul>
           </div>
         </div>

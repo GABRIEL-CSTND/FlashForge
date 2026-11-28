@@ -209,7 +209,7 @@ score and report the same way (`components/study/logic.ts`, moved out of
 - **The layout.** On a laptop (a desk at least 960 px wide): the deck on the left with
   the set's name on a paper label (the page's `h1`), the save or rename controls and the
   pencil; the card in the middle; the Got it and Missed it piles on the right; the brass
-  tools (Flip, Type, Match, Read aloud, Auto) under the card. On a phone: the deck peeks
+  tools (Flip, Type, Match, Read aloud) under the card. On a phone: the deck peeks
   out above the card, the piles are two trays under it (Missed it on the left, Got it on
   the right), then the tools. The paper sheet steps aside for it
   (`.desk-sheet:has(.on-desk)` in `globals.css`).
@@ -277,7 +277,7 @@ layout hook (`useDeskLayout`), so it reads the same way on a laptop and a phone.
 - **Focus.** Picking an answer (or checking a typed one) moves focus to *Next*; *Next*
   moves it to the new card's words (a typed card puts it on the line to type on), and the
   last one to the finish note. The card's words show no focus ring, as they aren't a
-  control. Read aloud and Auto are under the card, as for flashcards; Auto also reads a
+  control. Read aloud is under the card, as for flashcards; it also reads a
   part's card (*Part 2. True or false. 3 questions.*).
 - **Scoring is unchanged:** the first time through, each answer is reported in the
   quiz's order (`reportAnswer()`), and the server scores it in `lib/attempts.ts`.
@@ -397,7 +397,7 @@ new ones included, gets it without doing anything):
    (#70). The sheet says what it found, with a switch (*Use it as notes*) when that's
    wrong. Notes must be 20 to 30,000 characters (`pastedTextProblem()`), with a counter.
    The **"Make me 10 medium flashcards"** card (`components/make/MakeCard.tsx`) sets how
-   many (5, 10, 15, 20 or 30, #65), how hard and what kind (#68, #69): each word opens
+   many (5, 10, 15, 20, 30, 40 or 50 as presets, or any whole number from 5 to 50, #104), how hard and what kind (#68, #69): each word opens
    paper slips (`components/desk/SlipMenu.tsx`) with a line saying what each choice is.
    **Make my deck** sends it. Nothing is saved yet. While the AI works, the notes sheet
    turns into **the deck being made** (`components/make/MakingDeck.tsx`): a pencil writes
@@ -421,7 +421,7 @@ new ones included, gets it without doing anything):
      ignored.
    - The spread has Save and the source's credit; **Start studying** gathers the cards and
      the study screen takes over on the same URL.
-2. **`POST /api/generate`** (`app/api/generate/route.ts`, `maxDuration = 90`):
+2. **`POST /api/generate`** (`app/api/generate/route.ts`, `maxDuration = 150`):
    - Checks the caller's **daily limit** first (#63). Over it, the answer is 429 and the AI
      isn't called. See "Daily generation limits" below.
    - Checks the file again with the page's rules (`fileProblem()` in `lib/sources.ts`):
@@ -483,7 +483,7 @@ new ones included, gets it without doing anything):
      otherwise its first words (`titleFromText()`), and `sourceFilename` is null.
    - Calls `generateStudyItems(text, studyType, { count })` and returns
      `{ title, sourceFilename, studyType, items, model }`. `count` comes from the form:
-     any whole number from 5 to 30, otherwise 10 (`parseQuestionCount()` in
+     any whole number from 5 to 50, otherwise 10 (`parseQuestionCount()` in
      `lib/study-types.ts`). An unknown study type falls back to flashcards.
    - Never sends raw API errors to the browser; details go to the server log.
    - **Progress** (`lib/generation-progress.ts`): a normal request gets one JSON answer. The
@@ -538,9 +538,9 @@ new ones included, gets it without doing anything):
 | 2 | `gemini-3.5-flash-lite` | 2 | 25s, +0.5s per question over 10 | Same request; separate quota |
 | 3 | `gemma-4-26b-a4b-it` | 1 | 40s, +1.5s per question over 10 | Last resort: slow (~26–33s for 10) and sometimes fails |
 
-- The whole generation is capped at **75 seconds**.
+- The base generation budget is **75 seconds**. Each question above 30 adds 2.5 seconds to the total budget and 1.5 seconds to each model timeout. A timeout on a deck above 30 sends the request to the next model.
 - **429 (quota used up)** skips straight to the next model.
-- **503/5xx, timeouts, network errors, and empty or invalid output** are retried with
+- **503/5xx, standard deck timeouts, network errors, and empty or invalid output** are retried with
   exponential backoff plus jitter.
 - **Other 4xx errors** (bad request, bad key) fail immediately.
 - Users only ever see "The AI is busy right now…" or a generic error message.
@@ -783,8 +783,10 @@ them, which is off unless turned on.
 
 ## 2. Auth and roles
 
-- **Sign-in:** Google OAuth through Supabase (`lib/auth.ts`). Anyone can generate and
-  study without signing in; saving requires sign-in.
+- **Sign-in:** Google OAuth through Supabase (`lib/auth.ts`). Google always shows its
+  account chooser (`prompt: 'select_account'`), so a shared computer doesn't sign in as
+  whoever used it last. Anyone can generate and study without signing in; saving requires
+  sign-in.
 - **Roles** (`public.profiles.role`): `student` (default), `teacher`, `admin`.
   - A trigger on `auth.users` creates a student profile at sign-up. It catches its own
     errors, so it can never block a sign-up.
@@ -929,6 +931,31 @@ live database's keys were checked on 2026-11-14: they match the migrations.
   became one: `private.teaches_student_in_assignment()` skips materials, so RLS hides them
   too. Making a graded item a material asks first; making it an assignment or quiz again
   brings its scores back.
+
+### Student notifications (#110)
+
+- **The bell** (`components/desk/NotificationBell.tsx`) is on the front of the card box,
+  for signed-in students only. It lists what their classes' teachers posted, newest first
+  (`buildStudentNotifications()` in `lib/student-notifications.ts`): assigned sets,
+  quizzes and learning materials from `/api/student/classes`, and class files (the
+  `class_files` rows' names and dates, not their bytes). Picking one opens it and marks it
+  read; *Mark all as read* marks them all.
+- **When it reloads:** when a page opens, when the bell is opened, when the window gets
+  focus, and when this tab assigns a set (`AssignPanel` sends `TEACHER_POST_EVENT`). It
+  also subscribes to Supabase Realtime changes on `assignments` and `class_files` and to a
+  `teacher-post` broadcast, but nothing sends the broadcast, and neither table is in the
+  `supabase_realtime` publication (checked on the live database on 2026-11-28), so no
+  changes arrive. Live updates need a migration. Publishing `class_files` as it is would
+  send each file's base64 bytes with every change, so a small notifications table (or a
+  publication column list) is the better way.
+- **Read or not** is kept per student in the browser (`localStorage`, or memory when
+  storage is blocked), so another device shows everything as unread.
+- **Screen readers** hear about posts found after the first load ("1 new post from your
+  teachers"); the bell's label carries the unread count.
+- **Placement:** on a phone the list hangs from the card box's front, as wide as it; from
+  640 px it hangs from the bell, 384 px wide, and opens to the right, since the card box
+  is at the left of the screen.
+
 ### Study results (#57)
 
 - **Every finish on a saved set is saved** for signed-in users. `StudyViewer` reports what
@@ -1055,19 +1082,20 @@ live database's keys were checked on 2026-11-14: they match the migrations.
 
 ### Reading cards aloud (#77)
 
-- **Read aloud** (a brass button under the card, on the flashcard and the quiz desk)
-  reads what's on screen: the
-  question (with the choices, or "True or false?" before a statement), the answer once a
-  flashcard is flipped, the right answer and any explanation once a question is answered,
-  in matching the round's clues, and a mixed quiz's part card (*Part 2. True or false. 3
-  questions.*). **Auto** reads each card as it appears and the answer when a card is
-  flipped; moving on, finishing or leaving stops the reading.
+- **Read aloud** (a brass switch under the card, on the flashcard and the quiz desk; one
+  control since #117, which merged the old Read aloud button and Auto switch). Turning it
+  on reads what's on screen straight away: the
+  question (with the choices, or "True or false?" before a statement), in matching the
+  round's clues, and a mixed quiz's part card (*Part 2. True or false. 3 questions.*).
+  While it's on, each card is read as it appears, the answer once a flashcard is flipped,
+  and the right answer and any explanation once a question is answered. Turning it off,
+  moving on, finishing or leaving stops the reading.
 - It uses the browser's built-in speech (`speechSynthesis` in `lib/speech.ts`): free, no AI
   requests, and on most phones it works offline. Where a browser can't speak, the
-  controls aren't shown. The voice is the device's default, at 0.95 speed.
-- Auto is remembered on the device (`localStorage`, falling back to the open page if
-  storage is blocked). Both values are read with `useSyncExternalStore`, so the page
-  renders the same on the server and in the browser.
+  control isn't shown. The voice is the device's default, at 0.95 speed.
+- The switch is remembered on the device (`localStorage` key `flashforge_read_aloud`,
+  falling back to the open page if storage is blocked). Both values are read with
+  `useSyncExternalStore`, so the page renders the same on the server and in the browser.
 
 ### Student results for teachers (#58)
 
@@ -1372,7 +1400,7 @@ to making a deck.
     Right / Wrong piles, the Wrong pile again, part cards and focus), `MatchBoard` (pairing,
     the five pair colours, same-answer grading, focus after Submit Answers), `CardEditor`,
     `AssignPanel`, the desk's card box and library card (the tabs each role gets, signing
-    in and out), `PageTurn` (the sheet, and the rise after Back and Forward), `PaperCard`, the desk layout at four widths, the
+    in and out), `NotificationBell` (#110: the list, read and unread, new posts), `PageTurn` (the sheet, and the rise after Back and Forward), `PaperCard`, the desk layout at four widths, the
     set page, My Sets (its decks, best scores, delete), the History pages (saving from a deck too), the User Guide, saving a guide made while signed out across the Google sign-in (`app/upload-sign-in-save.test.tsx`, #89) and the teacher and student pages, in jsdom with React Testing Library.
     Component tests start with `// @vitest-environment jsdom`.
 - Live games (#26): `lib/live-game.test.ts` (the rules: points, one pick, typed guesses,
@@ -1452,6 +1480,9 @@ to making a deck.
   page, which browsers slow down in a background tab and phones pause, so a host who
   switches away holds up the game: players see *We lost the host* after 25 s, and the
   game picks up when the host comes back.
+- **The notification bell (#110) isn't live:** it checks for teacher posts when a page
+  opens, when it's opened and when the window gets focus, since the database doesn't send
+  changes over Realtime yet (that needs a migration). What's been read is kept per device.
 - **The daily limits (#63) count signed-out visitors per IP**, so someone switching
   networks or using many IPs gets more, and so does someone with many Google accounts.
   Failed guides that asked the AI have their own cap (#41). `/admin/usage`

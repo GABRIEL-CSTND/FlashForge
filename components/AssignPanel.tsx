@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { apiFetch, errorMessage } from '@/lib/api-client';
 import { CLASS_CONTENT, isClassContentCategory, type ClassContentCategory } from '@/lib/classes-shared';
 import { formatDueDate, fromLocalInputValue, parseDueAt } from '@/lib/due-dates';
+import { TEACHER_POST_EVENT } from '@/lib/student-notifications';
 
 interface ClassOption {
   classId: string;
@@ -95,6 +96,9 @@ export default function AssignPanel({ setId, setTitle, onClose }: { setId: strin
       setSelected([]);
       setDueLocal('');
       setAllowSourceMaterial(false);
+      if (typeof window !== 'undefined' && assigned.length > 0) {
+        window.dispatchEvent(new Event(TEACHER_POST_EVENT));
+      }
       setState(await fetchOptions(setId));
     } catch {
       setMessage({ kind: 'error', text: OFFLINE_MESSAGE });
