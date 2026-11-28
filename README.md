@@ -14,6 +14,7 @@ or automatically, with the browser's built-in voice. Sign in
 with Google to save study guides, then rename, revisit, or delete them from **My Sets**.
 Signed in, every guide you make is also kept in **History**, saved or not, so you can study one again
 or save it later.
+Use **Previous** during a quiz or while flipping or typing flashcards to review earlier cards and their recorded answers.
 Signed in, every finished study session is saved with its score. Teachers can create classes, assign sets, and see each student's scores and
 the most-missed questions; students join with a code. Admins manage users' roles and can remove any study set.
 With **Play live**, a group plays a deck at the same time, as in a quiz show: everyone gets the same question at once,

@@ -12,7 +12,7 @@ import { byPart, cardSpeech, isCorrect, reportAnswer, type CardAnswer, type Flas
 import SourceNote from './SourceNote';
 import StudyTools from './StudyTools';
 import TypedForm from './TypedForm';
-import { ChoiceVerdictLine, DeskHeader, TypedVerdictLine } from './parts';
+import { ChoiceVerdictLine, DeskHeader, PreviousCardButton, TypedVerdictLine } from './parts';
 import { clueSize } from './sizes';
 
 // The Right pile lies where a flashcard deck's Got it pile does, and the Wrong
@@ -131,11 +131,13 @@ export default function QuizDesk({
       order: [...d.order, ...Array.from({ length: sheets.length - seenSheets }, (_, k) => seenSheets + k)],
     }));
   }
-  // The first time through: the answer to each question (by position in
-  // `cards`), for the score.
+  // Answers from the current pass, for review and for scoring the first pass.
   const [answers, setAnswers] = useState<Record<number, CardAnswer>>({});
+  // Review moves through answered questions without moving the answer position.
+  const [reviewPos, setReviewPos] = useState<number | null>(null);
   // The answer to the card in the middle, until it goes to a pile.
   const [answer, setAnswer] = useState<CardAnswer | null>(null);
+  const [draft, setDraft] = useState('');
   // The sheet on its way to a pile (or aside) keeps its words until it lands.
   const [flying, setFlying] = useState<number | null>(null);
   // Bumped on every restart and every new pass, so slips and typed answers
@@ -167,17 +169,22 @@ export default function QuizDesk({
   const interactionFor = (c: StudyItem): Interaction => (mixed && cardKind(c.options) === 'identification' ? 'typed' : 'choice');
 
   const finished = deck.pos >= deck.order.length;
-  const current = finished ? undefined : deck.order[deck.pos];
+  const reviewing = reviewPos !== null;
+  const shownPos = reviewPos ?? deck.pos;
+  const current = finished ? undefined : deck.order[shownPos];
   const sheet = current === undefined ? undefined : sheets[current];
   const card = sheet?.kind === 'question' ? cards[sheet.index] : undefined;
+  const shownAnswer = reviewing && sheet?.kind === 'question' ? answers[sheet.index] : answer;
   const interaction: Interaction = card ? interactionFor(card) : 'choice';
   const rightList = deck.landed.filter((s) => deck.pile[s] === 'got');
   const wrongList = deck.landed.filter((s) => deck.pile[s] === 'missed');
   const isQuestion = (s: number) => sheets[s].kind === 'question';
   const passCount = deck.order.filter(isQuestion).length;
-  const passDone = deck.order.slice(0, deck.pos).filter(isQuestion).length;
+  const questionsBefore = deck.order.slice(0, shownPos).filter(isQuestion).length;
+  const previousPos = deck.order.findLastIndex((s, pos) => pos < shownPos && isQuestion(s));
+  const nextReviewPos = reviewing ? deck.order.findIndex((s, pos) => pos > shownPos && (pos === deck.pos || isQuestion(s))) : -1;
 
-  const { stageRef, slot, kind, card: flashcard, slots, settled } = useDeskLayout(`${finished}|${run}|${deck.pos}|${answer ? 1 : 0}`);
+  const { stageRef, slot, kind, card: flashcard, slots, settled } = useDeskLayout(`${finished}|${run}|${shownPos}|${shownAnswer ? 1 : 0}`);
   // On a laptop the question card is lower than a flashcard (about 290 high), so
   // the answers and Next fit under it on a 768-pixel-high screen. On a phone
   // it's taller than a flashcard, as the narrow card also has to hold the
@@ -192,18 +199,18 @@ export default function QuizDesk({
   // correction) once it's answered. Moving on stops what's being read.
   const speechAvailable = useCanSpeak();
   const [autoRead, setAutoRead] = useAutoRead();
-  const answered = answer ? 1 : 0;
+  const answered = shownAnswer ? 1 : 0;
   const speech = !sheet
     ? ''
     : sheet.kind === 'part'
       ? `Part ${sheet.number}. ${sheet.part.label}. ${questionsWord(sheet.count)}.`
-      : cardSpeech(interaction, card, [], false, answer ?? undefined);
+      : cardSpeech(interaction, card, [], false, shownAnswer ?? undefined);
   useEffect(() => {
     if (autoRead && speech) speak(speech);
     else stopSpeaking();
     // Only when another card is shown or the card is answered.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRead, finished, deck.pos, run, answered]);
+  }, [autoRead, finished, shownPos, run, answered]);
   useEffect(() => stopSpeaking, []);
 
   // Keyboard focus follows the work: to Next once a question is answered, to
@@ -217,7 +224,7 @@ export default function QuizDesk({
     movedOn.current = false;
     if (finished) doneRef.current?.focus();
     else (questionRef.current ?? partRef.current)?.focus();
-  }, [deck.pos, run, finished]);
+  }, [shownPos, run, finished]);
 
   const fly = (s: number) => {
     setFlying(s);
@@ -232,20 +239,34 @@ export default function QuizDesk({
     });
 
   const pick = (option: string) => {
-    if (!card || answer || interaction !== 'choice') return;
+    if (!card || answer || reviewing || interaction !== 'choice') return;
     setAnswer({ chosen: option });
   };
 
   const checkTyped = (typed: string | null) => {
-    if (!card || answer || interaction !== 'typed') return;
+    if (!card || answer || reviewing || interaction !== 'typed') return;
     setAnswer(typed === null ? { typed: null, verdict: 'wrong' } : { typed, verdict: checkTypedAnswer(typed, card.answer) });
+  };
+
+  const previous = () => {
+    if (previousPos < 0) return;
+    movedOn.current = true;
+    setReviewPos(previousPos);
   };
 
   // On to the next sheet. An answered question goes to the Right or Wrong
   // pile; the first time through, its answer counts, and the last question
   // reports the run (#57). A part's card is put aside.
-  const next = () => {
+  const next = (event: React.MouseEvent<HTMLButtonElement>) => {
+    // The same button can become “See your score” as soon as review ends.
+    // Treat a pointer double-click as one navigation, including on the last card.
+    if (event.detail > 1) return;
     if (current === undefined || !sheet) return;
+    if (reviewing) {
+      movedOn.current = true;
+      setReviewPos(nextReviewPos >= 0 && nextReviewPos < deck.pos ? nextReviewPos : null);
+      return;
+    }
     if (sheet.kind === 'question' && !answer) return;
     movedOn.current = true;
     fly(current);
@@ -257,10 +278,10 @@ export default function QuizDesk({
     const right = isCorrect(interaction, cards[sheet.index], answer);
     setDeck({ ...deck, pos: nextPos, pile: { ...deck.pile, [current]: right ? 'got' : 'missed' }, landed: [...deck.landed, current] });
     setAnswer(null);
-    if (deck.practice) return;
+    setDraft('');
     const nextAnswers = { ...answers, [sheet.index]: answer };
     setAnswers(nextAnswers);
-    if (nextPos >= deck.order.length) report(nextAnswers);
+    if (!deck.practice && nextPos >= deck.order.length) report(nextAnswers);
   };
 
   // The Wrong pile, dealt again: those questions go back into the deck and the
@@ -269,7 +290,9 @@ export default function QuizDesk({
     if (!finished || wrongList.length === 0) return;
     movedOn.current = true;
     setDeck({ order: wrongList, pos: 0, pile: Object.fromEntries(rightList.map((s) => [s, 'got' as const])), landed: rightList, practice: true });
+    setAnswers({});
     setAnswer(null);
+    setDraft('');
     setRun((r) => r + 1);
   };
 
@@ -277,23 +300,28 @@ export default function QuizDesk({
     movedOn.current = true;
     setDeck(freshDeck(sheets.length));
     setAnswers({});
+    setReviewPos(null);
     setAnswer(null);
+    setDraft('');
     setRun((r) => r + 1);
   };
 
   // Where each sheet lies: on a pile, in the middle, in the deck, or put aside.
   const placed = slots ?? {};
+  const visibleRight = rightList.filter((index) => index !== current);
+  const visibleWrong = wrongList.filter((index) => index !== current);
   const place = (s: number): { spot: Spot | null; z: number; shown: boolean } => {
+    if (s === current) return { spot: middleSpot(placed, false), z: 300, shown: true };
     const pile = deck.pile[s];
     if (pile) {
-      const list = pile === 'got' ? rightList : wrongList;
+      const list = pile === 'got' ? visibleRight : visibleWrong;
       const j = list.indexOf(s);
       return { spot: pileSpot(kind, placed, size, pile, j), z: 200 + j, shown: list.length - j <= MAX_LAYERS };
     }
-    if (s === current) return { spot: middleSpot(placed, false), z: 300, shown: true };
     const k = deck.order.indexOf(s);
-    if (k > deck.pos) {
-      const depth = k - deck.pos - 1;
+    const top = deck.pos + (reviewing ? 0 : 1);
+    if (k >= top) {
+      const depth = k - top;
       return { spot: deckSpot(kind, placed, size, depth), z: 100 - Math.min(depth, 90), shown: depth < MAX_LAYERS };
     }
     return { spot: asideSpot(placed), z: 250, shown: false };
@@ -308,7 +336,8 @@ export default function QuizDesk({
     const c = cards[i];
     const part = partOf(c);
     const typed = interactionFor(c) === 'typed';
-    const given = full ? answer : null;
+    const given = full ? shownAnswer : null;
+    const focusQuestion = full && (!typed || !!given);
     // The question keeps all its lines: when the card holds more than fits, the
     // whole card scrolls rather than squeezing the question.
     return (
@@ -321,8 +350,8 @@ export default function QuizDesk({
         </div>
         <div className="flex flex-1 shrink-0">
           <p
-            ref={full && !typed ? questionRef : undefined}
-            tabIndex={full && !typed ? -1 : undefined}
+            ref={focusQuestion ? questionRef : undefined}
+            tabIndex={focusQuestion ? -1 : undefined}
             className="my-auto font-serif leading-[1.3] [text-wrap:pretty]"
             style={{ fontSize: clueSize(c.question, kind, full && (!!given || typed)) }}
           >
@@ -337,7 +366,9 @@ export default function QuizDesk({
           ))}
         {given && c.explanation && <p className="border-l-2 border-brass pl-3 text-[14.5px] leading-snug text-ink/80">{c.explanation}</p>}
         {given && <SourceNote card={c} label={quoteLabel} className="[&>p:last-child]:line-clamp-2" />}
-        {full && typed && !given && <TypedForm key={`${run}-${i}`} onCheck={checkTyped} />}
+        {full && typed && !reviewing && !given && (
+          <TypedForm key={`${run}-${i}`} draft={draft} onDraftChange={setDraft} onCheck={checkTyped} />
+        )}
       </div>
     );
   };
@@ -495,7 +526,9 @@ export default function QuizDesk({
   // What Next says: begin a part, go on to the next one, or see the score.
   const after = current === undefined ? undefined : sheets[deck.order[deck.pos + 1]];
   const nextLabel =
-    sheet?.kind === 'part'
+    reviewing
+      ? nextReviewPos === deck.pos ? 'Resume quiz →' : 'Next question →'
+      : sheet?.kind === 'part'
       ? `Begin Part ${sheet.part.numeral} →`
       : !after
         ? 'See your score →'
@@ -504,18 +537,19 @@ export default function QuizDesk({
           : card && cardKind(card.options) === 'true_false'
             ? 'Next statement →'
             : 'Next question →';
-  const ready = sheet?.kind === 'part' || !!answer;
+  const ready = reviewing || sheet?.kind === 'part' || !!answer;
 
   // Under the card: the answers to pick from, then Next. Next keeps its place
   // while it's hidden, so the desk doesn't jump when it appears.
   const underCard = finished ? null : (
     <div className="mt-4 flex w-full flex-col items-center gap-4" style={{ maxWidth: size.w }}>
       {card && interaction === 'choice' && (
-        <AnswerSlips key={`${run}-${current}`} options={card.options ?? []} answer={card.answer} picked={answer?.chosen} onPick={pick} kind={kind} />
+        <AnswerSlips key={`${run}-${current}`} options={card.options ?? []} answer={card.answer} picked={shownAnswer?.chosen} onPick={pick} kind={kind} locked={reviewing} />
       )}
-      <div className="flex min-h-12 w-full items-center justify-center">
+      <div role="group" aria-label="Question navigation" className="flex min-h-12 w-full flex-wrap items-center justify-center gap-2.5">
+        <PreviousCardButton disabled={previousPos < 0} onClick={previous} />
         {ready && (
-          <button ref={nextRef} type="button" onClick={next} className={`btn btn-primary min-h-12 rounded-full px-7 text-[15px] ${kind === 'phone' ? 'w-full' : ''}`}>
+          <button ref={nextRef} type="button" onClick={next} className="btn btn-primary min-h-12 rounded-full px-5 text-[15px]">
             {nextLabel}
           </button>
         )}
@@ -530,7 +564,7 @@ export default function QuizDesk({
     ? 'All done'
     : sheet?.kind === 'part'
       ? `Part ${sheet.part.numeral} · ${sheet.part.label}`
-      : `Question ${passDone + 1} of ${Math.max(passCount, expected ?? 0)}`;
+      : `${reviewing ? 'Reviewing question' : 'Question'} ${questionsBefore + 1} of ${Math.max(passCount, expected ?? 0)}`;
   const header = <DeskHeader onExit={onExit} progress={progress} tally={`. Right ${right}, Wrong ${wrong}.`} />;
 
   const label = (

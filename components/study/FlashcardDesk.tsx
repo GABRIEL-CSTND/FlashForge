@@ -12,7 +12,7 @@ import MatchBoard from './MatchBoard';
 import SourceNote from './SourceNote';
 import StudyTools from './StudyTools';
 import TypedForm from './TypedForm';
-import { DeskHeader, TypedVerdictLine } from './parts';
+import { DeskHeader, PreviousCardButton, TypedVerdictLine } from './parts';
 import { clueSize, termSize } from './sizes';
 
 type Pile = FlashcardMark;
@@ -87,8 +87,11 @@ export default function FlashcardDesk({
     setSeen(count);
     setDeck((d) => ({ ...d, order: [...d.order, ...Array.from({ length: count - seen }, (_, k) => seen + k)] }));
   }
-  // The first time through: what was done with each card, for the score.
+  // Answers from the current pass, for review and for scoring the first pass.
   const [answers, setAnswers] = useState<Record<number, CardAnswer>>({});
+  // Review changes the card in the middle without moving the answer position.
+  const [reviewPos, setReviewPos] = useState<number | null>(null);
+  const [reviewFlipped, setReviewFlipped] = useState(false);
   const [flipped, setFlipped] = useState(false);
   // The back of the current card has been shown, so it keeps its words while
   // it turns back over.
@@ -96,6 +99,7 @@ export default function FlashcardDesk({
   const [lifted, setLifted] = useState(false);
   // Type mode: the current card's checked answer.
   const [checked, setChecked] = useState<CardAnswer | null>(null);
+  const [draft, setDraft] = useState('');
   // The card on its way to a pile keeps its words until it lands.
   const [flying, setFlying] = useState<number | null>(null);
   // Bumped on every restart and every new pass, so typed cards and Match
@@ -124,7 +128,11 @@ export default function FlashcardDesk({
   const rounds = matchRounds(deck.order.length);
   const roundIndex = mode === 'match' && !finished ? rounds.findIndex(([start]) => start === deck.pos) : -1;
   const round = roundIndex >= 0 ? deck.order.slice(rounds[roundIndex][0], rounds[roundIndex][1]) : [];
-  const current = !finished && mode !== 'match' ? deck.order[deck.pos] : undefined;
+  const reviewing = reviewPos !== null;
+  const shownPos = reviewPos ?? deck.pos;
+  const current = !finished && mode !== 'match' ? deck.order[shownPos] : undefined;
+  const shownChecked = mode === 'type' && reviewing && current !== undefined ? answers[current] : checked;
+  const shownFlipped = reviewing ? mode === 'type' || reviewFlipped : flipped;
   const gotList = deck.landed.filter((i) => deck.pile[i] === 'got');
   const missedList = deck.landed.filter((i) => deck.pile[i] === 'missed');
 
@@ -136,13 +144,13 @@ export default function FlashcardDesk({
   const [autoRead, setAutoRead] = useAutoRead();
   const speech = finished
     ? ''
-    : cardSpeech(interaction, current === undefined ? undefined : cards[current], round.map((i) => ({ card: cards[i] })), flipped, checked ?? undefined);
+    : cardSpeech(interaction, current === undefined ? undefined : cards[current], round.map((i) => ({ card: cards[i] })), shownFlipped, shownChecked ?? undefined);
   useEffect(() => {
     if (autoRead && speech) speak(speech);
     else stopSpeaking();
     // Only when another card or side is shown, not again after each answer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRead, finished, deck.pos, flipped, mode, run]);
+  }, [autoRead, finished, shownPos, shownFlipped, mode, run]);
   useEffect(() => stopSpeaking, []);
 
   // Keyboard focus follows the work: to the finish note when the deck is done,
@@ -151,8 +159,8 @@ export default function FlashcardDesk({
     if (finished) doneRef.current?.focus();
   }, [finished, run]);
   useEffect(() => {
-    if (checked) nextRef.current?.focus();
-  }, [checked]);
+    if (!reviewing && checked) nextRef.current?.focus();
+  }, [checked, reviewing]);
 
   const lift = () => {
     setLifted(true);
@@ -183,17 +191,32 @@ export default function FlashcardDesk({
     setFlipped(false);
     setBackSeen(false);
     setChecked(null);
-    if (deck.practice) return;
+    setDraft('');
     const nextAnswers = { ...answers, ...Object.fromEntries(results.map((r) => [r.index, r.answer])) };
     setAnswers(nextAnswers);
-    if (nextPos >= deck.order.length) report(nextAnswers);
+    if (!deck.practice && nextPos >= deck.order.length) report(nextAnswers);
   };
 
   const flip = () => {
     if (current === undefined || mode !== 'flip') return;
-    if (!flipped) setBackSeen(true);
-    setFlipped(!flipped);
+    if (reviewing) {
+      setReviewFlipped(!reviewFlipped);
+    } else {
+      if (!flipped) setBackSeen(true);
+      setFlipped(!flipped);
+    }
     lift();
+  };
+
+  const previous = () => {
+    if (current === undefined || shownPos === 0) return;
+    setReviewPos(shownPos - 1);
+    setReviewFlipped(false);
+  };
+
+  const nextReview = () => {
+    setReviewPos(shownPos + 1 < deck.pos ? shownPos + 1 : null);
+    setReviewFlipped(false);
   };
 
   // The Missed it pile, dealt again: the cards go back into the deck and the
@@ -201,9 +224,11 @@ export default function FlashcardDesk({
   const dealMissed = () => {
     if (!finished || missedList.length === 0) return;
     setDeck({ order: missedList, pos: 0, pile: Object.fromEntries(gotList.map((i) => [i, 'got' as const])), landed: gotList, practice: true });
+    setAnswers({});
     setFlipped(false);
     setBackSeen(false);
     setChecked(null);
+    setDraft('');
     setRun((r) => r + 1);
   };
 
@@ -212,7 +237,7 @@ export default function FlashcardDesk({
       if (pile === 'missed') dealMissed();
       return;
     }
-    if (mode !== 'flip' || current === undefined) return;
+    if (mode !== 'flip' || current === undefined || reviewing) return;
     fly(current);
     land([{ index: current, pile, answer: { result: pile } }], deck.pos + 1);
   };
@@ -220,13 +245,14 @@ export default function FlashcardDesk({
   // ← and → sort the card while the card or a pile has focus.
   const onDeskKey = (e: React.KeyboardEvent) => {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    if (reviewing || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     if (!finished && mode !== 'flip') return;
     e.preventDefault();
     sortTo(e.key === 'ArrowRight' ? 'got' : 'missed');
   };
 
   const checkTyped = (typed: string | null) => {
-    if (current === undefined || checked) return;
+    if (current === undefined || checked || reviewing) return;
     setChecked(typed === null ? { typed: null, verdict: 'wrong' } : { typed, verdict: checkTypedAnswer(typed, cards[current].answer) });
     setFlipped(true);
     setBackSeen(true);
@@ -236,7 +262,7 @@ export default function FlashcardDesk({
   // A checked card goes to the pile its verdict says (a small typo still
   // counts, as it always has).
   const nextTyped = () => {
-    if (current === undefined || !checked) return;
+    if (current === undefined || !checked || reviewing) return;
     fly(current);
     land([{ index: current, pile: checked.verdict === 'wrong' ? 'missed' : 'got', answer: checked }], deck.pos + 1);
   };
@@ -256,9 +282,12 @@ export default function FlashcardDesk({
   const restart = () => {
     setDeck(freshDeck(count));
     setAnswers({});
+    setReviewPos(null);
+    setReviewFlipped(false);
     setFlipped(false);
     setBackSeen(false);
     setChecked(null);
+    setDraft('');
     setRun((r) => r + 1);
   };
 
@@ -270,16 +299,18 @@ export default function FlashcardDesk({
   // Where each card lies: on a pile, in the middle, out on the desk as a Match
   // slip (hidden), or in the deck.
   const placed = slots ?? {};
+  const visibleGot = gotList.filter((index) => index !== current);
+  const visibleMissed = missedList.filter((index) => index !== current);
   const place = (i: number): { spot: Spot | null; z: number; shown: boolean; turned: boolean } => {
+    if (i === current) return { spot: middleSpot(placed, lifted), z: 300, shown: true, turned: shownFlipped };
     const pile = deck.pile[i];
     if (pile) {
-      const list = pile === 'got' ? gotList : missedList;
+      const list = pile === 'got' ? visibleGot : visibleMissed;
       const j = list.indexOf(i);
       return { spot: pileSpot(kind, placed, size, pile, j), z: 200 + j, shown: list.length - j <= MAX_LAYERS, turned: true };
     }
-    if (i === current) return { spot: middleSpot(placed, lifted), z: 300, shown: true, turned: flipped };
     if (round.includes(i)) return { spot: deckSpot(kind, placed, size, 0), z: 150, shown: false, turned: false };
-    const top = roundIndex >= 0 ? rounds[roundIndex][1] : deck.pos + (current === undefined ? 0 : 1);
+    const top = roundIndex >= 0 ? rounds[roundIndex][1] : deck.pos + (current === undefined || reviewing ? 0 : 1);
     const depth = Math.max(0, deck.order.indexOf(i) - top);
     return { spot: deckSpot(kind, placed, size, depth), z: 100 - Math.min(depth, 90), shown: depth < MAX_LAYERS, turned: false };
   };
@@ -304,7 +335,9 @@ export default function FlashcardDesk({
         </p>
       </div>
       {full && mode === 'flip' && <p className="text-[13px] text-muted">{kind === 'phone' ? 'Tap the card to flip it' : 'Click the card to flip it'}</p>}
-      {full && mode === 'type' && <TypedForm key={`${run}-${i}`} onCheck={checkTyped} />}
+      {full && mode === 'type' && !reviewing && !checked && (
+        <TypedForm key={`${run}-${i}`} draft={draft} onDraftChange={setDraft} onCheck={checkTyped} />
+      )}
     </div>
   );
 
@@ -317,22 +350,26 @@ export default function FlashcardDesk({
         <div className="flex min-h-0 flex-1 overflow-y-auto">
           <p
             className="m-auto font-serif font-medium leading-[1.05] tracking-[-0.02em] [overflow-wrap:anywhere]"
-            style={{ fontSize: termSize(c.answer, kind, full && (!!c.source || !!checked)) }}
+            style={{ fontSize: termSize(c.answer, kind, full && (!!c.source || !!shownChecked)) }}
           >
             {c.answer}
           </p>
         </div>
-        {full && mode === 'type' && checked && (
+        {full && mode === 'type' && shownChecked && (
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
-            <TypedVerdictLine card={c} answer={checked} className="font-serif text-[17px] italic" />
-            <button ref={nextRef} type="button" onClick={nextTyped} className="btn btn-primary min-h-11 rounded-full px-5">
-              {deck.pos + 1 >= deck.order.length ? 'Finish' : 'Next card →'}
-            </button>
+            <TypedVerdictLine card={c} answer={shownChecked} className="font-serif text-[17px] italic" />
+            {!reviewing && (
+              <button ref={nextRef} type="button" onClick={nextTyped} className="btn btn-primary min-h-11 rounded-full px-5">
+                {deck.pos + 1 >= deck.order.length ? 'Finish' : 'Next card →'}
+              </button>
+            )}
           </div>
         )}
         {full && <SourceNote card={c} label={quoteLabel} className="w-full [&>p:last-child]:line-clamp-2" />}
         {full && mode === 'flip' && (
-          <p className="text-[13px] text-muted">{kind === 'phone' ? 'Did you know it? Tap a tray.' : 'Did you know it? Click a pile, or press → or ←.'}</p>
+          <p className="text-[13px] text-muted">
+            {reviewing ? `Marked ${deck.pile[i] === 'got' ? 'Got it' : 'Missed it'}` : kind === 'phone' ? 'Did you know it? Tap a tray.' : 'Did you know it? Click a pile, or press → or ←.'}
+          </p>
         )}
       </div>
     );
@@ -364,7 +401,7 @@ export default function FlashcardDesk({
             <PaperCard
               flipped={turned}
               front={isCurrent || isFlying ? front(i, isCurrent) : null}
-              back={isCurrent ? (backSeen ? back(i, true) : null) : isFlying ? back(i, false) : null}
+              back={isCurrent ? (reviewing || backSeen ? back(i, true) : null) : isFlying ? back(i, false) : null}
             />
           </div>
         );
@@ -382,7 +419,7 @@ export default function FlashcardDesk({
     if (pile === 'missed' && n > 0) return `Study the ${n} missed card${n === 1 ? '' : 's'} again`;
     return `${pileWord(pile)} pile, ${n === 0 ? 'empty' : cardsWord(n)}`;
   };
-  const pileOpen = (pile: Pile) => (finished ? pile === 'missed' && missed > 0 : mode === 'flip');
+  const pileOpen = (pile: Pile) => (finished ? pile === 'missed' && missed > 0 : mode === 'flip' && !reviewing);
   const small = { w: Math.round(size.w * 0.42), h: Math.round(size.h * 0.42) };
 
   const pileButton = (pile: Pile, extra: ReactNode = null) => (
@@ -483,7 +520,7 @@ export default function FlashcardDesk({
       type="button"
       onClick={flip}
       onKeyDown={onDeskKey}
-      aria-label={flipped ? 'Flip back' : 'Flip the card'}
+      aria-label={shownFlipped ? 'Flip back' : 'Flip the card'}
       className="block shrink-0 rounded-[10px]"
       style={{ width: size.w, height: size.h }}
     />
@@ -491,11 +528,22 @@ export default function FlashcardDesk({
     <div ref={slot('card')} className="shrink-0" style={{ width: size.w, height: size.h }} />
   );
 
+  const navigation = current === undefined ? null : (
+    <div role="group" aria-label="Card navigation" className="mt-4 flex items-center justify-center gap-2.5">
+      <PreviousCardButton disabled={shownPos === 0} onClick={previous} />
+      {reviewing && (
+        <button type="button" onClick={nextReview} className="btn btn-primary min-h-11 rounded-full">
+          {shownPos + 1 === deck.pos ? 'Resume studying →' : 'Next card →'}
+        </button>
+      )}
+    </div>
+  );
+
   const progress = finished
     ? 'All done'
     : roundIndex >= 0
       ? `Round ${roundIndex + 1} of ${rounds.length}`
-      : `Card ${deck.pos + 1} of ${Math.max(deck.order.length, expected ?? 0)}`;
+      : `${reviewing ? 'Reviewing card' : 'Card'} ${shownPos + 1} of ${Math.max(deck.order.length, expected ?? 0)}`;
   const header = <DeskHeader onExit={onExit} progress={progress} tally={`. Got it ${got}, Missed it ${missed}.`} />;
 
   const toGo = deck.order.length - deck.pos;
@@ -522,6 +570,7 @@ export default function FlashcardDesk({
             {current !== undefined && <div aria-hidden="true" className="h-9" />}
             {cardLayer}
             {center}
+            {navigation}
             {piles}
             {tools && <div className="mt-5">{tools}</div>}
             {(notes || pencil) && (
@@ -552,6 +601,7 @@ export default function FlashcardDesk({
           <div className="flex flex-col items-center">
             {cardLayer}
             {center}
+            {navigation}
           </div>
           {piles}
           {tools && <div className="col-start-2">{tools}</div>}

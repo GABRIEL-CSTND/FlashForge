@@ -25,6 +25,8 @@ with the next release of `dev` to `main`.
 
 ### Added
 
+- **Previous card during study (#101).** Review earlier flashcards in Flip or Type mode
+  and earlier quiz questions. Previously recorded answers and scores are preserved when you resume.
 - **Student notification bell for teacher posts (#110):** signed-in students get a bell on
   the front of the card box, with a badge counting the assignments, quizzes, learning
   materials and class files their teachers posted that they haven't opened. It checks when
