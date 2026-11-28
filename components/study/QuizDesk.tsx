@@ -257,7 +257,10 @@ export default function QuizDesk({
   // On to the next sheet. An answered question goes to the Right or Wrong
   // pile; the first time through, its answer counts, and the last question
   // reports the run (#57). A part's card is put aside.
-  const next = () => {
+  const next = (event: React.MouseEvent<HTMLButtonElement>) => {
+    // The same button can become “See your score” as soon as review ends.
+    // Treat a pointer double-click as one navigation, including on the last card.
+    if (event.detail > 1) return;
     if (current === undefined || !sheet) return;
     if (reviewing) {
       movedOn.current = true;

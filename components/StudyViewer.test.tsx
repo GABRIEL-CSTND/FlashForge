@@ -148,6 +148,25 @@ describe('quizzes on the desk', () => {
     expect(onComplete).toHaveBeenCalledOnce();
   });
 
+  it('resumes the last question on a double-click without submitting the quiz', () => {
+    const onComplete = vi.fn();
+    render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} onComplete={onComplete} />);
+    click('Network');
+    click('Next question →');
+    click('UDP');
+    click('← Previous');
+
+    const resume = screen.getByRole('button', { name: 'Resume quiz →' });
+    fireEvent.click(resume, { detail: 1 });
+    fireEvent.click(screen.getByRole('button', { name: 'See your score →' }), { detail: 2 });
+    expect(screen.getByText('Question 2 of 2')).toBeTruthy();
+    expect(onComplete).not.toHaveBeenCalled();
+
+    click('See your score →');
+    expect(screen.getByText('1 / 2')).toBeTruthy();
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+
   it('lays the answers out as lettered slips, and shows the verdict once one is picked', () => {
     render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
     expect(screen.getByRole('heading', { name: 'Networking' })).toBeTruthy();
