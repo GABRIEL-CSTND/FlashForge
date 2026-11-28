@@ -1522,12 +1522,9 @@ to making a deck.
 - **The join-code guessing limit is per account** (10 wrong codes per 15 minutes).
   Someone with many Google accounts could guess faster. With about 887 million possible
   codes, that's still impractical, and #63 will add wider rate limits.
-- **Open dependency advisories** (`npm audit`, 2026-10-20):
-  - **`next` 16.3.3** (used by the live site) has published advisories. They include a
-    critical remote-code-execution bug in `next/og` and a high-severity SSRF in image
-    optimization. FlashForge doesn't use `next/og`, `next/image` or an `images`
-    config, so it's likely not exploitable, but the fix is to upgrade to **16.3.8**
-    (along with `eslint-config-next`). This hasn't been done yet.
+- **Open dependency advisories** (`npm audit`, 2026-11-28):
+  - **`next` and `eslint-config-next` are on 16.4.6** (#127), which resolves all 17
+    published `next` advisories from 16.3.3 (`npm audit` now reports nothing for `next`).
   - **Dev tools only:** `vitest` 3.2.7 still pulls in `tinypool` and `@vitest/mocker`
     advisories, and `eslint-config-next` pulls in `fast-glob`, `micromatch` and
     `braces` advisories. These only matter if someone controls our test or lint config,
