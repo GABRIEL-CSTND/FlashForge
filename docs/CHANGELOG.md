@@ -10,6 +10,9 @@ with the next release of `dev` to `main`.
 
 ### Fixed
 
+- **Upgraded Next.js to 16.4.6 (#127):** upgraded `next` and `eslint-config-next` from
+  16.3.3 to 16.4.6, resolving all 17 published `next` security advisories (`npm audit`
+  now reports nothing for `next`).
 - **One Read aloud switch (#117):** the study desk had a Read aloud button and a separate
   Auto switch that did nearly the same thing, which confused people. They're now one brass
   **Read aloud** switch: turning it on reads the card on screen straight away, then each
