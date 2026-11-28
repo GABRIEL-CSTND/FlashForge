@@ -344,7 +344,12 @@ describe('/api/generate options', () => {
     expect(sentOptions()).toEqual([['multiple_choice', 20]]);
   });
 
-  it.each(['', '3', '31', 'lots'])('uses 10 questions when the count is %j', async (count) => {
+  it.each(['31', '50'])('passes a count of %s to the AI, up to 50 (#104)', async (count) => {
+    expect((await generate(LONG_TEXT, asSam, { count })).status).toBe(200);
+    expect(sentOptions()).toEqual([['multiple_choice', Number(count)]]);
+  });
+
+  it.each(['', '3', '51', 'lots'])('uses 10 questions when the count is %j', async (count) => {
     expect((await generate(LONG_TEXT, asSam, { count })).status).toBe(200);
     expect(sentOptions()).toEqual([['multiple_choice', 10]]);
   });
