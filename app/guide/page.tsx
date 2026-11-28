@@ -204,6 +204,9 @@ export default function GuidePage() {
         <p className="text-sm text-muted">
           All study sessions run directly on the green leather desk with tactile paper cards, Got it / Missed it piles, and brass study tools:
         </p>
+        <p className="text-sm text-muted">
+          Use <strong>Previous</strong> below the card to review earlier flashcards in Flip or Type mode or earlier quiz questions. Continue forward to resume where you left off. The desk keeps your answers and marks.
+        </p>
         <div className="space-y-3 text-sm">
           <div className="paper rounded-lg p-3.5 space-y-1 border border-ink/10">
             <h3 className="font-medium text-sm text-ink">🔄 Flip Cards</h3>

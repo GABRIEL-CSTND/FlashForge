@@ -33,6 +33,14 @@ export function DeskHeader({ onExit, progress, tally }: { onExit?: () => void; p
   );
 }
 
+export function PreviousCardButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
+  return (
+    <button type="button" disabled={disabled} onClick={onClick} className="btn brass-ring min-h-11 rounded-full">
+      ← Previous
+    </button>
+  );
+}
+
 // "✓ Correct", "✓ Almost. It's spelled …" or "✗ Not quite. The answer is …"
 // after a typed answer (#66) is checked.
 export function TypedVerdictLine({ card, answer, className }: { card: StudyItem; answer: CardAnswer; className: string }) {

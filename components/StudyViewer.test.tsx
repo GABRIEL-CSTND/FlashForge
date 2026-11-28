@@ -103,6 +103,51 @@ describe('multiple choice', () => {
 describe('quizzes on the desk', () => {
   const slips = () => within(screen.getByRole('group', { name: 'Answers' })).getAllByRole('button');
 
+  it('keeps both picks and their score when going back after seeing a correction', () => {
+    const onComplete = vi.fn();
+    render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} onComplete={onComplete} />);
+    expect((screen.getByRole('button', { name: '← Previous' }) as HTMLButtonElement).disabled).toBe(true);
+    click('Network');
+    click('Next question →');
+    click('UDP');
+    expect(screen.getByRole('status').textContent).toContain('The answer is TCP.');
+
+    click('← Previous');
+    expect(screen.getByText('Reviewing question 1 of 2')).toBeTruthy();
+    expect(screen.getByText('. Right 1, Wrong 0.')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe('✓ Correct');
+    expect(slips().every((b) => (b as HTMLButtonElement).disabled)).toBe(true);
+
+    click('Resume quiz →');
+    expect(screen.getByRole('status').textContent).toContain('The answer is TCP.');
+    expect((screen.getByRole('button', { name: 'TCP' }) as HTMLButtonElement).disabled).toBe(true);
+    click('See your score →');
+    expect(onComplete).toHaveBeenCalledExactlyOnceWith({
+      answers: [{ cardId: 'c1', chosen: 'Network' }, { cardId: 'c2', chosen: 'UDP' }],
+      correct: 1,
+      total: 2,
+    });
+  });
+
+  it('reviews answers from the current practice round without reporting again', () => {
+    const onComplete = vi.fn();
+    render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} onComplete={onComplete} />);
+    click('Physical');
+    click('Next question →');
+    click('UDP');
+    click('See your score →');
+    click('Try the wrong ones again');
+    click('Network');
+    click('Next question →');
+    click('← Previous');
+    expect(screen.getByRole('status').textContent).toBe('✓ Correct');
+    click('Resume quiz →');
+    click('TCP');
+    click('See your score →');
+    expect(screen.getByText('2 / 2')).toBeTruthy();
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+
   it('lays the answers out as lettered slips, and shows the verdict once one is picked', () => {
     render(<StudyViewer title="Networking" studyType="multiple_choice" cards={MC_CARDS} />);
     expect(screen.getByRole('heading', { name: 'Networking' })).toBeTruthy();
@@ -291,6 +336,58 @@ describe('type the answer (#66)', () => {
       .getAllByRole('button')
       .map((b) => [b.textContent, b.getAttribute('aria-pressed')]);
 
+  it('reviews flipped cards without marking them again or losing the active side', () => {
+    const onComplete = vi.fn();
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} onComplete={onComplete} />);
+    sortTo('Missed it');
+    sortTo('Got it');
+    flip();
+    click('← Previous');
+    expect(screen.getByText('Reviewing card 2 of 3')).toBeTruthy();
+    click('← Previous');
+    expect(screen.getByText('Reviewing card 1 of 3')).toBeTruthy();
+    pressKey('Flip the card', 'ArrowRight');
+    expect(screen.getByText('. Got it 1, Missed it 1.')).toBeTruthy();
+    flip();
+    expect(screen.getByText('Marked Missed it')).toBeTruthy();
+    click('Next card →');
+    click('Resume studying →');
+    expect(screen.getByRole('button', { name: 'Flip back' })).toBeTruthy();
+    sortTo('Got it');
+    expect(onComplete.mock.calls[0][0].answers).toEqual([
+      { cardId: 'f1', result: 'missed' }, { cardId: 'f2', result: 'got' }, { cardId: 'f3', result: 'got' },
+    ]);
+  });
+
+  it('locks checked typed answers while reviewing and keeps the active draft', () => {
+    const onComplete = vi.fn();
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} onComplete={onComplete} />);
+    click('Type');
+    type('xylem');
+    click('Check');
+    click('Next card →');
+    type('RuBisCO');
+    click('← Previous');
+    expect(screen.getByRole('status').textContent).toContain('The answer is Stroma.');
+    expect(screen.queryByRole('textbox', { name: 'Your answer' })).toBeNull();
+    click('Resume studying →');
+    expect((screen.getByRole('textbox', { name: 'Your answer' }) as HTMLInputElement).value).toBe('RuBisCO');
+    click('Check');
+    click('← Previous');
+    click('Resume studying →');
+    expect(screen.getByRole('status').textContent).toBe('✓ Correct');
+    click('Next card →');
+    type('Chlorophyll');
+    click('Check');
+    click('Finish');
+    expect(onComplete).toHaveBeenCalledExactlyOnceWith({
+      mode: 'type',
+      answers: [{ cardId: 'f1', typed: 'xylem' }, { cardId: 'f2', typed: 'RuBisCO' }, { cardId: 'f3', typed: 'Chlorophyll' }],
+      correct: 2,
+      total: 3,
+    });
+  });
+
   it('lets flashcard sets be flipped, typed or matched, starting with Flip', () => {
     const first = render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
     expect(modes()).toEqual([
@@ -366,6 +463,12 @@ describe('type the answer (#66)', () => {
 });
 
 describe('matching (#67)', () => {
+  it('shows previous-card navigation only in the individual card modes', () => {
+    render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={FLASH_CARDS} />);
+    click('Match');
+    expect(screen.queryByRole('button', { name: '← Previous' })).toBeNull();
+  });
+
   it('plays round by round, checks each round on Submit Answers, and reports the term paired with each clue', () => {
     const results: StudyResult[] = [];
     render(<StudyViewer title="Photosynthesis" studyType="flashcard" cards={SIX} onComplete={(r) => results.push(r)} />);
@@ -617,6 +720,28 @@ describe('mixed quiz (#69)', () => {
     { id: 'm2', question: 'Plants give off oxygen.', answer: 'True', options: ['True', 'False'], explanation: null },
     { id: 'm1', question: 'Layer 3?', answer: 'Network', options: ['Physical', 'Network', 'Transport', 'Session'] },
   ];
+
+  it('reviews previous questions across parts and resumes a typed draft', () => {
+    render(<StudyViewer title="Exam" studyType="mixed" cards={MIXED} />);
+    click('Begin Part I →');
+    click('Network');
+    click('On to Part II →');
+    click('Begin Part II →');
+    click('False');
+    click('On to Part III →');
+    click('Begin Part III →');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your answer' }), { target: { value: 'mitoch' } });
+
+    click('← Previous');
+    expect(screen.getByText('Reviewing question 2 of 3')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe("✗ Not quite. It's true.");
+    click('← Previous');
+    expect(screen.getByText('Reviewing question 1 of 3')).toBeTruthy();
+    click('Next question →');
+    click('Resume quiz →');
+    expect(screen.getByText('Question 3 of 3')).toBeTruthy();
+    expect((screen.getByRole('textbox', { name: 'Your answer' }) as HTMLInputElement).value).toBe('mitoch');
+  });
 
   it('opens each part with its own card, types Part III, and scores each part', () => {
     const onComplete = vi.fn<(r: StudyResult) => void>();

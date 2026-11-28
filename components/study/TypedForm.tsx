@@ -1,13 +1,15 @@
 'use client';
 
-import { useState } from 'react';
 import { CARD_LIMITS } from '@/lib/card-rules';
 
 // The answer written on the card, on the line under the clue: flashcards in
 // Type mode (#66) and Part III of a mixed quiz (#69). "I don't know" checks it
 // as not answered.
-export default function TypedForm({ onCheck }: { onCheck: (typed: string | null) => void }) {
-  const [draft, setDraft] = useState('');
+export default function TypedForm({ draft, onDraftChange, onCheck }: {
+  draft: string;
+  onDraftChange: (draft: string) => void;
+  onCheck: (typed: string | null) => void;
+}) {
   return (
     <form
       onSubmit={(e) => {
@@ -21,7 +23,7 @@ export default function TypedForm({ onCheck }: { onCheck: (typed: string | null)
         <input
           aria-label="Your answer"
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => onDraftChange(e.target.value)}
           maxLength={CARD_LIMITS.answer}
           autoFocus
           autoComplete="off"

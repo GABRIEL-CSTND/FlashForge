@@ -264,8 +264,11 @@ layout hook (`useDeskLayout`), so it reads the same way on a laptop and a phone.
 - **Moving on.** *Next question* (*Next statement* in true or false, *See your score* on
   the last one) puts the card on the Right or Wrong pile. The piles are only paper
   (`aria-hidden`): answers are given on the slips, and the counts are read out with the
-  progress above the desk (*Question 3 of 10*). There's no going back, as in the
-  flashcard desk.
+  progress above the desk (*Question 3 of 10*).
+- **Previous** brings answered questions back to the middle, skipping mixed-quiz part cards.
+  The flashcard desk supports the same review in Flip and Type modes. Both desks track the
+  review position separately from the next unanswered card. Answers and piles stay fixed
+  while reviewing, and practice passes keep their own answers.
 - **A mixed quiz** goes part by part (`byPart()`), and each part opens with its own card:
   *Part II*, *True or false*, *3 questions*, with **Begin Part II**. The last question of a
   part says *On to Part III*. Part III is typed on the card with the same line to type on
