@@ -779,8 +779,10 @@ them, which is off unless turned on.
 
 ## 2. Auth and roles
 
-- **Sign-in:** Google OAuth through Supabase (`lib/auth.ts`). Anyone can generate and
-  study without signing in; saving requires sign-in.
+- **Sign-in:** Google OAuth through Supabase (`lib/auth.ts`). Google always shows its
+  account chooser (`prompt: 'select_account'`), so a shared computer doesn't sign in as
+  whoever used it last. Anyone can generate and study without signing in; saving requires
+  sign-in.
 - **Roles** (`public.profiles.role`): `student` (default), `teacher`, `admin`.
   - A trigger on `auth.users` creates a student profile at sign-up. It catches its own
     errors, so it can never block a sign-up.

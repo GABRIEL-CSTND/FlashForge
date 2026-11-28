@@ -80,6 +80,9 @@ with the next release of `dev` to `main`.
   green, wrong ones red pencil with the right term under the clue, and the quotes appear. A
   card's answer is the term it was paired with when the round was submitted, not the first
   one picked, so changing your mind before submitting no longer counts against you.
+- **Sign in with Google asks which account to use:** Google always shows its account
+  chooser (`prompt: 'select_account'`), so someone on a shared or school computer no
+  longer signs straight back in as whoever used it last.
 
 ## 2026-11-16: the desk redesign
 

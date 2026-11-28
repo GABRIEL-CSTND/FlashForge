@@ -219,7 +219,7 @@ lib/
   route-helpers.ts      Shared error/404 responses for API routes
   supabase.ts           Browser Supabase client (anon key)
   supabase-admin.ts     Server-only Supabase client (service-role key)
-  auth.ts               useUser hook, Google sign-in/out
+  auth.ts               useUser hook, Google sign-in (always asks which account) and sign-out
 test-utils/
   fake-supabase.ts      In-memory Supabase client for route tests
 public/
